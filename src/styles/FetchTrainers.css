@@ -1,0 +1,764 @@
+/* Import Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* Base Container */
+.fetch-trainers-container {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 20px;
+  color: #333;
+}
+
+/* Header */
+.fetch-trainers-header {
+  text-align: center;
+  margin-bottom: 40px;
+  color: white;
+}
+
+.fetch-trainers-title {
+  font-size: 3rem;
+  font-weight: 700;
+  margin: 0 0 10px 0;
+  text-shadow: 0 4px 8px rgba(0,0,0,0.2);
+  background: linear-gradient(45deg, #fff, #f0f8ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.fetch-trainers-subtitle {
+  font-size: 1.2rem;
+  font-weight: 300;
+  margin: 0;
+  opacity: 0.9;
+}
+
+/* Controls */
+.fetch-trainers-controls {
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  border-radius: 20px;
+  padding: 25px;
+  margin-bottom: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.fetch-trainers-search-box {
+  flex: 1;
+  min-width: 300px;
+}
+
+.fetch-trainers-search-input {
+  width: 100%;
+  padding: 15px 20px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 12px;
+  font-size: 16px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #333;
+  outline: none;
+  transition: all 0.3s ease;
+  box-sizing: border-box;
+}
+
+.fetch-trainers-search-input:focus {
+  border-color: #fff;
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
+}
+
+.fetch-trainers-search-input::placeholder {
+  color: #666;
+  font-weight: 400;
+}
+
+.fetch-trainers-filter-group {
+  display: flex;
+  gap: 15px;
+}
+
+.fetch-trainers-filter-select {
+  padding: 15px 20px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #333;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  min-width: 150px;
+  transition: all 0.3s ease;
+}
+
+.fetch-trainers-filter-select:hover {
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+/* Stats */
+.fetch-trainers-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+.fetch-trainers-stat-card {
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  padding: 25px;
+  text-align: center;
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: all 0.3s ease;
+}
+
+.fetch-trainers-stat-card:hover {
+  transform: translateY(-5px);
+  background: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.fetch-trainers-stat-number {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.fetch-trainers-stat-label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  opacity: 0.9;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Grid */
+.fetch-trainers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 25px;
+  margin-bottom: 30px;
+}
+
+/* Training Cards */
+.fetch-trainers-card {
+  background: white;
+  border-radius: 20px;
+  padding: 25px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e2e8f0;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.fetch-trainers-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+}
+
+.fetch-trainers-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+}
+
+.fetch-trainers-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.fetch-trainers-trainer-info {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  flex: 1;
+}
+
+.fetch-trainers-trainer-avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 24px;
+  font-weight: 700;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+
+.fetch-trainers-trainer-details {
+  flex: 1;
+}
+
+.fetch-trainers-trainer-name {
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: #2d3748;
+  margin: 0 0 5px 0;
+}
+
+.fetch-trainers-trainer-id {
+  font-size: 0.9rem;
+  color: #718096;
+  margin: 0;
+  font-family: 'Monaco', monospace;
+}
+
+/* Status Badges */
+.fetch-trainers-status-badge {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.fetch-trainers-status-pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.fetch-trainers-status-active {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.fetch-trainers-status-completed {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.fetch-trainers-status-cancelled {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.fetch-trainers-status-default {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+/* Card Body */
+.fetch-trainers-card-body {
+  margin-bottom: 20px;
+}
+
+.fetch-trainers-info-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f7fafc;
+}
+
+.fetch-trainers-info-row:last-child {
+  border-bottom: none;
+}
+
+.fetch-trainers-info-icon {
+  font-size: 18px;
+  width: 24px;
+  text-align: center;
+}
+
+.fetch-trainers-info-text {
+  font-size: 0.95rem;
+  color: #4a5568;
+  font-weight: 500;
+}
+
+/* Card Footer */
+.fetch-trainers-card-footer {
+  padding-top: 15px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.fetch-trainers-participants {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.fetch-trainers-participant-count,
+.fetch-trainers-confirmed-count {
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+
+.fetch-trainers-participant-count {
+  background: #e6fffa;
+  color: #234e52;
+}
+
+.fetch-trainers-confirmed-count {
+  background: #f0fff4;
+  color: #22543d;
+}
+
+.fetch-trainers-products {
+  margin-top: 10px;
+}
+
+.fetch-trainers-products-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #4a5568;
+  margin-right: 8px;
+}
+
+.fetch-trainers-products-list {
+  font-size: 0.85rem;
+  color: #667eea;
+  font-weight: 500;
+}
+
+/* Empty State */
+.fetch-trainers-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 80px 20px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 20px;
+  border: 2px dashed #cbd5e1;
+}
+
+.fetch-trainers-empty-icon {
+  font-size: 4rem;
+  margin-bottom: 20px;
+  opacity: 0.7;
+}
+
+.fetch-trainers-empty h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #4a5568;
+  margin: 0 0 10px 0;
+}
+
+.fetch-trainers-empty p {
+  color: #718096;
+  font-size: 1.1rem;
+}
+
+/* Loading State */
+.fetch-trainers-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  color: white;
+  text-align: center;
+}
+
+.fetch-trainers-spinner {
+  width: 60px;
+  height: 60px;
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-top: 4px solid white;
+  border-radius: 50%;
+  animation: fetch-trainers-spin 1s linear infinite;
+  margin-bottom: 20px;
+}
+
+@keyframes fetch-trainers-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.fetch-trainers-loading h2 {
+  font-size: 2rem;
+  font-weight: 600;
+  margin: 0 0 10px 0;
+}
+
+.fetch-trainers-loading p {
+  font-size: 1.1rem;
+  opacity: 0.9;
+}
+
+/* Error State */
+.fetch-trainers-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  color: white;
+  text-align: center;
+}
+
+.fetch-trainers-error-icon {
+  font-size: 4rem;
+  margin-bottom: 20px;
+}
+
+.fetch-trainers-error h2 {
+  font-size: 2rem;
+  font-weight: 600;
+  margin: 0 0 10px 0;
+}
+
+.fetch-trainers-error p {
+  font-size: 1.1rem;
+  margin-bottom: 20px;
+  opacity: 0.9;
+}
+
+.fetch-trainers-retry-btn {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.fetch-trainers-retry-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+/* Modal Styles */
+.fetch-trainers-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(5px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.fetch-trainers-modal {
+  background: white;
+  border-radius: 24px;
+  width: 100%;
+  max-width: 900px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
+  position: relative;
+}
+
+.fetch-trainers-modal-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 30px;
+  border-radius: 24px 24px 0 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.fetch-trainers-modal-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  color: white;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.3s ease;
+}
+
+.fetch-trainers-modal-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.fetch-trainers-modal-title {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.fetch-trainers-modal-body {
+  padding: 30px;
+}
+
+.fetch-trainers-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 25px;
+  margin-bottom: 30px;
+}
+
+.fetch-trainers-modal-section {
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 20px;
+  border: 1px solid #e2e8f0;
+}
+
+.fetch-trainers-section-title {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #2d3748;
+  margin: 0 0 15px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fetch-trainers-detail-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.fetch-trainers-detail-item:last-child {
+  border-bottom: none;
+}
+
+.fetch-trainers-detail-label {
+  font-size: 0.9rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.fetch-trainers-detail-value {
+  font-size: 0.9rem;
+  color: #1e293b;
+  font-weight: 600;
+  text-align: right;
+  max-width: 60%;
+  word-wrap: break-word;
+}
+
+/* Participants Section */
+.fetch-trainers-participants-section {
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 20px;
+  border: 1px solid #e2e8f0;
+}
+
+.fetch-trainers-participants-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.fetch-trainers-participant-card {
+  background: white;
+  border-radius: 8px;
+  padding: 15px;
+  border: 1px solid #e2e8f0;
+  transition: box-shadow 0.3s ease;
+}
+
+.fetch-trainers-participant-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.fetch-trainers-participant-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.fetch-trainers-participant-name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.fetch-trainers-participant-status {
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.fetch-trainers-confirmed {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.fetch-trainers-pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.fetch-trainers-participant-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .fetch-trainers-container {
+    padding: 15px;
+  }
+
+  .fetch-trainers-title {
+    font-size: 2rem;
+  }
+
+  .fetch-trainers-controls {
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .fetch-trainers-search-box {
+    min-width: 100%;
+  }
+
+  .fetch-trainers-filter-group {
+    width: 100%;
+  }
+
+  .fetch-trainers-filter-select {
+    width: 100%;
+  }
+
+  .fetch-trainers-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .fetch-trainers-modal {
+    margin: 10px;
+    max-width: calc(100vw - 20px);
+  }
+
+  .fetch-trainers-modal-header {
+    padding: 20px;
+  }
+
+  .fetch-trainers-modal-title {
+    font-size: 1.5rem;
+  }
+
+  .fetch-trainers-modal-body {
+    padding: 20px;
+  }
+
+  .fetch-trainers-modal-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .fetch-trainers-participants {
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+  }
+
+  .fetch-trainers-participant-details {
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+
+/* Tablet Responsive */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .fetch-trainers-grid {
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  }
+
+  .fetch-trainers-modal-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Large Desktop */
+@media (min-width: 1400px) {
+  .fetch-trainers-container {
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .fetch-trainers-grid {
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  }
+}
+
+/* Print Styles */
+@media print {
+  .fetch-trainers-container {
+    background: white;
+    color: black;
+  }
+
+  .fetch-trainers-controls,
+  .fetch-trainers-modal-overlay {
+    display: none;
+  }
+
+  .fetch-trainers-card {
+    box-shadow: none;
+    border: 1px solid #ccc;
+    break-inside: avoid;
+  }
+}
+
+/* Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .fetch-trainers-card,
+  .fetch-trainers-stat-card,
+  .fetch-trainers-spinner {
+    animation: none;
+    transition: none;
+  }
+
+  .fetch-trainers-card:hover,
+  .fetch-trainers-stat-card:hover {
+    transform: none;
+  }
+}
+
+/* High Contrast Mode */
+@media (prefers-contrast: high) {
+  .fetch-trainers-card {
+    border: 2px solid #000;
+  }
+
+  .fetch-trainers-status-badge {
+    border: 1px solid #000;
+  }
+}

@@ -1,0 +1,1804 @@
+import React, { useState, useEffect } from 'react';
+import { ref, push, onValue, set, remove } from 'firebase/database';
+import { db } from '../../firebase/config';
+import { 
+  FaPlus, 
+  FaEdit, 
+  FaTrash, 
+  FaSearch, 
+  FaTimes, 
+  FaUser, 
+  FaPhone, 
+  FaEnvelope, 
+  FaIdCard,
+  FaBriefcase,
+  FaCalendar,
+  FaClock,
+  FaUniversity,
+  FaBars
+} from 'react-icons/fa';
+
+function Employees() {
+  const [form, setForm] = useState({
+    name: '',
+    mobile: '',
+    email: '',
+    aadhar: '',
+    role: '',
+    joiningDate: '',
+    shift: '',
+    salaryAccount: {
+      accountNo: '',
+      ifscCode: '',
+      bankName: ''
+    }
+  });
+
+  const [employees, setEmployees] = useState({});
+  const [filteredEmployees, setFilteredEmployees] = useState({});
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isFormVisible, setIsFormVisible] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [editingId, setEditingId] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({});
+
+  const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
+  
+  const toggleForm = () => {
+    setIsFormVisible(!isFormVisible);
+    if (isFormVisible) {
+      resetForm();
+    }
+  };
+
+  const resetForm = () => {
+    setForm({
+      name: '',
+      mobile: '',
+      email: '',
+      aadhar: '',
+      role: '',
+      joiningDate: '',
+      shift: '',
+      salaryAccount: {
+        accountNo: '',
+        ifscCode: '',
+        bankName: ''
+      }
+    });
+    setEditingId(null);
+    setErrors({});
+  };
+
+  const closeDetails = () => setSelectedEmployee(null);
+
+  // Validation functions
+  const validateField = (name, value) => {
+    let error = '';
+    
+    switch (name) {
+      case 'name':
+        if (!value.trim()) {
+          error = 'Name is required';
+        } else if (value.trim().length < 2) {
+          error = 'Name must be at least 2 characters';
+        } else if (!/^[a-zA-Z\s]+$/.test(value)) {
+          error = 'Name can only contain letters and spaces';
+        }
+        break;
+        
+      case 'mobile':
+        if (!value) {
+          error = 'Mobile number is required';
+        } else if (!/^\d{10}$/.test(value)) {
+          error = 'Mobile number must be exactly 10 digits';
+        }
+        break;
+        
+      case 'email':
+        if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+          error = 'Please enter a valid email address';
+        }
+        break;
+        
+      case 'aadhar':
+        if (!value) {
+          error = 'Aadhar number is required';
+        } else if (!/^\d{12}$/.test(value)) {
+          error = 'Aadhar number must be exactly 12 digits';
+        }
+        break;
+        
+      case 'role':
+        if (!value) {
+          error = 'Role is required';
+        }
+        break;
+        
+      case 'joiningDate':
+        if (!value) {
+          error = 'Joining date is required';
+        } else {
+          const selectedDate = new Date(value);
+          const today = new Date();
+          today.setHours(23, 59, 59, 999); // End of today
+          if (selectedDate > today) {
+            error = 'Joining date cannot be in the future';
+          }
+        }
+        break;
+        
+      case 'bankName':
+        if (!value.trim()) {
+          error = 'Bank name is required';
+        } else if (value.trim().length < 2) {
+          error = 'Bank name must be at least 2 characters';
+        }
+        break;
+        
+      case 'accountNo':
+        if (!value) {
+          error = 'Account number is required';
+        } else if (!/^\d{9,18}$/.test(value)) {
+          error = 'Account number must be 9-18 digits';
+        }
+        break;
+        
+      case 'ifscCode':
+        if (!value) {
+          error = 'IFSC code is required';
+        } else if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(value.toUpperCase())) {
+          error = 'Invalid IFSC code format (e.g., SBIN0001234)';
+        }
+        break;
+        
+      default:
+        break;
+    }
+    
+    return error;
+  };
+
+  // Input formatters
+  const formatInput = (name, value) => {
+    switch (name) {
+      case 'mobile':
+        // Only allow digits, max 10
+        return value.replace(/\D/g, '').slice(0, 10);
+        
+      case 'aadhar':
+        // Only allow digits, max 12
+        return value.replace(/\D/g, '').slice(0, 12);
+        
+      case 'accountNo':
+        // Only allow digits, max 18
+        return value.replace(/\D/g, '').slice(0, 18);
+        
+      case 'ifscCode':
+        // Convert to uppercase, only alphanumeric, max 11
+        return value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 11);
+        
+      case 'name':
+      case 'bankName':
+        // Only allow letters and spaces, trim multiple spaces
+        return value.replace(/[^a-zA-Z\s]/g, '').replace(/\s+/g, ' ');
+        
+      default:
+        return value;
+    }
+  };
+
+  useEffect(() => {
+    const cachedEmployees = localStorage.getItem('htamsEmployees');
+    if (cachedEmployees) {
+      const parsed = JSON.parse(cachedEmployees);
+      setEmployees(parsed);
+      setFilteredEmployees(parsed);
+    }
+
+    const employeeRef = ref(db, 'HTAMS/company/Employees/');
+    const unsubscribe = onValue(
+      employeeRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          setEmployees(data);
+          setFilteredEmployees(data);
+          localStorage.setItem('htamsEmployees', JSON.stringify(data));
+        } else {
+          setEmployees({});
+          setFilteredEmployees({});
+          localStorage.removeItem('htamsEmployees');
+        }
+      },
+      (error) => {
+        console.error('Firebase error:', error);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    const formattedValue = formatInput(name, value);
+    
+    if (['accountNo', 'ifscCode', 'bankName'].includes(name)) {
+      setForm((prev) => ({
+        ...prev,
+        salaryAccount: {
+          ...prev.salaryAccount,
+          [name]: formattedValue
+        }
+      }));
+      
+      // Validate and set error for salary account fields
+      const error = validateField(name, formattedValue);
+      setErrors(prev => ({
+        ...prev,
+        [name]: error
+      }));
+    } else {
+      setForm((prev) => ({
+        ...prev,
+        [name]: formattedValue
+      }));
+      
+      // Validate and set error for regular fields
+      const error = validateField(name, formattedValue);
+      setErrors(prev => ({
+        ...prev,
+        [name]: error
+      }));
+    }
+  };
+
+  const validateForm = () => {
+    const newErrors = {};
+    
+    // Validate all fields
+    Object.keys(form).forEach(key => {
+      if (key === 'salaryAccount') {
+        Object.keys(form.salaryAccount).forEach(subKey => {
+          const error = validateField(subKey, form.salaryAccount[subKey]);
+          if (error) newErrors[subKey] = error;
+        });
+      } else {
+        const error = validateField(key, form[key]);
+        if (error) newErrors[key] = error;
+      }
+    });
+    
+    // Check for duplicate mobile and aadhar
+    const existingEmployees = Object.entries(employees);
+    
+    // Check mobile duplication
+    const mobileExists = existingEmployees.find(([id, emp]) => 
+      emp.mobile === form.mobile && (!editingId || id !== editingId)
+    );
+    if (mobileExists) {
+      newErrors.mobile = 'This mobile number is already registered';
+    }
+    
+    // Check aadhar duplication
+    const aadharExists = existingEmployees.find(([id, emp]) => 
+      emp.aadhar === form.aadhar && (!editingId || id !== editingId)
+    );
+    if (aadharExists) {
+      newErrors.aadhar = 'This Aadhar number is already registered';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!validateForm()) {
+      alert('Please fix all validation errors before submitting');
+      return;
+    }
+    
+    setLoading(true);
+
+    const employeeRef = editingId
+      ? ref(db, `HTAMS/company/Employees/${editingId}`)
+      : ref(db, 'HTAMS/company/Employees/');
+
+    const action = editingId ? set : push;
+
+    try {
+      await action(employeeRef, form);
+      alert(editingId ? 'Employee updated successfully!' : 'Employee added successfully!');
+      localStorage.removeItem('htamsEmployees');
+      resetForm();
+      setIsFormVisible(false);
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEdit = (id, emp) => {
+    setForm(emp);
+    setEditingId(id);
+    setIsFormVisible(true);
+    setErrors({});
+  };
+
+  const handleDelete = async (id, name) => {
+    if (window.confirm(`Are you sure you want to delete employee: ${name}?`)) {
+      setLoading(true);
+      const employeeRef = ref(db, `HTAMS/company/Employees/${id}`);
+      try {
+        await remove(employeeRef);
+        alert(`Employee ${name} deleted successfully!`);
+        localStorage.removeItem('htamsEmployees');
+      } catch (err) {
+        alert('Error: ' + err.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  const handleRowClick = (emp) => {
+    setSelectedEmployee(emp);
+  };
+
+  const handleSearch = () => {
+    const query = searchQuery.toLowerCase();
+    const filtered = Object.entries(employees).reduce((acc, [id, emp]) => {
+      const nameMatch = emp.name.toLowerCase().includes(query);
+      const mobileMatch = emp.mobile.includes(query);
+      const roleMatch = emp.role.toLowerCase().includes(query);
+      if (nameMatch || mobileMatch || roleMatch) {
+        acc[id] = emp;
+      }
+      return acc;
+    }, {});
+    setFilteredEmployees(filtered);
+  };
+
+  const clearSearch = () => {
+    setSearchQuery('');
+    setFilteredEmployees(employees);
+  };
+
+  return (
+    <div className="employee-management">
+      <div className="page-header">
+        <div className="header-content">
+          <div className="header-left">
+            <h1 className="page-title">
+              <FaUser className="page-icon" />
+              Employee Management
+            </h1>
+            <p className="page-subtitle">Manage your team members and their information</p>
+          </div>
+          <div className="header-right">
+            <div className="total-employees-card">
+              <div className="total-employees-number">{Object.keys(employees).length}</div>
+              <div className="total-employees-label">TOTAL EMPLOYEES</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {isFormVisible && (
+        <div className="form-container">
+          <div className="form-header">
+            <h2 className="form-title">
+              {editingId ? 'Edit Employee' : 'Add New Employee'}
+            </h2>
+            <button onClick={toggleForm} className="close-btn">
+              <FaTimes />
+            </button>
+          </div>
+          
+          <form onSubmit={handleSubmit} className="employee-form">
+            <div className="form-section">
+              <h3 className="section-title">Personal Information</h3>
+              <div className="form-grid">
+                <div className="form-group">
+                  <label htmlFor="name" className="form-label">
+                    <FaUser className="label-icon" />
+                    Full Name *
+                  </label>
+                  <input
+                    id="name"
+                    type="text"
+                    name="name"
+                    value={form.name}
+                    onChange={handleChange}
+                    placeholder="Enter full name"
+                    required
+                    className={`form-input ${errors.name ? 'error' : ''}`}
+                  />
+                  {errors.name && <span className="error-message">{errors.name}</span>}
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="mobile" className="form-label">
+                    <FaPhone className="label-icon" />
+                    Mobile Number *
+                  </label>
+                  <input
+                    id="mobile"
+                    type="tel"
+                    name="mobile"
+                    value={form.mobile}
+                    onChange={handleChange}
+                    placeholder="10-digit mobile number"
+                    required
+                    className={`form-input ${errors.mobile ? 'error' : ''}`}
+                  />
+                  {errors.mobile && <span className="error-message">{errors.mobile}</span>}
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="email" className="form-label">
+                    <FaEnvelope className="label-icon" />
+                    Email Address
+                  </label>
+                  <input
+                    id="email"
+                    type="email"
+                    name="email"
+                    value={form.email}
+                    onChange={handleChange}
+                    placeholder="Enter email address"
+                    className={`form-input ${errors.email ? 'error' : ''}`}
+                  />
+                  {errors.email && <span className="error-message">{errors.email}</span>}
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="aadhar" className="form-label">
+                    <FaIdCard className="label-icon" />
+                    Aadhar Number *
+                  </label>
+                  <input
+                    id="aadhar"
+                    type="text"
+                    name="aadhar"
+                    value={form.aadhar}
+                    onChange={handleChange}
+                    placeholder="12-digit Aadhar number"
+                    required
+                    className={`form-input ${errors.aadhar ? 'error' : ''}`}
+                  />
+                  {errors.aadhar && <span className="error-message">{errors.aadhar}</span>}
+                </div>
+              </div>
+            </div>
+
+            <div className="form-section">
+              <h3 className="section-title">Job Information</h3>
+              <div className="form-grid">
+                <div className="form-group">
+                  <label htmlFor="role" className="form-label">
+                    <FaBriefcase className="label-icon" />
+                    Role *
+                  </label>
+                  <select
+                    id="role"
+                    name="role"
+                    value={form.role}
+                    onChange={handleChange}
+                    required
+                    className={`form-input ${errors.role ? 'error' : ''}`}
+                  >
+                    <option value="">Select Role</option>
+                    <option value="Technician">Technician</option>
+                    <option value="Sales">Sales</option>
+                    <option value="Service">Service</option>
+                    <option value="Admin">Admin</option>
+                    <option value="Trainer">Trainer</option>
+                    <option value="Manager">Manager</option>
+                  </select>
+                  {errors.role && <span className="error-message">{errors.role}</span>}
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="joiningDate" className="form-label">
+                    <FaCalendar className="label-icon" />
+                    Joining Date *
+                  </label>
+                  <input
+                    id="joiningDate"
+                    type="date"
+                    name="joiningDate"
+                    value={form.joiningDate}
+                    onChange={handleChange}
+                    required
+                    max={new Date().toISOString().split('T')[0]}
+                    className={`form-input ${errors.joiningDate ? 'error' : ''}`}
+                  />
+                  {errors.joiningDate && <span className="error-message">{errors.joiningDate}</span>}
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="shift" className="form-label">
+                    <FaClock className="label-icon" />
+                    Shift/Working Time
+                  </label>
+                  <input
+                    id="shift"
+                    type="text"
+                    name="shift"
+                    value={form.shift}
+                    onChange={handleChange}
+                    placeholder="e.g., 9 AM - 6 PM"
+                    className="form-input"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="form-section">
+              <h3 className="section-title">Bank Details</h3>
+              <div className="form-grid">
+                <div className="form-group">
+                  <label htmlFor="bankName" className="form-label">
+                    <FaUniversity className="label-icon" />
+                    Bank Name *
+                  </label>
+                  <input
+                    id="bankName"
+                    type="text"
+                    name="bankName"
+                    value={form.salaryAccount.bankName}
+                    onChange={handleChange}
+                    placeholder="Enter bank name"
+                    required
+                    className={`form-input ${errors.bankName ? 'error' : ''}`}
+                  />
+                  {errors.bankName && <span className="error-message">{errors.bankName}</span>}
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="accountNo" className="form-label">
+                    Account Number *
+                  </label>
+                  <input
+                    id="accountNo"
+                    type="text"
+                    name="accountNo"
+                    value={form.salaryAccount.accountNo}
+                    onChange={handleChange}
+                    placeholder="Enter account number (9-18 digits)"
+                    required
+                    className={`form-input ${errors.accountNo ? 'error' : ''}`}
+                  />
+                  {errors.accountNo && <span className="error-message">{errors.accountNo}</span>}
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="ifscCode" className="form-label">
+                    IFSC Code *
+                  </label>
+                  <input
+                    id="ifscCode"
+                    type="text"
+                    name="ifscCode"
+                    value={form.salaryAccount.ifscCode}
+                    onChange={handleChange}
+                    placeholder="e.g., SBIN0001234"
+                    required
+                    className={`form-input ${errors.ifscCode ? 'error' : ''}`}
+                  />
+                  {errors.ifscCode && <span className="error-message">{errors.ifscCode}</span>}
+                </div>
+              </div>
+            </div>
+
+            <div className="form-actions">
+              <button 
+                type="button" 
+                onClick={toggleForm} 
+                className="secondary-btn"
+                disabled={loading}
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit" 
+                className="primary-btn"
+                disabled={loading}
+              >
+                {loading ? 'Saving...' : (editingId ? 'Update Employee' : 'Add Employee')}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      <div className="content-container">
+        <div className="search-section">
+          <div className="search-container">
+            <div className="search-input-wrapper">
+              <FaSearch className="search-icon" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by name, mobile, or role..."
+                className="search-input"
+                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+              />
+              {searchQuery && (
+                <button onClick={clearSearch} className="clear-btn">
+                  <FaTimes />
+                </button>
+              )}
+            </div>
+            <button onClick={handleSearch} className="search-btn">
+              Search
+            </button>
+            <button onClick={toggleForm} className="primary-btn add-btn">
+              <FaPlus className="btn-icon" />
+              <span className="btn-text">{isFormVisible ? 'Cancel' : 'Add Employee'}</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="table-section">
+          <div className="table-header">
+            <h3 className="table-title">All Employees ({Object.keys(filteredEmployees).length})</h3>
+          </div>
+          
+          {/* Mobile Card View */}
+          <div className="mobile-cards">
+            {Object.entries(filteredEmployees).map(([id, emp]) => (
+              <div key={id} className="employee-card" onClick={() => handleRowClick(emp)}>
+                <div className="card-header">
+                  <div className="employee-info">
+                    <div className="employee-name">{emp.name}</div>
+                    <div className="employee-id">ID: {emp.aadhar}</div>
+                  </div>
+                  <span className={`role-badge ${emp.role.toLowerCase()}`}>
+                    {emp.role.toUpperCase()}
+                  </span>
+                </div>
+                <div className="card-body">
+                  <div className="contact-info">
+                    <div className="contact-item">
+                      <FaPhone className="contact-icon" />
+                      <span>{emp.mobile}</span>
+                    </div>
+                    <div className="contact-item">
+                      <FaEnvelope className="contact-icon" />
+                      <span>{emp.email || 'N/A'}</span>
+                    </div>
+                  </div>
+                  <div className="employment-info">
+                    <div className="info-item">
+                      <FaCalendar className="info-icon" />
+                      <span>{new Date(emp.joiningDate).toLocaleDateString()}</span>
+                    </div>
+                    <div className="info-item">
+                      <FaClock className="info-icon" />
+                      <span>{emp.shift || 'N/A'}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="card-actions">
+                  <button
+                    className="action-btn view-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRowClick(emp);
+                    }}
+                    title="View Employee"
+                  >
+                    👁️
+                  </button>
+                  <button
+                    className="action-btn edit-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleEdit(id, emp);
+                    }}
+                    title="Edit Employee"
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    className="action-btn delete-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(id, emp.name);
+                    }}
+                    title="Delete Employee"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop Table View */}
+          <div className="table-container">
+            <table className="employee-table">
+              <thead>
+                <tr>
+                  <th>EMPLOYEE</th>
+                  <th>ROLE</th>
+                  <th>CONTACT</th>
+                  <th>JOINING DATE</th>
+                  <th>SHIFT</th>
+                  <th>ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(filteredEmployees).map(([id, emp]) => (
+                  <tr key={id} onClick={() => handleRowClick(emp)} className="employee-row">
+                    <td className="name-cell">
+                      <div className="employee-info">
+                        <div className="employee-name">{emp.name}</div>
+                        <div className="employee-id">ID: {emp.aadhar}</div>
+                      </div>
+                    </td>
+                    <td>
+                      <span className={`role-badge ${emp.role.toLowerCase()}`}>
+                        {emp.role.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="contact-cell">
+                      <div className="contact-info">
+                        <div className="phone">📞 {emp.mobile}</div>
+                        <div className="email">📧 {emp.email || 'N/A'}</div>
+                      </div>
+                    </td>
+                    <td>{new Date(emp.joiningDate).toLocaleDateString()}</td>
+                    <td>{emp.shift || 'N/A'}</td>
+                    <td>
+                      <div className="action-buttons">
+                        <button
+                          className="action-btn view-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRowClick(emp);
+                          }}
+                          title="View Employee"
+                        >
+                          👁️
+                        </button>
+                        <button
+                          className="action-btn edit-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEdit(id, emp);
+                          }}
+                          title="Edit Employee"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          className="action-btn delete-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(id, emp.name);
+                          }}
+                          title="Delete Employee"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {Object.keys(filteredEmployees).length === 0 && (
+            <div className="empty-state">
+              <FaUser className="empty-icon" />
+              <h3>No employees found</h3>
+              <p>Try adjusting your search criteria or add a new employee.</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {selectedEmployee && (
+        <div className="modal-overlay" onClick={closeDetails}>
+          <div className="employee-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">Employee Details</h3>
+              <button onClick={closeDetails} className="modal-close-btn">
+                <FaTimes />
+              </button>
+            </div>
+            
+            <div className="modal-body">
+              <div className="employee-info-grid">
+                <div className="info-section">
+                  <h4>Personal Information</h4>
+                  <div className="info-item">
+                    <FaUser className="info-icon" />
+                    <div>
+                      <span className="info-label">Name</span>
+                      <span className="info-value">{selectedEmployee.name}</span>
+                    </div>
+                  </div>
+                  <div className="info-item">
+                    <FaPhone className="info-icon" />
+                    <div>
+                      <span className="info-label">Mobile</span>
+                      <span className="info-value">{selectedEmployee.mobile}</span>
+                    </div>
+                  </div>
+                  <div className="info-item">
+                    <FaEnvelope className="info-icon" />
+                    <div>
+                      <span className="info-label">Email</span>
+                      <span className="info-value">{selectedEmployee.email || 'N/A'}</span>
+                    </div>
+                  </div>
+                  <div className="info-item">
+                    <FaIdCard className="info-icon" />
+                    <div>
+                      <span className="info-label">Aadhar</span>
+                      <span className="info-value">{selectedEmployee.aadhar}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="info-section">
+                  <h4>Job Information</h4>
+                  <div className="info-item">
+                    <FaBriefcase className="info-icon" />
+                    <div>
+                      <span className="info-label">Role</span>
+                      <span className="info-value">{selectedEmployee.role}</span>
+                    </div>
+                  </div>
+                  <div className="info-item">
+                    <FaCalendar className="info-icon" />
+                    <div>
+                      <span className="info-label">Joining Date</span>
+                      <span className="info-value">
+                        {new Date(selectedEmployee.joiningDate).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="info-item">
+                    <FaClock className="info-icon" />
+                    <div>
+                      <span className="info-label">Shift</span>
+                      <span className="info-value">{selectedEmployee.shift || 'N/A'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="info-section">
+                  <h4>Bank Details</h4>
+                  <div className="info-item">
+                    <FaUniversity className="info-icon" />
+                    <div>
+                      <span className="info-label">Bank Name</span>
+                      <span className="info-value">
+                        {selectedEmployee.salaryAccount?.bankName || 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="info-item">
+                    <div>
+                      <span className="info-label">Account Number</span>
+                      <span className="info-value">
+                        {selectedEmployee.salaryAccount?.accountNo || 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="info-item">
+                    <div>
+                      <span className="info-label">IFSC Code</span>
+                      <span className="info-value">
+                        {selectedEmployee.salaryAccount?.ifscCode || 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style jsx>{`
+        .employee-management {
+          background-color: #f8fafc;
+          min-height: 100vh;
+          padding: 0;
+        }
+
+        .page-header {
+          background: #f8fafc;
+          padding: 1rem 1rem 2rem;
+          color: #2d3748;
+          position: relative;
+          overflow: hidden;
+          border-bottom: 1px solid #e2e8f0;
+        }
+
+        .header-content {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          position: relative;
+          z-index: 1;
+          max-width: 1200px;
+          margin: 0 auto;
+          gap: 1rem;
+        }
+
+        .header-left {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .page-title {
+          font-size: clamp(1.5rem, 4vw, 2rem);
+          font-weight: 700;
+          margin: 0;
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          color: #2d3748;
+        }
+
+        .page-icon {
+          font-size: clamp(1.25rem, 3vw, 1.5rem);
+          color: #6366f1;
+          flex-shrink: 0;
+        }
+
+        .page-subtitle {
+          font-size: clamp(0.875rem, 2.5vw, 1rem);
+          color: #64748b;
+          margin: 0.5rem 0 0 0;
+          font-weight: 400;
+        }
+
+        .header-right {
+          flex-shrink: 0;
+        }
+
+        .total-employees-card {
+          background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+          color: white;
+          padding: 1rem 1.5rem;
+          border-radius: 12px;
+          text-align: center;
+          min-width: 150px;
+          box-shadow: 0 8px 25px rgba(99, 102, 241, 0.3);
+        }
+
+        .total-employees-number {
+          font-size: clamp(1.75rem, 5vw, 2.5rem);
+          font-weight: 800;
+          margin: 0;
+          line-height: 1;
+        }
+
+        .total-employees-label {
+          font-size: clamp(0.75rem, 2vw, 0.875rem);
+          font-weight: 600;
+          margin: 0.5rem 0 0 0;
+          opacity: 0.9;
+          letter-spacing: 0.05em;
+        }
+
+        .primary-btn {
+          background: #6366f1;
+          color: white;
+          border: none;
+          padding: 0.75rem 1rem;
+          border-radius: 8px;
+          cursor: pointer;
+          font-size: clamp(0.875rem, 2.5vw, 1rem);
+          font-weight: 600;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          transition: all 0.3s ease;
+          box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+          white-space: nowrap;
+        }
+
+        .primary-btn:hover {
+          background: #5855eb;
+          transform: translateY(-1px);
+          box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
+        }
+
+        .btn-icon {
+          font-size: 0.875rem;
+          flex-shrink: 0;
+        }
+
+        .btn-text {
+          display: inline;
+        }
+
+        .form-container {
+          background: white;
+          margin: -1rem 1rem 1rem;
+          border-radius: 12px;
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+          position: relative;
+          z-index: 2;
+        }
+
+        .form-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 1.5rem 1.5rem 0;
+          border-bottom: 1px solid #e2e8f0;
+          margin-bottom: 1.5rem;
+        }
+
+        .form-title {
+          font-size: clamp(1.25rem, 3vw, 1.5rem);
+          font-weight: 700;
+          color: #2d3748;
+          margin: 0;
+        }
+
+        .close-btn {
+          background: #f7fafc;
+          border: none;
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #64748b;
+          transition: all 0.2s ease;
+          flex-shrink: 0;
+        }
+
+        .close-btn:hover {
+          background: #e2e8f0;
+          color: #1a202c;
+        }
+
+        .employee-form {
+          padding: 0 1.5rem 1.5rem;
+        }
+
+        .form-section {
+          margin-bottom: 2rem;
+        }
+
+        .section-title {
+          font-size: clamp(1rem, 2.5vw, 1.125rem);
+          font-weight: 600;
+          color: #2d3748;
+          margin: 0 0 1rem 0;
+          padding-bottom: 0.5rem;
+          border-bottom: 2px solid #e2e8f0;
+        }
+
+        .form-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+          gap: 1rem;
+        }
+
+        .form-group {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .form-label {
+          font-size: 0.875rem;
+          font-weight: 600;
+          color: #374151;
+          margin-bottom: 0.5rem;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+
+        .label-icon {
+          color: #667eea;
+          font-size: 0.875rem;
+          flex-shrink: 0;
+        }
+
+        .form-input, .employee-form select {
+          width: 100%;
+          padding: 0.75rem;
+          border: 2px solid #e2e8f0;
+          border-radius: 8px;
+          font-size: 1rem;
+          transition: all 0.2s ease;
+          background-color: #ffffff;
+        }
+
+        .form-input:focus, .employee-form select:focus {
+          outline: none;
+          border-color: #667eea;
+          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-input.error {
+          border-color: #ef4444;
+          box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+        }
+
+        .error-message {
+          color: #ef4444;
+          font-size: 0.75rem;
+          margin-top: 0.25rem;
+          font-weight: 500;
+        }
+
+        .form-actions {
+          display: flex;
+          gap: 1rem;
+          justify-content: flex-end;
+          margin-top: 2rem;
+          padding-top: 1.5rem;
+          border-top: 1px solid #e2e8f0;
+        }
+
+        .secondary-btn {
+          background: #f7fafc;
+          color: #64748b;
+          border: 2px solid #e2e8f0;
+          padding: 0.75rem 1rem;
+          border-radius: 8px;
+          cursor: pointer;
+          font-size: 1rem;
+          font-weight: 600;
+          transition: all 0.2s ease;
+        }
+
+        .secondary-btn:hover:not(:disabled) {
+          background: #e2e8f0;
+          color: #1a202c;
+        }
+
+        .secondary-btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .primary-btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .content-container {
+          max-width: 1200px;
+          margin: 0 auto;
+          padding: 0 1rem;
+        }
+
+        .search-section {
+          margin-bottom: 1.5rem;
+        }
+
+        .search-container {
+          background: white;
+          padding: 1rem;
+          border-radius: 12px;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+          display: flex;
+          gap: 1rem;
+          align-items: flex-end;
+          flex-wrap: wrap;
+        }
+
+        .search-input-wrapper {
+          position: relative;
+          flex: 1;
+          min-width: 200px;
+        }
+
+        .search-icon {
+          position: absolute;
+          left: 0.75rem;
+          top: 50%;
+          transform: translateY(-50%);
+          color: #64748b;
+          font-size: 0.875rem;
+        }
+
+        .search-input {
+          width: 100%;
+          padding: 0.75rem 0.75rem 0.75rem 2.5rem;
+          border: 2px solid #e2e8f0;
+          border-radius: 8px;
+          font-size: 1rem;
+          transition: all 0.2s ease;
+        }
+
+        .search-input:focus {
+          outline: none;
+          border-color: #667eea;
+          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .clear-btn {
+          position: absolute;
+          right: 0.5rem;
+          top: 50%;
+          transform: translateY(-50%);
+          background: none;
+          border: none;
+          cursor: pointer;
+          color: #64748b;
+          padding: 0.25rem;
+          border-radius: 4px;
+          transition: all 0.2s ease;
+        }
+
+        .clear-btn:hover {
+          color: #1a202c;
+          background: #f1f5f9;
+        }
+
+        .search-btn {
+          background: #667eea;
+          color: white;
+          border: none;
+          padding: 0.75rem 1rem;
+          border-radius: 8px;
+          cursor: pointer;
+          font-size: 1rem;
+          font-weight: 600;
+          transition: all 0.2s ease;
+          white-space: nowrap;
+        }
+
+        .search-btn:hover {
+          background: #5a67d8;
+          transform: translateY(-1px);
+        }
+
+        .add-btn {
+          flex-shrink: 0;
+        }
+
+        .table-section {
+          background: white;
+          border-radius: 12px;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+          overflow: hidden;
+        }
+
+        .table-header {
+          padding: 1rem 1.5rem;
+          border-bottom: 1px solid #e2e8f0;
+        }
+
+        .table-title {
+          font-size: clamp(1.125rem, 3vw, 1.25rem);
+          font-weight: 700;
+          color: #2d3748;
+          margin: 0;
+        }
+
+        /* Mobile Card View */
+        .mobile-cards {
+          display: none;
+          padding: 1rem;
+          gap: 1rem;
+          flex-direction: column;
+        }
+
+        .employee-card {
+          background: #f8fafc;
+          border-radius: 12px;
+          padding: 1rem;
+          border: 1px solid #e2e8f0;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .employee-card:hover {
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+          transform: translateY(-2px);
+        }
+
+        .card-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          margin-bottom: 1rem;
+        }
+
+        .card-body {
+          margin-bottom: 1rem;
+        }
+
+        .contact-info {
+          margin-bottom: 0.75rem;
+        }
+
+        .contact-item {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          margin-bottom: 0.5rem;
+          font-size: 0.875rem;
+        }
+
+        .contact-icon {
+          color: #6366f1;
+          font-size: 0.75rem;
+          width: 12px;
+        }
+
+        .employment-info {
+          display: flex;
+          gap: 1rem;
+          flex-wrap: wrap;
+        }
+
+        .info-item {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          font-size: 0.875rem;
+        }
+
+        .info-icon {
+          color: #6366f1;
+          font-size: 0.75rem;
+          width: 12px;
+        }
+
+        .card-actions {
+          display: flex;
+          gap: 0.5rem;
+          justify-content: flex-end;
+        }
+
+        /* Desktop Table View */
+        .table-container {
+          overflow-x: auto;
+        }
+
+        .employee-table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+
+        .employee-table th {
+          background: #4a5568;
+          color: white;
+          padding: 1rem;
+          text-align: left;
+          font-weight: 600;
+          border-bottom: 2px solid #e2e8f0;
+          font-size: 0.875rem;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+
+        .employee-table td {
+          padding: 1rem;
+          border-bottom: 1px solid #e2e8f0;
+          vertical-align: middle;
+        }
+
+        .employee-row {
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .employee-row:hover {
+          background-color: #f8fafc;
+        }
+
+        .name-cell {
+          font-weight: 600;
+        }
+
+        .employee-info {
+          display: flex;
+          flex-direction: column;
+          gap: 0.25rem;
+        }
+
+        .employee-name {
+          font-size: 1rem;
+          font-weight: 600;
+          color: #2d3748;
+        }
+
+        .employee-id {
+          font-size: 0.75rem;
+          color: #64748b;
+        }
+
+        .contact-cell {
+          font-size: 0.875rem;
+        }
+
+        .contact-info {
+          display: flex;
+          flex-direction: column;
+          gap: 0.25rem;
+        }
+
+        .phone, .email {
+          display: flex;
+          align-items: center;
+          gap: 0.25rem;
+          font-size: 0.875rem;
+        }
+
+        .role-badge {
+          display: inline-block;
+          padding: 0.25rem 0.75rem;
+          border-radius: 9999px;
+          font-size: 0.75rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.025em;
+        }
+
+        .role-badge.technician {
+          background-color: #6366f1;
+          color: white;
+        }
+
+        .role-badge.sales {
+          background-color: #10b981;
+          color: white;
+        }
+
+        .role-badge.service {
+          background-color: #f59e0b;
+          color: white;
+        }
+
+        .role-badge.admin {
+          background-color: #ec4899;
+          color: white;
+        }
+
+        .role-badge.trainer {
+          background-color: #8b5cf6;
+          color: white;
+        }
+
+        .role-badge.manager {
+          background-color: #ef4444;
+          color: white;
+        }
+
+        .action-buttons {
+          display: flex;
+          gap: 0.5rem;
+        }
+
+        .action-btn {
+          width: 32px;
+          height: 32px;
+          border: none;
+          border-radius: 6px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 0.875rem;
+          transition: all 0.2s ease;
+        }
+
+        .view-btn {
+          background-color: #6366f1;
+          color: white;
+        }
+
+        .view-btn:hover {
+          background-color: #5855eb;
+          transform: translateY(-1px);
+        }
+
+        .edit-btn {
+          background-color: #f59e0b;
+          color: white;
+        }
+
+        .edit-btn:hover {
+          background-color: #d97706;
+          transform: translateY(-1px);
+        }
+
+        .delete-btn {
+          background-color: #ef4444;
+          color: white;
+        }
+
+        .delete-btn:hover {
+          background-color: #dc2626;
+          transform: translateY(-1px);
+        }
+
+        .empty-state {
+          text-align: center;
+          padding: 3rem 1rem;
+          color: #64748b;
+        }
+
+        .empty-icon {
+          font-size: 3rem;
+          color: #cbd5e0;
+          margin-bottom: 1rem;
+        }
+
+        .empty-state h3 {
+          font-size: 1.25rem;
+          font-weight: 600;
+          margin: 0 0 0.5rem 0;
+        }
+
+        .empty-state p {
+          font-size: 1rem;
+          margin: 0;
+        }
+
+        .modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: rgba(0, 0, 0, 0.6);
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          z-index: 1000;
+          backdrop-filter: blur(4px);
+          padding: 1rem;
+        }
+
+        .employee-modal {
+          background: white;
+          border-radius: 16px;
+          box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+          max-width: 800px;
+          width: 100%;
+          max-height: 90vh;
+          overflow-y: auto;
+        }
+
+        .modal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 1.5rem 1.5rem 1rem;
+          border-bottom: 1px solid #e2e8f0;
+        }
+
+        .modal-title {
+          font-size: clamp(1.25rem, 3vw, 1.5rem);
+          font-weight: 700;
+          color: #2d3748;
+          margin: 0;
+        }
+
+        .modal-close-btn {
+          background: #f7fafc;
+          border: none;
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #64748b;
+          transition: all 0.2s ease;
+          flex-shrink: 0;
+        }
+
+        .modal-close-btn:hover {
+          background: #e2e8f0;
+          color: #1a202c;
+        }
+
+        .modal-body {
+          padding: 1.5rem;
+        }
+
+        .employee-info-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+          gap: 1.5rem;
+        }
+
+        .info-section {
+          background: #f8fafc;
+          padding: 1rem;
+          border-radius: 12px;
+        }
+
+        .info-section h4 {
+          font-size: 1rem;
+          font-weight: 600;
+          color: #2d3748;
+          margin: 0 0 1rem 0;
+          padding-bottom: 0.5rem;
+          border-bottom: 2px solid #e2e8f0;
+        }
+
+        .info-item {
+          display: flex;
+          align-items: flex-start;
+          gap: 0.75rem;
+          margin-bottom: 1rem;
+        }
+
+        .info-item:last-child {
+          margin-bottom: 0;
+        }
+
+        .info-icon {
+          color: #667eea;
+          font-size: 1rem;
+          margin-top: 0.125rem;
+          flex-shrink: 0;
+        }
+
+        .info-item > div {
+          display: flex;
+          flex-direction: column;
+          gap: 0.25rem;
+          min-width: 0;
+        }
+
+        .info-label {
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: #64748b;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+
+        .info-value {
+          font-size: 0.875rem;
+          color: #2d3748;
+          font-weight: 500;
+          word-break: break-all;
+        }
+
+        /* Responsive breakpoints */
+        @media (max-width: 1024px) {
+          .form-grid {
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          }
+          
+          .search-container {
+            flex-direction: column;
+            align-items: stretch;
+          }
+          
+          .search-input-wrapper {
+            max-width: none;
+            order: 1;
+          }
+          
+          .search-btn {
+            order: 2;
+          }
+          
+          .add-btn {
+            order: 3;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .page-header {
+            padding: 1rem 0.75rem 1.5rem;
+          }
+
+          .header-content {
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            gap: 1rem;
+          }
+
+          .header-left {
+            flex: none;
+          }
+
+          .total-employees-card {
+            min-width: 140px;
+          }
+
+          .form-container {
+            margin: -1rem 0.75rem 1rem;
+          }
+
+          .content-container {
+            padding: 0 0.75rem;
+          }
+
+          .form-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .form-actions {
+            flex-direction: column-reverse;
+          }
+
+          .btn-text {
+            display: none;
+          }
+
+          /* Show mobile cards, hide table */
+          .mobile-cards {
+            display: flex;
+          }
+
+          .table-container {
+            display: none;
+          }
+
+          .employee-info-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .page-header {
+            padding: 0.75rem 0.5rem 1rem;
+          }
+
+          .form-container {
+            margin: -0.75rem 0.5rem 0.75rem;
+          }
+
+          .content-container {
+            padding: 0 0.5rem;
+          }
+
+          .search-container,
+          .mobile-cards,
+          .form-header,
+          .employee-form {
+            padding: 0.75rem;
+          }
+
+          .total-employees-card {
+            padding: 0.75rem 1rem;
+            min-width: 120px;
+          }
+
+          .employee-card {
+            padding: 0.75rem;
+          }
+
+          .modal-body {
+            padding: 1rem;
+          }
+
+          .info-section {
+            padding: 0.75rem;
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+export default Employees;
