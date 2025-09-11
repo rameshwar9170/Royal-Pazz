@@ -509,7 +509,7 @@ const TrainerLogin = () => {
           {/* Simple Footer - Only Copyright and Terms */}
           {/* <div className="simple-footer">
             <div className="copyright-text">
-              © {new Date().getFullYear()} Panchgiri Ayurveda. All rights reserved.
+              © {new Date().getFullYear()}ONDO. All rights reserved.
             </div>
             <span 
               className="terms-link"

@@ -47,6 +47,8 @@
   import LevelsManager from './pages/Company/LevelsManager';
 import WithdrawMoney from './pages/WithdrawMoney';
 import WithdrawRequests from './pages/Company/WithdrawRequests';
+import DocumentVerification from './pages/DocumentVerification';
+import AdminDocumentVerification from './pages/Company/AdminDocumentVerification';
 
   function PrivateRoute({ children, allowedRoles }) {
     const { currentUser, loading } = useContext(AuthContext);
@@ -176,6 +178,7 @@ import WithdrawRequests from './pages/Company/WithdrawRequests';
             <Route path="user-profile" element={<UserProfile />} />
             <Route path="web-builder" element={<DemoPage />} />
             <Route path="withdrawal" element={<WithdrawMoney />} />
+            <Route path="DocumentVerification" element={<DocumentVerification />} />
           </Route>
 
           {/* Company Dashboard */}
@@ -196,7 +199,7 @@ import WithdrawRequests from './pages/Company/WithdrawRequests';
             <Route path="sales-dashboard" element={<SalesDashboard />} />
             <Route path="user-list" element={<CompanyUserList />} />
             <Route path="add-admin" element={<AddAdminPage />} />
-            
+            <Route path="document-verification" element={<AdminDocumentVerification />} />
             <Route path="total-trainers" element={<FetchTrainers />} />
             <Route path="levels" element={<LevelsManager />} />
             <Route path="withdraw-requests" element={<WithdrawRequests />} />

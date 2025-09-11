@@ -86,6 +86,11 @@
         path: isCompanyDashboard ? '/company-dashboard/withdraw-requests' : '/dashboard/withdraw-requests',
         icon: <FaUserShield />,
       },
+      {
+        name: 'Document Verification',
+        path: isCompanyDashboard ? '/company-dashboard/document-verification' : '/dashboard/document-verification',
+        icon: <FaUserShield />,
+      },
     ];
 
     const handleLogout = async () => {

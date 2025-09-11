@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ref, get, push, set, update } from 'firebase/database';
 import { db } from '../firebase/config';
-import { useNavigate } from 'react-router-dom'; // Added for navigation
-import '../styles/DashboardPremium.css';
+import { useNavigate } from 'react-router-dom';
 
 function isActiveTraining(training) {
   if (training.status === 'active') return true;
@@ -15,7 +14,7 @@ function isActiveTraining(training) {
 }
 
 export default function Dashboard() {
-  const navigate = useNavigate(); // Navigation hook
+  const navigate = useNavigate();
   const [trainings, setTrainings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState([]);
@@ -25,11 +24,11 @@ export default function Dashboard() {
   const [filterStatus, setFilterStatus] = useState('all');
   
   const SMS_CONFIG = {
-  username: "Experts",
-  authkey: "ba9dcdcdfcXX",
-  senderId: "EXTSKL",
-  accusage: "1" // Add this if needed
-};
+    username: "Experts",
+    authkey: "ba9dcdcdfcXX",
+    senderId: "EXTSKL",
+    accusage: "1"
+  };
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -169,9 +168,8 @@ export default function Dashboard() {
     try {
       await navigator.clipboard.writeText(link);
       setCopiedId(trainingId);
-      setTimeout(() => setCopiedId(null), 2000); // Reset after 2 seconds
+      setTimeout(() => setCopiedId(null), 2000);
     } catch (err) {
-      // Fallback for older browsers
       const textArea = document.createElement('textarea');
       textArea.value = link;
       document.body.appendChild(textArea);
@@ -213,143 +211,143 @@ export default function Dashboard() {
     return { valid: true };
   };
 
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  const selectedTrainer = trainers.find((t) => t.id === form.trainerId);
-  if (!selectedTrainer) {
-    alert('Please select a trainer');
-    return;
-  }
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const selectedTrainer = trainers.find((t) => t.id === form.trainerId);
+    if (!selectedTrainer) {
+      alert('Please select a trainer');
+      return;
+    }
 
-  const dateValidation = validateDates();
-  if (!dateValidation.valid) {
-    alert(dateValidation.message);
-    return;
-  }
+    const dateValidation = validateDates();
+    if (!dateValidation.valid) {
+      alert(dateValidation.message);
+      return;
+    }
 
-  if (isNaN(parseInt(form.candidates)) || parseInt(form.candidates) <= 0) {
-    alert('Candidate count must be a valid positive number');
-    return;
-  }
-  if (isNaN(parseInt(form.accessDuration)) || parseInt(form.accessDuration) <= 0) {
-    alert('Access duration must be a valid positive number');
-    return;
-  }
-  if (form.fees === '' || isNaN(parseFloat(form.fees)) || parseFloat(form.fees) < 0) {
-    alert('Fees must be a valid positive number');
-    return;
-  }
+    if (isNaN(parseInt(form.candidates)) || parseInt(form.candidates) <= 0) {
+      alert('Candidate count must be a valid positive number');
+      return;
+    }
+    if (isNaN(parseInt(form.accessDuration)) || parseInt(form.accessDuration) <= 0) {
+      alert('Access duration must be a valid positive number');
+      return;
+    }
+    if (form.fees === '' || isNaN(parseFloat(form.fees)) || parseFloat(form.fees) < 0) {
+      alert('Fees must be a valid positive number');
+      return;
+    }
 
-  const dataToSave = {
-    ...form,
-    products: form.products.split(',').map((p) => p.trim()).filter(p => p.length > 0),
-    candidates: parseInt(form.candidates),
-    fees: parseFloat(form.fees),
-    accessDuration: parseInt(form.accessDuration),
-    trainerName: selectedTrainer.name || '',
-    photo: form.photo || '',
-    status: form.status || 'pending',
+    const dataToSave = {
+      ...form,
+      products: form.products.split(',').map((p) => p.trim()).filter(p => p.length > 0),
+      candidates: parseInt(form.candidates),
+      fees: parseFloat(form.fees),
+      accessDuration: parseInt(form.accessDuration),
+      trainerName: selectedTrainer.name || '',
+      photo: form.photo || '',
+      status: form.status || 'pending',
+    };
+
+    try {
+      if (editingTraining) {
+        // UPDATE EXISTING TRAINING
+        const trainingRef = ref(db, `HTAMS/company/trainings/${editingTraining.id}`);
+        await update(trainingRef, dataToSave);
+        
+        const updatedTrainings = trainings.map(training => 
+          training.id === editingTraining.id 
+            ? { ...training, ...dataToSave }
+            : training
+        ).sort((a, b) => {
+          const dateA = new Date(getStartDate(a) || '1900-01-01').getTime();
+          const dateB = new Date(getStartDate(b) || '1900-01-01').getTime();
+          return dateB - dateA;
+        });
+        
+        setTrainings(updatedTrainings);
+        
+        // Send SMS notifications to participants
+        if (editingTraining.participants) {
+          const participantMobiles = extractParticipantMobiles(editingTraining.participants);
+
+          if (participantMobiles.length > 0) {
+            console.log('Sending SMS to participants:', participantMobiles);
+
+            const smsResult = await sendTrainingUpdateMessage(
+              { ...editingTraining, ...dataToSave },
+              participantMobiles
+            );
+
+            console.log('SMS Result:', smsResult);
+
+            if (smsResult.success) {
+              alert(`Training updated successfully! ${smsResult.message}`);
+            } else {
+              alert(`Training updated successfully, but some SMS failed: ${smsResult.message}`);
+            }
+          } else {
+            alert('Training updated successfully! (No valid participant mobile numbers)');
+          }
+        } else {
+          alert('Training updated successfully! (No participants found)');
+        }
+        
+      } else {
+        // CREATE NEW TRAINING
+        const newRef = push(ref(db, 'HTAMS/company/trainings'));
+        const trainingId = newRef.key;
+        const joinLink = `${window.location.origin}/join-training/${trainingId}`;
+        
+        const newTrainingData = { 
+          ...dataToSave, 
+          id: trainingId,
+          status: 'pending', 
+          joinLink, 
+          joinedCount: 0 
+        };
+        
+        const updatedTrainings = [newTrainingData, ...trainings].sort((a, b) => {
+          const dateA = new Date(getStartDate(a) || '1900-01-01').getTime();
+          const dateB = new Date(getStartDate(b) || '1900-01-01').getTime();
+          return dateB - dateA;
+        });
+        
+        setTrainings(updatedTrainings);
+        await set(newRef, newTrainingData);
+        alert('Training created successfully');
+      }
+      
+      resetForm();
+      setShowCreateForm(false);
+      
+    } catch (error) {
+      alert('Failed to save training: ' + error.message);
+    }
   };
-
-  try {
-    if (editingTraining) {
-      // UPDATE EXISTING TRAINING
-      const trainingRef = ref(db, `HTAMS/company/trainings/${editingTraining.id}`);
-      await update(trainingRef, dataToSave);
-      
-      // Update and re-sort trainings
-      const updatedTrainings = trainings.map(training => 
-        training.id === editingTraining.id 
-          ? { ...training, ...dataToSave }
-          : training
-      ).sort((a, b) => {
-        const dateA = new Date(getStartDate(a) || '1900-01-01').getTime();
-        const dateB = new Date(getStartDate(b) || '1900-01-01').getTime();
-        return dateB - dateA;
-      });
-      
-      setTrainings(updatedTrainings);
-      
-// **NEW: Send SMS notifications to participants**
-if (editingTraining.participants) {
-  const participantMobiles = extractParticipantMobiles(editingTraining.participants);
-
-  if (participantMobiles.length > 0) {
-    console.log('Sending SMS to participants:', participantMobiles);
-
-    const smsResult = await sendTrainingUpdateMessage(
-      { ...editingTraining, ...dataToSave },
-      participantMobiles
-    );
-
-    console.log('SMS Result:', smsResult);
-
-    if (smsResult.success) {
-      alert(`Training updated successfully! ${smsResult.message}`);
-    } else {
-      alert(`Training updated successfully, but some SMS failed: ${smsResult.message}`);
-    }
-
-  } else {
-    alert('Training updated successfully! (No valid participant mobile numbers)');
-  }
-} else {
-  alert('Training updated successfully! (No participants found)');
-}
-
-
-      
-    } else {
-      // CREATE NEW TRAINING
-      const newRef = push(ref(db, 'HTAMS/company/trainings'));
-      const trainingId = newRef.key;
-      const joinLink = `${window.location.origin}/join-training/${trainingId}`;
-      
-      const newTrainingData = { 
-        ...dataToSave, 
-        id: trainingId,
-        status: 'pending', 
-        joinLink, 
-        joinedCount: 0 
-      };
-      
-      // Add new training and re-sort
-      const updatedTrainings = [newTrainingData, ...trainings].sort((a, b) => {
-        const dateA = new Date(getStartDate(a) || '1900-01-01').getTime();
-        const dateB = new Date(getStartDate(b) || '1900-01-01').getTime();
-        return dateB - dateA;
-      });
-      
-      setTrainings(updatedTrainings);
-      await set(newRef, newTrainingData);
-      alert('Training created successfully');
-    }
-    
-    resetForm();
-    setShowCreateForm(false);
-    
-  } catch (error) {
-    alert('Failed to save training: ' + error.message);
-  }
-};
-
 
   // Stats calculation
   const participantCount = trainings.reduce(
     (sum, t) => sum + (t.participants ? Object.keys(t.participants).length : 0), 0);
   const activeCount = trainings.filter(isActiveTraining).length;
- const completedCount = trainings.filter(t => t.status === 'completed').length;
+  const completedCount = trainings.filter(t => t.status === 'completed').length;
 
-
-  // Filter trainings based on search and status
+  // ENHANCED SEARCH AND FILTER FUNCTIONALITY
   const filteredTrainings = trainings.filter(t => {
+    // Enhanced search functionality - searches in multiple fields
     const matchesSearch = !searchTerm || 
       t.trainerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.location?.toLowerCase().includes(searchTerm.toLowerCase());
+      t.location?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      t.venue?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (Array.isArray(t.products) && t.products.some(product => 
+        product.toLowerCase().includes(searchTerm.toLowerCase())
+      )) ||
+      (typeof t.products === 'string' && t.products.toLowerCase().includes(searchTerm.toLowerCase()));
     
     const matchesStatus = filterStatus === 'all' || 
       (filterStatus === 'active' && isActiveTraining(t)) ||
-      t.status === filterStatus;
+      (filterStatus === 'pending' && t.status === 'pending') ||
+      (filterStatus === 'completed' && t.status === 'completed');
     
     return matchesSearch && matchesStatus;
   });
@@ -360,6 +358,12 @@ if (editingTraining.participants) {
   const indexOfLastTraining = currentPage * trainingsPerPage;
   const indexOfFirstTraining = indexOfLastTraining - trainingsPerPage;
   const currentTrainings = filteredTrainings.slice(indexOfFirstTraining, indexOfLastTraining);
+
+  // Clear search function
+  const clearSearch = () => {
+    setSearchTerm('');
+    setFilterStatus('all');
+  };
 
   // Enhanced formatDate function
   const formatDate = (dateString, fieldName = 'unknown') => {
@@ -419,290 +423,1651 @@ if (editingTraining.participants) {
     }
   };
 
-const sendTrainingUpdateMessage = async (training, participantMobiles) => {
-  const results = [];
+  const sendTrainingUpdateMessage = async (training, participantMobiles) => {
+    const results = [];
 
-  for (const mobile of participantMobiles) {
-    try {
-      // Generate OTP
-      const updateCode = String(Math.floor(Math.random() * 900000) + 100000);
+    for (const mobile of participantMobiles) {
+      try {
+        const updateCode = String(Math.floor(Math.random() * 900000) + 100000);
+        const safeLocation = training.location.replace(/"/g, '');
+        const message = `Training ${safeLocation} has been updated. Your Verification Code is ${updateCode}. - Expertskill Technology.`;
+        const encodedMessage = encodeURIComponent(message);
 
-      // Clean location text
-      const safeLocation = training.location.replace(/"/g, '');
+        const accusage = "1";
+        const username = "Experts";
+        const authkey = "ba9dcdcdfcXX";
+        const mobiles = "+91" + mobile.trim();
+        const senderId = "EXTSKL";
 
-      // Create message
-      const message = `Training ${safeLocation} has been updated. Your Verification Code is ${updateCode}. - Expertskill Technology.`;
-      const encodedMessage = encodeURIComponent(message);
+        const mainUrl = "https://mobicomm.dove-sms.com/submitsms.jsp?";
+        const url = `${mainUrl}user=${username}&key=${authkey}&mobile=${mobiles}&message=${encodedMessage}&accusage=${accusage}&senderid=${senderId}`;
 
-      // Prepare parameters
-      const accusage = "1";
-      const username = "Experts";
-      const authkey = "ba9dcdcdfcXX";
-      const mobiles = "+91" + mobile.trim();
-      const senderId = "EXTSKL";
+        console.log(`Sending to ${mobile} → URL:`, url);
 
-      const mainUrl = "https://mobicomm.dove-sms.com/submitsms.jsp?";
-      const url = `${mainUrl}user=${username}&key=${authkey}&mobile=${mobiles}&message=${encodedMessage}&accusage=${accusage}&senderid=${senderId}`;
+        const response = await fetch(url, { method: 'GET' });
+        const responseText = await response.text();
 
-      console.log(`Sending to ${mobile} → URL:`, url);
+        const isSuccess = response.ok && responseText.toLowerCase().includes("success");
 
-      const response = await fetch(url, { method: 'GET' });
-      const responseText = await response.text();
+        if (!isSuccess) {
+          console.warn(`SMS failed for ${mobile}:`, responseText);
+        } else {
+          console.log(`SMS sent successfully to ${mobile}`);
+        }
 
-      const isSuccess = response.ok && responseText.toLowerCase().includes("success");
+        results.push({
+          mobile,
+          success: isSuccess,
+          response: responseText
+        });
 
-      if (!isSuccess) {
-        console.warn(`SMS failed for ${mobile}:`, responseText);
-      } else {
-        console.log(`SMS sent successfully to ${mobile}`);
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+      } catch (error) {
+        console.error(`Error sending SMS to ${mobile}:`, error.message);
+        results.push({ mobile, success: false, error: error.message });
       }
-
-      results.push({
-        mobile,
-        success: isSuccess,
-        response: responseText
-      });
-
-      await new Promise(resolve => setTimeout(resolve, 500)); // avoid spam blocking
-
-    } catch (error) {
-      console.error(`Error sending SMS to ${mobile}:`, error.message);
-      results.push({ mobile, success: false, error: error.message });
     }
-  }
 
-  const successCount = results.filter(r => r.success).length;
-  const totalCount = results.length;
+    const successCount = results.filter(r => r.success).length;
+    const totalCount = results.length;
 
-  return {
-    success: successCount > 0,
-    message: `Training update notifications sent to ${successCount}/${totalCount} participants`,
-    results
+    return {
+      success: successCount > 0,
+      message: `Training update notifications sent to ${successCount}/${totalCount} participants`,
+      results
+    };
   };
-};
 
-
-
-
-
-
-
-const extractParticipantMobiles = (participants) => {
-  if (!participants || typeof participants !== 'object') return [];
-  
-  return Object.values(participants)
-    .map(participant => {
-      // Extract mobile number from participant object
-      // Adjust these field names based on your actual participant data structure
-      return participant.mobile || participant.phone || participant.contact || null;
-    })
-    .filter(mobile => mobile && mobile.length >= 10) // Filter valid mobile numbers
-    .map(mobile => {
-      // Clean mobile number (remove +91, spaces, etc.)
-      return mobile.replace(/[^\d]/g, '').slice(-10);
-    });
-};
-
+  const extractParticipantMobiles = (participants) => {
+    if (!participants || typeof participants !== 'object') return [];
+    
+    return Object.values(participants)
+      .map(participant => {
+        return participant.mobile || participant.phone || participant.contact || null;
+      })
+      .filter(mobile => mobile && mobile.length >= 10)
+      .map(mobile => {
+        return mobile.replace(/[^\d]/g, '').slice(-10);
+      });
+  };
 
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, filterStatus]);
 
-  return (
-    <div className="dash-premium-root">
-      {/* Header */}
-      <div className="dash-premium-header">
-        <h1 className="dash-premium-page-title">Training Dashboard</h1>
-        <p className="dash-premium-page-subtitle">Monitor and manage all training sessions</p>
-        
-        {/* Button Container */}
-        <div style={{
-          display: 'flex',
-          gap: '12px',
-          marginTop: '16px',
-          flexWrap: 'wrap',
-          alignItems: 'center'
-        }}>
-          {/* Create Training Button */}
-          <button 
-            className="create-training-button"
-            onClick={toggleCreateForm}
-            style={{
-              background: showCreateForm ? '#dc2626' : '#2563eb',
-              color: 'white',
-              border: 'none',
-              padding: '12px 24px',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '16px',
-              fontWeight: '600',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            {showCreateForm ? '✕ Close Form' : '+ Create Training'}
-          </button>
+// Enhanced Responsive Styles with Fixed Card Sizing
+const styles = {
+  // Root container - fully responsive
+  dashPremiumRoot: {
+    minHeight: '100vh',
+    background: 'linear-gradient(135deg, #5566b1ff 0%, #8759b1ff 100%)',
+    fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+    padding: 'clamp(10px, 3vw, 20px)',
+    boxSizing: 'border-box',
+  },
+  
+  // Header section with improved responsive design
+  dashPremiumHeader: {
+    background: 'linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.08) 100%)',
+    backdropFilter: 'blur(15px)',
+    border: '1px solid rgba(255,255,255,0.2)',
+    borderRadius: 'clamp(12px, 3vw, 20px)',
+    padding: 'clamp(20px, 4vw, 30px)',
+    marginBottom: 'clamp(20px, 4vw, 30px)',
+    boxShadow: '0 25px 50px rgba(0,0,0,0.15)',
+    width: '100%',
+    boxSizing: 'border-box',
+  },
 
-          {/* Register Trainer Toggle Button */}
-          <button 
-            onClick={handleNavigateToTrainers}
-            style={{
-              background: '#059669',
-              color: 'white',
-              border: 'none',
-              padding: '12px 24px',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '16px',
-              fontWeight: '600',
-              transition: 'all 0.2s ease',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}
-            onMouseOver={(e) => {
-              e.target.style.background = '#047857';
-              e.target.style.transform = 'translateY(-1px)';
-              e.target.style.boxShadow = '0 4px 12px rgba(5, 150, 105, 0.3)';
-            }}
-            onMouseOut={(e) => {
-              e.target.style.background = '#059669';
-              e.target.style.transform = 'translateY(0)';
-              e.target.style.boxShadow = 'none';
-            }}
-          >
-            👨‍🏫 Register Trainer
-          </button>
+  headerTitleSection: {
+    textAlign: 'center',
+    marginBottom: 'clamp(25px, 5vw, 35px)',
+  },
+
+  dashPremiumPageTitle: {
+    fontSize: 'clamp(1.8rem, 6vw, 2.8rem)',
+    fontWeight: '800',
+    color: '#ffffff',
+    margin: 0,
+    textShadow: '3px 3px 6px rgba(0,0,0,0.4)',
+    lineHeight: '1.1',
+    background: 'linear-gradient(135deg, #ffffff, #f0f0f0)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text',
+    wordBreak: 'break-word',
+  },
+
+  dashPremiumPageSubtitle: {
+    fontSize: 'clamp(0.9rem, 3vw, 1.2rem)',
+    color: 'rgba(255,255,255,0.9)',
+    margin: '12px 0 0 0',
+    fontWeight: '500',
+    lineHeight: '1.4',
+    wordBreak: 'break-word',
+  },
+
+  // Fully responsive controls section
+  controlsSection: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 'clamp(15px, 3vw, 20px)',
+    background: 'rgba(255,255,255,0.1)',
+    borderRadius: 'clamp(12px, 3vw, 16px)',
+    padding: 'clamp(15px, 3vw, 20px)',
+    backdropFilter: 'blur(10px)',
+    border: '1px solid rgba(255,255,255,0.15)',
+    width: '100%',
+    boxSizing: 'border-box',
+  },
+
+  // Search section responsive design
+  searchSection: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '15px',
+    width: '100%',
+  },
+
+  searchFiltersRow: {
+    display: 'flex',
+    gap: '15px',
+    width: '100%',
+    flexWrap: 'wrap',
+  },
+
+  searchWrapper: {
+    position: 'relative',
+    flex: '1',
+    minWidth: '200px',
+    display: 'flex',
+    alignItems: 'center',
+  },
+
+  searchIcon: {
+    position: 'absolute',
+    left: '16px',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    fontSize: '1.2rem',
+    color: '#6366f1',
+    zIndex: 2,
+    pointerEvents: 'none',
+  },
+
+  searchInput: {
+    width: '100%',
+    padding: '14px 16px 14px 50px',
+    border: '2px solid rgba(255,255,255,0.3)',
+    borderRadius: 'clamp(10px, 2vw, 14px)',
+    fontSize: 'clamp(14px, 3vw, 16px)',
+    transition: 'all 0.3s ease',
+    boxSizing: 'border-box',
+    background: 'rgba(255,255,255,0.95)',
+    color: '#374151',
+    minHeight: '52px',
+    fontWeight: '500',
+    boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
+  },
+
+  clearSearchBtn: {
+    position: 'absolute',
+    right: '12px',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    background: 'transparent',
+    border: 'none',
+    color: '#6b7280',
+    fontSize: '18px',
+    cursor: 'pointer',
+    padding: '4px',
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+    transition: 'all 0.2s ease',
+    width: '28px',
+    height: '28px',
+  },
+
+  filterWrapper: {
+    flex: '1',
+    minWidth: '150px',
+    display: 'flex',
+    alignItems: 'center',
+  },
+
+  filterSelect: {
+    width: '100%',
+    padding: '14px 16px',
+    border: '2px solid rgba(255,255,255,0.3)',
+    borderRadius: 'clamp(10px, 2vw, 14px)',
+    fontSize: 'clamp(14px, 3vw, 16px)',
+    background: 'rgba(255,255,255,0.95)',
+    color: '#374151',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+    boxSizing: 'border-box',
+    minHeight: '52px',
+    fontWeight: '500',
+    boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
+  },
+
+  // Enhanced responsive buttons section
+  buttonsSection: {
+    display: 'flex',
+    gap: '15px',
+    justifyContent: 'center',
+    width: '100%',
+    flexWrap: 'wrap',
+  },
+
+  actionBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '10px',
+    padding: '14px 26px',
+    border: 'none',
+    borderRadius: 'clamp(10px, 2vw, 14px)',
+    fontWeight: '700',
+    fontSize: 'clamp(13px, 3vw, 15px)',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+    boxShadow: '0 8px 25px rgba(0,0,0,0.25)',
+    minWidth: '140px',
+    minHeight: '52px',
+    whiteSpace: 'nowrap',
+    position: 'relative',
+    overflow: 'hidden',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+    flex: '1 1 auto',
+    maxWidth: '220px',
+  },
+
+  actionBtnPrimary: {
+    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+    color: 'white',
+  },
+
+  actionBtnDanger: {
+    background: 'linear-gradient(135deg, #dc2626, #b91c1c)',
+    color: 'white',
+  },
+
+  actionBtnSuccess: {
+    background: 'linear-gradient(135deg, #059669, #047857)',
+    color: 'white',
+  },
+
+  btnIcon: {
+    fontSize: 'clamp(16px, 3vw, 18px)',
+    fontWeight: 'bold',
+  },
+
+  // Search results info - responsive
+  searchResultsInfo: {
+    background: 'rgba(255,255,255,0.1)',
+    borderRadius: 'clamp(10px, 2vw, 12px)',
+    padding: '15px 20px',
+    marginBottom: '20px',
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 'clamp(13px, 3vw, 14px)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: '10px',
+    border: '1px solid rgba(255,255,255,0.15)',
+    boxSizing: 'border-box',
+  },
+
+  searchResultsText: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexWrap: 'wrap',
+  },
+
+  resultCount: {
+    background: 'rgba(255,255,255,0.2)',
+    padding: '4px 12px',
+    borderRadius: '20px',
+    fontWeight: '600',
+    color: 'white',
+  },
+
+  clearAllBtn: {
+    background: 'rgba(255,255,255,0.2)',
+    border: '1px solid rgba(255,255,255,0.3)',
+    borderRadius: '8px',
+    padding: '6px 12px',
+    color: 'white',
+    fontSize: '12px',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    whiteSpace: 'nowrap',
+  },
+
+  // Form container - fully responsive
+  createTrainingFormContainer: {
+    background: 'white',
+    borderRadius: 'clamp(15px, 3vw, 20px)',
+    padding: 'clamp(20px, 4vw, 30px)',
+    marginBottom: 'clamp(20px, 4vw, 30px)',
+    boxShadow: '0 20px 40px rgba(0,0,0,0.1)',
+    border: '1px solid rgba(255,255,255,0.2)',
+    width: '100%',
+    boxSizing: 'border-box',
+  },
+
+  formHeader: {
+    marginBottom: '25px',
+    textAlign: 'center',
+  },
+
+  formTitle: {
+    fontSize: 'clamp(1.3rem, 4vw, 1.8rem)',
+    fontWeight: '700',
+    color: '#1f2937',
+    margin: 0,
+  },
+
+  trainingForm: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '20px',
+    width: '100%',
+  },
+
+  formGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+    gap: '20px',
+    width: '100%',
+  },
+
+  formGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    width: '100%',
+  },
+
+  formLabel: {
+    fontWeight: '600',
+    color: '#374151',
+    fontSize: 'clamp(13px, 3vw, 14px)',
+  },
+
+  formInput: {
+    padding: '12px 16px',
+    border: '2px solid #e5e7eb',
+    borderRadius: 'clamp(8px, 2vw, 10px)',
+    fontSize: 'clamp(13px, 3vw, 14px)',
+    transition: 'all 0.2s ease',
+    background: 'white',
+    width: '100%',
+    boxSizing: 'border-box',
+    minHeight: '44px',
+  },
+
+  formSelect: {
+    padding: '12px 16px',
+    border: '2px solid #e5e7eb',
+    borderRadius: 'clamp(8px, 2vw, 10px)',
+    fontSize: 'clamp(13px, 3vw, 14px)',
+    transition: 'all 0.2s ease',
+    background: 'white',
+    width: '100%',
+    boxSizing: 'border-box',
+    minHeight: '44px',
+  },
+
+  formSubmitBtn: {
+    background: 'linear-gradient(135deg, #059669, #047857)',
+    color: 'white',
+    border: 'none',
+    padding: '16px 32px',
+    borderRadius: 'clamp(10px, 2vw, 12px)',
+    fontSize: 'clamp(14px, 3vw, 16px)',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+    marginTop: '20px',
+    alignSelf: 'center',
+    boxShadow: '0 4px 15px rgba(5, 150, 105, 0.3)',
+    minHeight: '48px',
+    minWidth: '160px',
+    maxWidth: '300px',
+    width: '100%',
+  },
+
+  // Stats container - responsive grid
+  statsContainer: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+    gap: '20px',
+    marginBottom: '30px',
+    width: '100%',
+    boxSizing: 'border-box',
+  },
+
+  statCard: {
+    background: 'white',
+    borderRadius: 'clamp(12px, 3vw, 16px)',
+    padding: 'clamp(18px, 4vw, 25px)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '20px',
+    boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
+    transition: 'all 0.3s ease',
+    border: '1px solid rgba(255,255,255,0.2)',
+    minHeight: '120px',
+    boxSizing: 'border-box',
+  },
+
+  statCardTotal: {
+    background: 'linear-gradient(135deg, #667eea, #764ba2)',
+    color: 'white',
+  },
+
+  statCardParticipants: {
+    background: 'linear-gradient(135deg, #f093fb, #f5576c)',
+    color: 'white',
+  },
+
+  statCardActive: {
+    background: 'linear-gradient(135deg, #4facfe, #00f2fe)',
+    color: 'white',
+  },
+
+  statCardCompleted: {
+    background: 'linear-gradient(135deg, #43e97b, #38f9d7)',
+    color: 'white',
+  },
+
+  statIcon: {
+    fontSize: 'clamp(2rem, 6vw, 2.5rem)',
+    opacity: '0.9',
+    flexShrink: 0,
+  },
+
+  statContent: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  statNumber: {
+    fontSize: 'clamp(1.8rem, 5vw, 2.2rem)',
+    fontWeight: '700',
+    marginBottom: '5px',
+    lineHeight: '1',
+  },
+
+  statLabel: {
+    fontSize: 'clamp(0.9rem, 3vw, 1rem)',
+    opacity: '0.9',
+    fontWeight: '500',
+    lineHeight: '1.2',
+  },
+
+  // Pagination info - responsive
+  paginationInfo: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '20px',
+    padding: '0 10px',
+    flexWrap: 'wrap',
+    gap: '10px',
+    fontSize: 'clamp(12px, 3vw, 14px)',
+  },
+
+  paginationText: {
+    color: '#f0f0f0',
+    fontSize: 'clamp(12px, 3vw, 14px)',
+  },
+
+  highlight: {
+    color: 'white',
+    fontWeight: '600',
+  },
+
+  // IMPROVED: Training cards container with consistent sizing
+  trainingCardsContainer: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
+    gap: '20px',
+    marginBottom: '40px',
+    width: '100%',
+    boxSizing: 'border-box',
+    justifyItems: 'stretch',
+    alignItems: 'stretch',
+  },
+
+  trainingCardWrapper: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    width: '100%',
+    height: '100%', // Make wrapper take full height
+  },
+
+  // FIXED: Consistent card sizing across all devices
+  trainingCard: {
+    background: 'white',
+    borderRadius: 'clamp(12px, 3vw, 16px)',
+    padding: '18px',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+    boxShadow: '0 8px 25px rgba(0,0,0,0.08)',
+    border: '1px solid rgba(0,0,0,0.06)',
+    width: '100%',
+    minHeight: '320px', // Fixed minimum height for all cards
+    maxHeight: 'none', // Allow natural expansion
+    boxSizing: 'border-box',
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'space-between', // Distribute content evenly
+    position: 'relative',
+  },
+
+  cardHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: '16px',
+    flexWrap: 'wrap',
+    gap: '12px',
+    flex: 'none', // Don't grow/shrink
+  },
+
+  trainerInfo: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    flex: '1',
+    minWidth: '180px',
+  },
+
+  trainerAvatar: {
+    width: '48px',
+    height: '48px',
+    borderRadius: '50%',
+    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: 'white',
+    fontWeight: '700',
+    fontSize: '1.1rem',
+    boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)',
+    flexShrink: 0,
+  },
+
+  trainerDetails: {
+    flex: 1,
+    minWidth: 0,
+    overflow: 'hidden',
+  },
+
+  trainerName: {
+    fontSize: 'clamp(1rem, 3vw, 1.15rem)',
+    fontWeight: '700',
+    color: '#1f2937',
+    margin: '0 0 4px 0',
+    lineHeight: '1.3',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+
+  trainerLocation: {
+    fontSize: 'clamp(0.8rem, 2.5vw, 0.9rem)',
+    color: '#6b7280',
+    margin: 0,
+    lineHeight: '1.3',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+
+  cardActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexShrink: 0,
+  },
+
+  statusBadge: {
+    padding: '6px 12px',
+    borderRadius: '20px',
+    fontSize: 'clamp(10px, 2.5vw, 12px)',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+    whiteSpace: 'nowrap',
+    lineHeight: '1',
+  },
+
+  statusBadgeActive: {
+    background: 'linear-gradient(135deg, #10b981, #059669)',
+    color: 'white',
+    boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)',
+  },
+
+  statusBadgePending: {
+    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+    color: 'white',
+    boxShadow: '0 2px 8px rgba(245, 158, 11, 0.3)',
+  },
+
+  statusBadgeCompleted: {
+    background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+    color: 'white',
+    boxShadow: '0 2px 8px rgba(139, 92, 246, 0.3)',
+  },
+
+  editBtn: {
+    width: '34px',
+    height: '34px',
+    border: 'none',
+    borderRadius: '50%',
+    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+    color: 'white',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '13px',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 2px 8px rgba(245, 158, 11, 0.3)',
+  },
+
+  // IMPROVED: Card details with consistent spacing
+  cardDetails: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    width: '100%',
+    flex: '1', // Take remaining space
+    minHeight: '150px', // Ensure minimum content height
+  },
+
+  detailItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '10px 12px',
+    background: '#f8fafc',
+    borderRadius: '8px',
+    borderLeft: '3px solid #4f46e5',
+    width: '100%',
+    boxSizing: 'border-box',
+    minHeight: '40px', // Consistent height for all items
+  },
+
+  detailIcon: {
+    fontSize: '1rem',
+    minWidth: '18px',
+    flexShrink: 0,
+    color: '#4f46e5',
+  },
+
+  detailLabel: {
+    fontWeight: '600',
+    color: '#374151',
+    minWidth: '72px',
+    fontSize: 'clamp(11px, 3vw, 13px)',
+    flexShrink: 0,
+  },
+
+  detailValue: {
+    color: '#6b7280',
+    fontWeight: '500',
+    fontSize: 'clamp(11px, 3vw, 13px)',
+    flex: 1,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+
+  // IMPROVED: Link section with consistent sizing
+  linkSection: {
+    background: 'white',
+    borderRadius: '10px',
+    padding: '14px',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    border: '2px solid',
+    transition: 'all 0.2s ease',
+    flexWrap: 'wrap',
+    gap: '12px',
+    width: '100%',
+    boxSizing: 'border-box',
+    minHeight: '70px', // Consistent minimum height
+    marginTop: 'auto', // Push to bottom of wrapper
+  },
+
+  linkSectionAccessible: {
+    borderColor: '#10b981',
+    background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.05), rgba(5, 150, 105, 0.05))',
+  },
+
+  linkSectionExpired: {
+    borderColor: '#ef4444',
+    background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.05), rgba(220, 38, 38, 0.05))',
+  },
+
+  linkInfo: {
+    flex: 1,
+    minWidth: '120px',
+  },
+
+  linkStatus: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    fontWeight: '600',
+    marginBottom: '4px',
+    fontSize: 'clamp(11px, 3vw, 13px)',
+  },
+
+  linkStatusAccessible: {
+    color: '#f7f7f7ff',
+  },
+
+  linkStatusExpired: {
+    color: '#ffffffff',
+  },
+
+  linkIcon: {
+    fontSize: '10px',
+  },
+
+  linkText: {
+    fontSize: 'clamp(11px, 3vw, 13px)',
+  },
+
+  linkExpire: {
+    fontSize: 'clamp(10px, 3vw, 11px)',
+    color: '#ffffffff',
+    fontWeight: '500',
+  },
+
+  linkActions: {
+    display: 'flex',
+    gap: '6px',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+
+  linkBtn: {
+    padding: '6px 10px',
+    border: 'none',
+    borderRadius: '6px',
+    fontSize: 'clamp(10px, 3vw, 11px)',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    textDecoration: 'none',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '3px',
+    minHeight: '28px',
+    whiteSpace: 'nowrap',
+  },
+
+  linkBtnCopy: {
+    background: '#6b7280',
+    color: 'white',
+  },
+
+  linkBtnCopied: {
+    background: '#10b981',
+    color: 'white',
+  },
+
+  linkBtnOpen: {
+    background: '#059669',
+    color: 'white',
+  },
+
+  linkBtnExpired: {
+    background: '#dc2626',
+    color: 'white',
+    cursor: 'not-allowed',
+  },
+
+  // Pagination - responsive
+  paginationContainer: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: '10px',
+    marginTop: '40px',
+    flexWrap: 'wrap',
+    padding: '0 10px',
+  },
+
+  paginationBtn: {
+    padding: '10px 16px',
+    border: '2px solid rgba(255,255,255,0.3)',
+    borderRadius: '10px',
+    background: 'rgba(255,255,255,0.1)',
+    color: '#ffffff',
+    cursor: 'pointer',
+    fontSize: 'clamp(12px, 3vw, 14px)',
+    fontWeight: '600',
+    transition: 'all 0.2s ease',
+    backdropFilter: 'blur(10px)',
+    minHeight: '40px',
+    whiteSpace: 'nowrap',
+  },
+
+  paginationBtnDisabled: {
+    opacity: '0.5',
+    cursor: 'not-allowed',
+  },
+
+  pageNumbers: {
+    display: 'flex',
+    gap: '5px',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+  },
+
+  pageNumber: {
+    width: '40px',
+    height: '40px',
+    border: '2px solid rgba(255,255,255,0.3)',
+    borderRadius: '10px',
+    background: 'rgba(255,255,255,0.1)',
+    color: '#ffffff',
+    cursor: 'pointer',
+    fontSize: 'clamp(12px, 3vw, 14px)',
+    fontWeight: '600',
+    transition: 'all 0.2s ease',
+    backdropFilter: 'blur(10px)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  pageNumberActive: {
+    background: 'white',
+    color: '#4f46e5',
+    borderColor: 'white',
+  },
+
+  // Loading skeleton with consistent height
+  skeleton: {
+    background: 'linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%)',
+    backgroundSize: '200% 100%',
+    animation: 'loading 1.5s infinite',
+    minHeight: '320px', // Match card minimum height
+    borderRadius: 'clamp(12px, 3vw, 16px)',
+  },
+
+  skeletonLine: {
+    height: '18px',
+    borderRadius: '4px',
+    marginBottom: '8px',
+  },
+
+  skeletonLineTitle: {
+    height: '20px',
+    width: '70%',
+  },
+
+  skeletonLineText: {
+    width: '100%',
+  },
+
+  // Empty state
+  emptyState: {
+    gridColumn: '1 / -1',
+    textAlign: 'center',
+    padding: '60px 20px',
+    color: '#f0f0f0',
+  },
+
+  emptyIcon: {
+    fontSize: 'clamp(3rem, 8vw, 4rem)',
+    marginBottom: '20px',
+  },
+
+  emptyStateH3: {
+    fontSize: 'clamp(1.2rem, 4vw, 1.5rem)',
+    marginBottom: '10px',
+    color: '#ffffff',
+  },
+
+  emptyStateP: {
+    fontSize: 'clamp(0.9rem, 3vw, 1rem)',
+    opacity: '0.8',
+    color: '#f0f0f0',
+  },
+
+  // Modal styles (keeping your existing modal styles)
+  modalOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(0,0,0,0.8)',
+    backdropFilter: 'blur(5px)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+    padding: '20px',
+    boxSizing: 'border-box',
+  },
+
+  modalContainer: {
+    background: 'white',
+    borderRadius: 'clamp(15px, 3vw, 20px)',
+    maxWidth: 'min(800px, 95vw)',
+    width: '100%',
+    maxHeight: '90vh',
+    overflowY: 'auto',
+    boxShadow: '0 25px 50px rgba(0,0,0,0.3)',
+    boxSizing: 'border-box',
+  },
+
+  modalHeader: {
+    padding: '25px 25px 0 25px',
+    borderBottom: '1px solid #e5e7eb',
+    marginBottom: '25px',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+    gap: '15px',
+  },
+
+  modalHeaderContent: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '20px',
+    flex: 1,
+    minWidth: 0,
+  },
+
+  modalTrainerAvatar: {
+    width: '60px',
+    height: '60px',
+    borderRadius: '50%',
+    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: 'white',
+    fontWeight: '700',
+    fontSize: 'clamp(1.2rem, 4vw, 1.5rem)',
+    flexShrink: 0,
+  },
+
+  modalTrainerInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  modalTitle: {
+    fontSize: 'clamp(1.2rem, 4vw, 1.5rem)',
+    fontWeight: '700',
+    color: '#1f2937',
+    margin: '0 0 10px 0',
+    lineHeight: '1.2',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+
+  modalStatus: {
+    padding: '8px 16px',
+    borderRadius: '20px',
+    fontSize: 'clamp(12px, 3vw, 14px)',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+    whiteSpace: 'nowrap',
+  },
+
+  modalStatusActive: {
+    background: 'linear-gradient(135deg, #10b981, #059669)',
+    color: 'white',
+  },
+
+  modalStatusPending: {
+    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+    color: 'white',
+  },
+
+  modalStatusCompleted: {
+    background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+    color: 'white',
+  },
+
+  modalClose: {
+    width: '40px',
+    height: '40px',
+    border: 'none',
+    borderRadius: '50%',
+    background: '#f3f4f6',
+    color: '#6b7280',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '18px',
+    transition: 'all 0.2s ease',
+    flexShrink: 0,
+  },
+
+  modalContent: {
+    padding: '0 25px 25px 25px',
+  },
+
+  modalSection: {
+    marginBottom: '30px',
+  },
+
+  sectionTitle: {
+    fontSize: 'clamp(1.1rem, 3vw, 1.2rem)',
+    fontWeight: '700',
+    color: '#1f2937',
+    marginBottom: '20px',
+    paddingBottom: '10px',
+    borderBottom: '2px solid #e5e7eb',
+  },
+
+  detailGrid: {
+    display: 'grid',
+    gap: '15px',
+    width: '100%',
+  },
+
+  detailRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '15px',
+    background: '#f8fafc',
+    borderRadius: '10px',
+    borderLeft: '4px solid #4f46e5',
+    gap: '10px',
+    flexWrap: 'wrap',
+    boxSizing: 'border-box',
+  },
+
+  detailRowFull: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: '10px',
+  },
+
+  detailKey: {
+    fontWeight: '600',
+    color: '#374151',
+    minWidth: '120px',
+    fontSize: 'clamp(12px, 3vw, 14px)',
+    flexShrink: 0,
+  },
+
+  detailVal: {
+    color: '#6b7280',
+    textAlign: 'right',
+    flex: 1,
+    fontSize: 'clamp(12px, 3vw, 14px)',
+    wordBreak: 'break-word',
+  },
+
+  productsList: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px',
+    marginTop: '8px',
+    width: '100%',
+  },
+
+  productTag: {
+    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+    color: 'white',
+    padding: '4px 12px',
+    borderRadius: '20px',
+    fontSize: 'clamp(10px, 3vw, 12px)',
+    fontWeight: '500',
+    whiteSpace: 'nowrap',
+  },
+
+  // Participants section - responsive
+  participantsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+    gap: '15px',
+    width: '100%',
+  },
+
+  participantCard: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '15px',
+    padding: '15px',
+    background: '#f8fafc',
+    borderRadius: '12px',
+    border: '1px solid #e5e7eb',
+    transition: 'all 0.2s ease',
+    width: '100%',
+    boxSizing: 'border-box',
+  },
+
+  participantAvatar: {
+    width: '40px',
+    height: '40px',
+    borderRadius: '50%',
+    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: 'white',
+    fontWeight: '600',
+    fontSize: '1rem',
+    flexShrink: 0,
+  },
+
+  participantInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  participantName: {
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: '4px',
+    fontSize: 'clamp(13px, 3vw, 14px)',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+
+  participantContact: {
+    fontSize: 'clamp(11px, 3vw, 12px)',
+    color: '#6b7280',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+
+  participantStatus: {
+    width: '30px',
+    height: '30px',
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '14px',
+    fontWeight: '600',
+    flexShrink: 0,
+  },
+
+  participantStatusConfirmed: {
+    background: '#10b981',
+    color: 'white',
+  },
+
+  participantStatusPending: {
+    background: '#f59e0b',
+    color: 'white',
+  },
+};
+
+// Add responsive CSS for additional media queries
+const additionalCSS = `
+  <style>
+    @keyframes loading {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* Improved responsive breakpoints for cards */
+    @media (max-width: 1400px) {
+      .training-cards-container {
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)) !important;
+      }
+    }
+
+    @media (max-width: 1024px) {
+      .training-cards-container {
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)) !important;
+        gap: 18px !important;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .training-cards-container {
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)) !important;
+        gap: 16px !important;
+      }
+      
+      .mobile-stack {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 12px !important;
+      }
+      
+      .mobile-full-width {
+        width: 100% !important;
+        max-width: none !important;
+      }
+      
+      .mobile-text-center {
+        text-align: center !important;
+      }
+      
+      .mobile-hide-text {
+        font-size: 0 !important;
+      }
+      
+      .mobile-hide-text::before {
+        font-size: 14px !important;
+        content: attr(data-mobile-text) !important;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .training-cards-container {
+        grid-template-columns: 1fr !important;
+        gap: 15px !important;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .training-cards-container {
+        grid-template-columns: 1fr !important;
+        gap: 12px !important;
+      }
+      
+      .extra-small-text {
+        font-size: 12px !important;
+      }
+      
+      .extra-small-padding {
+        padding: 8px !important;
+      }
+    }
+
+    /* Ensure cards maintain consistent aspect ratio */
+    .training-card-wrapper {
+      aspect-ratio: auto !important;
+    }
+
+    .training-card {
+      height: auto !important;
+      min-height: 320px !important;
+    }
+
+    @media (max-width: 480px) {
+      .training-card {
+        min-height: 280px !important;
+      }
+    }
+  </style>
+`;
+
+  // Add CSS keyframes for skeleton animation
+  const styleSheet = document.createElement("style");
+  styleSheet.innerText = `
+    @keyframes loading {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    @media (max-width: 768px) {
+      .mobile-stack {
+        flex-direction: column !important;
+        align-items: stretch !important;
+      }
+      
+      .mobile-full-width {
+        width: 100% !important;
+        max-width: none !important;
+      }
+      
+      .mobile-text-center {
+        text-align: center !important;
+      }
+      
+      .mobile-hide-text {
+        font-size: 0 !important;
+      }
+      
+      .mobile-hide-text::before {
+        font-size: 14px !important;
+        content: attr(data-mobile-text) !important;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .extra-small-text {
+        font-size: 12px !important;
+      }
+      
+      .extra-small-padding {
+        padding: 10px !important;
+      }
+    }
+  `;
+  
+  if (!document.head.querySelector('#responsive-training-styles')) {
+    styleSheet.id = 'responsive-training-styles';
+    document.head.appendChild(styleSheet);
+  }
+
+  return (
+    <div style={styles.dashPremiumRoot}>
+      {/* Enhanced Header Section with Organized Layout */}
+      <div style={styles.dashPremiumHeader}>
+        {/* Title Section */}
+        <div style={styles.headerTitleSection}>
+          <h1 style={styles.dashPremiumPageTitle}>🎓 Training Dashboard</h1>
+          <p style={styles.dashPremiumPageSubtitle}>Monitor and manage all training sessions with ease</p>
+        </div>
+        
+        {/* Enhanced Combined Controls Section */}
+        <div style={styles.controlsSection}>
+          {/* Enhanced Search Section */}
+          <div style={styles.searchSection}>
+            <div style={styles.searchFiltersRow}>
+              <div style={styles.searchWrapper}>
+                <div style={styles.searchIcon}>🔍</div>
+                <input
+                  type="text"
+                  placeholder="Search trainings, trainers, locations, venues, products..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  style={styles.searchInput}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#4f46e5';
+                    e.target.style.boxShadow = '0 0 0 4px rgba(79, 70, 229, 0.15)';
+                    e.target.style.transform = 'translateY(-1px)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = 'rgba(255,255,255,0.3)';
+                    e.target.style.boxShadow = '0 4px 15px rgba(0,0,0,0.1)';
+                    e.target.style.transform = 'translateY(0)';
+                  }}
+                />
+                {searchTerm && (
+                  <button
+                    style={styles.clearSearchBtn}
+                    onClick={() => setSearchTerm('')}
+                    onMouseOver={(e) => {
+                      e.target.style.background = 'rgba(107, 114, 128, 0.1)';
+                      e.target.style.color = '#374151';
+                    }}
+                    onMouseOut={(e) => {
+                      e.target.style.background = 'transparent';
+                      e.target.style.color = '#6b7280';
+                    }}
+                    title="Clear search"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              
+              <div style={styles.filterWrapper}>
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  style={styles.filterSelect}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#4f46e5';
+                    e.target.style.boxShadow = '0 0 0 4px rgba(79, 70, 229, 0.15)';
+                    e.target.style.transform = 'translateY(-1px)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = 'rgba(255,255,255,0.3)';
+                    e.target.style.boxShadow = '0 4px 15px rgba(0,0,0,0.1)';
+                    e.target.style.transform = 'translateY(0)';
+                  }}
+                >
+                  <option value="all">🔄 All Status</option>
+                  <option value="active">⚡ Active</option>
+                  <option value="pending">⏳ Pending</option>
+                  <option value="completed">✅ Completed</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Enhanced Buttons Section */}
+            <div style={styles.buttonsSection}>
+              <button 
+                style={{
+                  ...styles.actionBtn,
+                  ...(showCreateForm ? styles.actionBtnDanger : styles.actionBtnPrimary)
+                }}
+                onClick={toggleCreateForm}
+                onMouseOver={(e) => {
+                  e.target.style.transform = 'translateY(-3px) scale(1.02)';
+                  e.target.style.boxShadow = '0 12px 35px rgba(0,0,0,0.35)';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.transform = 'translateY(0) scale(1)';
+                  e.target.style.boxShadow = '0 8px 25px rgba(0,0,0,0.25)';
+                }}
+              >
+                {showCreateForm ? (
+                  <>
+                    <span style={styles.btnIcon}>✕</span>
+                    <span className="mobile-hide-text" data-mobile-text="Close">Close Form</span>
+                  </>
+                ) : (
+                  <>
+                    <span style={styles.btnIcon}>+</span>
+                    <span className="mobile-hide-text" data-mobile-text="Create">Create Training</span>
+                  </>
+                )}
+              </button>
+
+              <button 
+                style={{...styles.actionBtn, ...styles.actionBtnSuccess}}
+                onClick={handleNavigateToTrainers}
+                onMouseOver={(e) => {
+                  e.target.style.transform = 'translateY(-3px) scale(1.02)';
+                  e.target.style.boxShadow = '0 12px 35px rgba(0,0,0,0.35)';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.transform = 'translateY(0) scale(1)';
+                  e.target.style.boxShadow = '0 8px 25px rgba(0,0,0,0.25)';
+                }}
+              >
+                <span style={styles.btnIcon}>👨‍🏫</span>
+                <span className="mobile-hide-text" data-mobile-text="Trainer">Register Trainer</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
+      {/* Search Results Info */}
+      {(searchTerm || filterStatus !== 'all') && (
+        <div style={styles.searchResultsInfo}>
+          <div style={styles.searchResultsText}>
+            <span>🔍 Search Results:</span>
+            <span style={styles.resultCount}>{filteredTrainings.length}</span>
+            <span>training{filteredTrainings.length !== 1 ? 's' : ''} found</span>
+            {searchTerm && <span>for "{searchTerm}"</span>}
+            {filterStatus !== 'all' && <span>with status "{filterStatus}"</span>}
+          </div>
+          {(searchTerm || filterStatus !== 'all') && (
+            <button
+              style={styles.clearAllBtn}
+              onClick={clearSearch}
+              onMouseOver={(e) => {
+                e.target.style.background = 'rgba(255,255,255,0.3)';
+                e.target.style.transform = 'translateY(-1px)';
+              }}
+              onMouseOut={(e) => {
+                e.target.style.background = 'rgba(255,255,255,0.2)';
+                e.target.style.transform = 'translateY(0)';
+              }}
+            >
+              Clear All Filters
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Create/Edit Training Form */}
       {showCreateForm && (
-        <div className="create-training-form-container" style={{
-          background: 'white',
-          border: '1px solid #e5e7eb',
-          borderRadius: '12px',
-          padding: '24px',
-          margin: '20px 0',
-          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-        }}>
-          <h2 style={{ marginBottom: '24px', color: '#1f2937' }}>
-            {editingTraining ? "Edit Training" : "Create New Training"}
-          </h2>
+        <div style={styles.createTrainingFormContainer}>
+          <div style={styles.formHeader}>
+            <h2 style={styles.formTitle}>
+              {editingTraining ? "✏️ Edit Training" : "🆕 Create New Training"}
+            </h2>
+          </div>
           
-          <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '16px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
-              {/* All form fields remain the same */}
-              <div className="form-group">
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>Location *</label>
+          <form onSubmit={handleSubmit} style={styles.trainingForm}>
+            <div style={styles.formGrid}>
+              {/* Location */}
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>📍 Location *</label>
                 <input
                   name="location"
                   value={form.location}
                   onChange={handleChange}
-                  placeholder="Training location"
+                  placeholder="Enter training location"
                   required
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px',
-                    fontSize: '14px'
+                  style={styles.formInput}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#4f46e5';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(79, 70, 229, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '#e5e7eb';
+                    e.target.style.boxShadow = 'none';
                   }}
                 />
               </div>
 
-              <div className="form-group">
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>Venue *</label>
+              {/* Venue */}
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>🏢 Venue *</label>
                 <input
                   name="venue"
                   value={form.venue}
                   onChange={handleChange}
-                  placeholder="Training venue"
+                  placeholder="Enter training venue"
                   required
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px',
-                    fontSize: '14px'
+                  style={styles.formInput}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#4f46e5';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(79, 70, 229, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '#e5e7eb';
+                    e.target.style.boxShadow = 'none';
                   }}
                 />
               </div>
 
-              <div className="form-group">
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>Start Date *</label>
+              {/* Start Date */}
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>📅 Start Date *</label>
                 <input
                   type="date"
                   name="startDate"
                   value={form.startDate}
                   onChange={handleChange}
                   required
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px',
-                    fontSize: '14px'
+                  style={styles.formInput}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#4f46e5';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(79, 70, 229, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '#e5e7eb';
+                    e.target.style.boxShadow = 'none';
                   }}
                 />
               </div>
 
-              <div className="form-group">
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>End Date *</label>
+              {/* End Date */}
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>📅 End Date *</label>
                 <input
                   type="date"
                   name="endDate"
                   value={form.endDate}
                   onChange={handleChange}
                   required
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px',
-                    fontSize: '14px'
+                  style={styles.formInput}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#4f46e5';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(79, 70, 229, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '#e5e7eb';
+                    e.target.style.boxShadow = 'none';
                   }}
                 />
               </div>
 
-              <div className="form-group">
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>Start Time *</label>
+              {/* Start Time */}
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>🕐 Start Time *</label>
                 <input
                   type="time"
                   name="time"
                   value={form.time}
                   onChange={handleChange}
                   required
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px',
-                    fontSize: '14px'
+                  style={styles.formInput}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#4f46e5';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(79, 70, 229, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '#e5e7eb';
+                    e.target.style.boxShadow = 'none';
                   }}
                 />
               </div>
 
-              <div className="form-group">
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>Products *</label>
+              {/* Products */}
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>📦 Products *</label>
                 <input
                   name="products"
                   value={form.products}
                   onChange={handleChange}
                   placeholder="Products (comma-separated)"
                   required
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px',
-                    fontSize: '14px'
+                  style={styles.formInput}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#4f46e5';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(79, 70, 229, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '#e5e7eb';
+                    e.target.style.boxShadow = 'none';
                   }}
                 />
               </div>
 
-              <div className="form-group">
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>Candidates *</label>
+              {/* Candidates */}
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>👥 Candidates *</label>
                 <input
                   type="number"
                   name="candidates"
@@ -710,29 +2075,32 @@ const extractParticipantMobiles = (participants) => {
                   onChange={handleChange}
                   placeholder="Number of candidates"
                   required
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px',
-                    fontSize: '14px'
+                  style={styles.formInput}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#4f46e5';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(79, 70, 229, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '#e5e7eb';
+                    e.target.style.boxShadow = 'none';
                   }}
                 />
               </div>
 
-              <div className="form-group">
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>Trainer *</label>
+              {/* Trainer */}
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>👨‍🏫 Trainer *</label>
                 <select
                   name="trainerId"
                   value={form.trainerId}
                   onChange={handleChange}
                   required
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px',
-                    fontSize: '14px'
+                  style={styles.formSelect}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#4f46e5';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '#e5e7eb';
                   }}
                 >
                   <option value="">Select Trainer</option>
@@ -744,26 +2112,30 @@ const extractParticipantMobiles = (participants) => {
                 </select>
               </div>
 
-              <div className="form-group">
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>Link Expire Date *</label>
+              {/* Link Expire Date */}
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>⏰ Link Expire Date *</label>
                 <input
                   type="date"
                   name="expireDate"
                   value={form.expireDate}
                   onChange={handleChange}
                   required
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px',
-                    fontSize: '14px'
+                  style={styles.formInput}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#4f46e5';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(79, 70, 229, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '#e5e7eb';
+                    e.target.style.boxShadow = 'none';
                   }}
                 />
               </div>
 
-              <div className="form-group">
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>Duration (Hours) *</label>
+              {/* Duration */}
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>⏱️ Duration (Hours) *</label>
                 <input
                   type="number"
                   name="accessDuration"
@@ -771,18 +2143,21 @@ const extractParticipantMobiles = (participants) => {
                   onChange={handleChange}
                   placeholder="Duration in hours"
                   required
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px',
-                    fontSize: '14px'
+                  style={styles.formInput}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#4f46e5';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(79, 70, 229, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '#e5e7eb';
+                    e.target.style.boxShadow = 'none';
                   }}
                 />
               </div>
 
-              <div className="form-group">
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>Fees (₹) *</label>
+              {/* Fees */}
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>💰 Fees (₹) *</label>
                 <input
                   type="number"
                   name="fees"
@@ -792,29 +2167,34 @@ const extractParticipantMobiles = (participants) => {
                   required
                   min="0"
                   step="0.01"
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px',
-                    fontSize: '14px'
+                  style={styles.formInput}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#4f46e5';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(79, 70, 229, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '#e5e7eb';
+                    e.target.style.boxShadow = 'none';
                   }}
                 />
               </div>
 
-              <div className="form-group">
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>Photo URL</label>
+              {/* Photo URL */}
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>🖼️ Photo URL</label>
                 <input
                   name="photo"
                   value={form.photo}
                   onChange={handleChange}
                   placeholder="Photo URL (optional)"
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px',
-                    fontSize: '14px'
+                  style={styles.formInput}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#4f46e5';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(79, 70, 229, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '#e5e7eb';
+                    e.target.style.boxShadow = 'none';
                   }}
                 />
               </div>
@@ -822,343 +2202,370 @@ const extractParticipantMobiles = (participants) => {
 
             <button 
               type="submit" 
-              style={{
-                background: '#059669',
-                color: 'white',
-                border: 'none',
-                padding: '12px 24px',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '16px',
-                fontWeight: '600',
-                marginTop: '16px'
+              style={styles.formSubmitBtn}
+              onMouseOver={(e) => {
+                e.target.style.transform = 'translateY(-2px)';
+                e.target.style.boxShadow = '0 8px 25px rgba(5, 150, 105, 0.4)';
+              }}
+              onMouseOut={(e) => {
+                e.target.style.transform = 'translateY(0)';
+                e.target.style.boxShadow = '0 4px 15px rgba(5, 150, 105, 0.3)';
               }}
             >
-              {editingTraining ? "Update Training" : "Create Training"}
+              {editingTraining ? "💾 Update Training" : "✨ Create Training"}
             </button>
           </form>
         </div>
       )}
 
-      {/* Summary Metrics */}
-      <div className="dash-premium-metrics">
-        <div className="dash-premium-metric">
-          <div className="dash-premium-metric-icon">📚</div>
-          <div className="dash-premium-metric-content">
-            <div className="dash-premium-metric-num">{trainings.length}</div>
-            <div className="dash-premium-metric-label">Total Trainings</div>
-          </div>
-        </div>
-        <div className="dash-premium-metric">
-          <div className="dash-premium-metric-icon">👥</div>
-          <div className="dash-premium-metric-content">
-            <div className="dash-premium-metric-num">{participantCount}</div>
-            <div className="dash-premium-metric-label">Participants</div>
-          </div>
-        </div>
-        <div className="dash-premium-metric">
-          <div className="dash-premium-metric-icon">⚡</div>
-          <div className="dash-premium-metric-content">
-            <div className="dash-premium-metric-num">{activeCount}</div>
-            <div className="dash-premium-metric-label">Active</div>
-          </div>
-        </div>
-        <div className="dash-premium-metric">
-          <div className="dash-premium-metric-icon">✅</div>
-          <div className="dash-premium-metric-content">
-            <div className="dash-premium-metric-num">{completedCount}</div>
-            <div className="dash-premium-metric-label">Completed</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="dash-premium-filters">
-        <div className="dash-premium-search-container">
-          <input
-            type="text"
-            placeholder="Search trainings..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="dash-premium-search-input"
-          />
-          <div className="dash-premium-search-icon">🔍</div>
-        </div>
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          className="dash-premium-filter-select"
+      {/* Enhanced Stats Cards */}
+      <div style={styles.statsContainer}>
+        <div 
+          style={{...styles.statCard, ...styles.statCardTotal}}
+          onMouseOver={(e) => {
+            e.currentTarget.style.transform = 'translateY(-5px)';
+            e.currentTarget.style.boxShadow = '0 20px 40px rgba(0,0,0,0.15)';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 10px 30px rgba(0,0,0,0.1)';
+          }}
         >
-          <option value="all">All Status</option>
-          <option value="active">Active</option>
-          {/* <option value="pending">Pending</option> */}
-          <option value="completed">Completed</option>
-        </select>
+          <div style={styles.statIcon}>📚</div>
+          <div style={styles.statContent}>
+            <div style={styles.statNumber}>{trainings.length}</div>
+            <div style={styles.statLabel}>Total Trainings</div>
+          </div>
+        </div>
+        
+        <div 
+          style={{...styles.statCard, ...styles.statCardParticipants}}
+          onMouseOver={(e) => {
+            e.currentTarget.style.transform = 'translateY(-5px)';
+            e.currentTarget.style.boxShadow = '0 20px 40px rgba(0,0,0,0.15)';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 10px 30px rgba(0,0,0,0.1)';
+          }}
+        >
+          <div style={styles.statIcon}>👥</div>
+          <div style={styles.statContent}>
+            <div style={styles.statNumber}>{participantCount}</div>
+            <div style={styles.statLabel}>Total Participants</div>
+          </div>
+        </div>
+        
+        <div 
+          style={{...styles.statCard, ...styles.statCardActive}}
+          onMouseOver={(e) => {
+            e.currentTarget.style.transform = 'translateY(-5px)';
+            e.currentTarget.style.boxShadow = '0 20px 40px rgba(0,0,0,0.15)';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 10px 30px rgba(0,0,0,0.1)';
+          }}
+        >
+          <div style={styles.statIcon}>⚡</div>
+          <div style={styles.statContent}>
+            <div style={styles.statNumber}>{activeCount}</div>
+            <div style={styles.statLabel}>Active Sessions</div>
+          </div>
+        </div>
+        
+        <div 
+          style={{...styles.statCard, ...styles.statCardCompleted}}
+          onMouseOver={(e) => {
+            e.currentTarget.style.transform = 'translateY(-5px)';
+            e.currentTarget.style.boxShadow = '0 20px 40px rgba(0,0,0,0.15)';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 10px 30px rgba(0,0,0,0.1)';
+          }}
+        >
+          <div style={styles.statIcon}>✅</div>
+          <div style={styles.statContent}>
+            <div style={styles.statNumber}>{completedCount}</div>
+            <div style={styles.statLabel}>Completed</div>
+          </div>
+        </div>
       </div>
 
       {/* Pagination Info */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        margin: '20px 0 10px 0',
-        padding: '0 10px'
-      }}>
-        <div style={{ color: '#6b7280', fontSize: '14px' }}>
-          Showing {indexOfFirstTraining + 1}-{Math.min(indexOfLastTraining, totalTrainings)} of {totalTrainings} trainings
+      <div style={styles.paginationInfo}>
+        <div style={styles.paginationText}>
+          Showing <span style={styles.highlight}>{indexOfFirstTraining + 1}-{Math.min(indexOfLastTraining, totalTrainings)}</span> of <span style={styles.highlight}>{totalTrainings}</span> trainings
         </div>
-        <div style={{ color: '#6b7280', fontSize: '14px' }}>
-          Page {currentPage} of {totalPages}
+        <div style={styles.paginationText}>
+          Page <span style={styles.highlight}>{currentPage}</span> of <span style={styles.highlight}>{totalPages}</span>
         </div>
       </div>
 
-      {/* Training Cards */}
-     {/* Training Cards */}
-{/* Training Cards */}
-<div className="dash-premium-lists">
-  {loading ? (
-    Array.from({ length: 6 }).map((_, i) => (
-      <div key={i} className="dash-premium-card-skeleton">
-        <div className="dash-premium-skeleton-line dash-premium-skeleton-title"></div>
-        <div className="dash-premium-skeleton-line dash-premium-skeleton-text"></div>
-        <div className="dash-premium-skeleton-line dash-premium-skeleton-text"></div>
-      </div>
-    ))
-  ) : currentTrainings.length === 0 ? (
-    <div className="dash-premium-empty-state">
-      <div className="dash-premium-empty-icon">📋</div>
-      <h3>No trainings found</h3>
-      <p>Try adjusting your search or filter criteria</p>
-    </div>
-  ) : (
-    currentTrainings.map(t => (
-      <div key={t.id} className="training-card-wrapper">
-        <button
-          className="dash-premium-card"
-          onClick={() => setSelected(t)}
-        >
-          <div className="dash-premium-card-header">
-            <div className="dash-premium-trainer-info">
-              <div className="dash-premium-trainer-avatar">
-                {t.trainerName?.charAt(0)?.toUpperCase() || '?'}
-              </div>
-              <div className="dash-premium-trainer-details">
-                <h3 className="dash-premium-trainer-name">
-                  {t.trainerName || "Unknown Trainer"}
-                </h3>
-                <p className="dash-premium-trainer-location">
-                  {t.location || 'No location'}
-                </p>
-              </div>
+      {/* Enhanced Training Cards */}
+      <div style={styles.trainingCardsContainer}>
+        {loading ? (
+          Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} style={{...styles.trainingCard, ...styles.skeleton}}>
+              <div style={{...styles.skeletonLine, ...styles.skeletonLineTitle}}></div>
+              <div style={{...styles.skeletonLine, ...styles.skeletonLineText}}></div>
+              <div style={{...styles.skeletonLine, ...styles.skeletonLineText}}></div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span className={`dash-premium-status ${isActiveTraining(t) ? 'active' : t.status || 'pending'}`}>
-                {isActiveTraining(t) ? "Active" : (t.status || 'Pending')}
-              </span>
-              {/* Update Button - Only show for active trainings */}
-              {isActiveTraining(t) && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation(); // Prevent triggering the card click
-                    console.log('Update button clicked for:', t.id); // Debug log
-                    handleEditTraining(t);
-                  }}
-                  style={{
-                    background: '#f59e0b',
-                    color: 'white',
-                    border: 'none',
-                    padding: '4px 8px',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '12px',
-                    fontWeight: '500'
-                  }}
-                  title="Update Training"
-                >
-                  ✏️ Update
-                </button>
-              )}
-            </div>
+          ))
+        ) : currentTrainings.length === 0 ? (
+          <div style={styles.emptyState}>
+            <div style={styles.emptyIcon}>📋</div>
+            <h3 style={styles.emptyStateH3}>No trainings found</h3>
+            <p style={styles.emptyStateP}>
+              {searchTerm || filterStatus !== 'all' 
+                ? 'Try adjusting your search or filter criteria' 
+                : 'Create your first training to get started'}
+            </p>
           </div>
-          
-          <div className="dash-premium-card-details">
-            <div className="dash-premium-detail-item">
-              <span className="dash-premium-detail-label">Start Date</span>
-              <span className="dash-premium-detail-value">
-                {formatDate(getStartDate(t), 'start date')}
-              </span>
-            </div>
-            <div className="dash-premium-detail-item">
-              <span className="dash-premium-detail-label">Participants</span>
-              <span className="dash-premium-detail-value">
-                {t.participants ? Object.keys(t.participants).length : 0}
-              </span>
-            </div>
-            <div className="dash-premium-detail-item">
-              <span className="dash-premium-detail-label">Venue</span>
-              <span className="dash-premium-detail-value">{t.venue || '—'}</span>
-            </div>
-          </div>
-        </button>
-        
-        {/* Training Link with Copy functionality */}
-        {t.joinLink && (
-          <div style={{
-            marginTop: '8px',
-            padding: '12px',
-            background: isLinkAccessible(t) ? '#f0fdf4' : '#fef2f2',
-            border: `1px solid ${isLinkAccessible(t) ? '#bbf7d0' : '#fecaca'}`,
-            borderRadius: '8px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between'
-          }}>
-            <div>
-              <span style={{ 
-                fontSize: '14px', 
-                fontWeight: '500',
-                color: isLinkAccessible(t) ? '#065f46' : '#991b1b'
-              }}>
-                Training Link: {isLinkAccessible(t) ? 'Active' : 'Expired'}
-              </span>
-              <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px' }}>
-                Expires: {formatDate(t.expireDate)}
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              {/* Copy Link Button */}
-              <button
-                onClick={() => copyTrainingLink(t.joinLink, t.id)}
-                style={{
-                  background: copiedId === t.id ? '#10b981' : '#6b7280',
-                  color: 'white',
-                  border: 'none',
-                  padding: '6px 12px',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  fontWeight: '500',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
+        ) : (
+          currentTrainings.map((t, idx) => (
+            <div key={t.id} style={styles.trainingCardWrapper}>
+              <div
+                style={styles.trainingCard}
+                onClick={() => setSelected(t)}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-5px)';
+                  e.currentTarget.style.boxShadow = '0 20px 40px rgba(0,0,0,0.15)';
                 }}
-                title="Copy Training Link"
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 10px 30px rgba(0,0,0,0.1)';
+                }}
               >
-                {copiedId === t.id ? '✓ Copied!' : '📋 Copy'}
-              </button>
+                <div style={styles.cardHeader} className="mobile-stack">
+                  <div style={styles.trainerInfo}>
+                    <div style={styles.trainerAvatar}>
+                      {t.trainerName?.charAt(0)?.toUpperCase() || '?'}
+                    </div>
+                    <div style={styles.trainerDetails}>
+                      <h3 style={styles.trainerName}>
+                        {t.trainerName || "Unknown Trainer"}
+                      </h3>
+                      <p style={styles.trainerLocation}>
+                        📍 {t.location || 'No location'}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div style={styles.cardActions} className="mobile-full-width mobile-stack">
+                    <span style={{
+                      ...styles.statusBadge,
+                      ...(isActiveTraining(t) 
+                        ? styles.statusBadgeActive 
+                        : t.status === 'completed' 
+                          ? styles.statusBadgeCompleted 
+                          : styles.statusBadgePending
+                      )
+                    }}>
+                      {isActiveTraining(t) ? "⚡ Active" : `📌 ${t.status || 'Pending'}`}
+                    </span>
+                    {isActiveTraining(t) && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEditTraining(t);
+                        }}
+                        style={styles.editBtn}
+                        title="Update Training"
+                        onMouseOver={(e) => {
+                          e.target.style.transform = 'scale(1.1)';
+                        }}
+                        onMouseOut={(e) => {
+                          e.target.style.transform = 'scale(1)';
+                        }}
+                      >
+                        ✏️
+                      </button>
+                    )}
+                  </div>
+                </div>
+                
+                <div style={styles.cardDetails}>
+                  <div style={styles.detailItem}>
+                    <span style={styles.detailIcon}>📅</span>
+                    <span style={styles.detailLabel}>Start Date</span>
+                    <span style={styles.detailValue}>
+                      {formatDate(getStartDate(t), 'start date')}
+                    </span>
+                  </div>
+                  <div style={styles.detailItem}>
+                    <span style={styles.detailIcon}>👥</span>
+                    <span style={styles.detailLabel}>Participants</span>
+                    <span style={styles.detailValue}>
+                      {t.participants ? Object.keys(t.participants).length : 0}
+                    </span>
+                  </div>
+                  <div style={styles.detailItem}>
+                    <span style={styles.detailIcon}>🏢</span>
+                    <span style={styles.detailLabel}>Venue</span>
+                    <span style={styles.detailValue}>{t.venue || '—'}</span>
+                  </div>
+                </div>
+              </div>
               
-              {/* Open Link Button */}
-              {isLinkAccessible(t) ? (
-                <a
-                  href={t.joinLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    background: '#059669',
-                    color: 'white',
-                    padding: '6px 12px',
-                    borderRadius: '6px',
-                    textDecoration: 'none',
-                    fontSize: '12px',
-                    fontWeight: '500'
-                  }}
-                >
-                  🔗 Open
-                </a>
-              ) : (
-                <span style={{
-                  background: '#dc2626',
-                  color: 'white',
-                  padding: '6px 12px',
-                  borderRadius: '6px',
-                  fontSize: '12px',
-                  fontWeight: '500'
+              {/* Enhanced Training Link Section */}
+              {t.joinLink && (
+                <div style={{
+                  ...styles.linkSection,
+                  ...(isLinkAccessible(t) 
+                    ? styles.linkSectionAccessible 
+                    : styles.linkSectionExpired
+                  )
                 }}>
-                  ❌ Expired
-                </span>
+                  <div style={styles.linkInfo}>
+                    <div style={{
+                      ...styles.linkStatus,
+                      ...(isLinkAccessible(t) 
+                        ? styles.linkStatusAccessible 
+                        : styles.linkStatusExpired
+                      )
+                    }}>
+                      <span style={styles.linkIcon}>{isLinkAccessible(t) ? '🟢' : '🔴'}</span>
+                      <span style={styles.linkText}>
+                        Training Link: {isLinkAccessible(t) ? 'Active' : 'Expired'}
+                      </span>
+                    </div>
+                    <div style={styles.linkExpire}>
+                      Expires: {formatDate(t.expireDate)}
+                    </div>
+                  </div>
+                  
+                  <div style={styles.linkActions}>
+                    <button
+                      onClick={() => copyTrainingLink(t.joinLink, t.id)}
+                      style={{
+                        ...styles.linkBtn,
+                        ...(copiedId === t.id ? styles.linkBtnCopied : styles.linkBtnCopy)
+                      }}
+                      title="Copy Training Link"
+                      onMouseOver={(e) => {
+                        e.target.style.transform = 'translateY(-1px)';
+                      }}
+                      onMouseOut={(e) => {
+                        e.target.style.transform = 'translateY(0)';
+                      }}
+                    >
+                      {copiedId === t.id ? '✓ Copied!' : '📋 Copy'}
+                    </button>
+                    
+                    {isLinkAccessible(t) ? (
+                      <a
+                        href={t.joinLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{...styles.linkBtn, ...styles.linkBtnOpen}}
+                        onMouseOver={(e) => {
+                          e.target.style.transform = 'translateY(-1px)';
+                        }}
+                        onMouseOut={(e) => {
+                          e.target.style.transform = 'translateY(0)';
+                        }}
+                      >
+                        🔗 Open
+                      </a>
+                    ) : (
+                      <span style={{...styles.linkBtn, ...styles.linkBtnExpired}}>
+                        ❌ Expired
+                      </span>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
-          </div>
+          ))
         )}
       </div>
-    ))
-  )}
-</div>
 
-
-
-      {/* Pagination Controls */}
+      {/* Enhanced Pagination */}
       {totalPages > 1 && (
-        <div style={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          gap: '8px',
-          margin: '30px 0',
-          flexWrap: 'wrap'
-        }}>
+        <div style={styles.paginationContainer}>
           <button
             onClick={handlePrevPage}
             disabled={currentPage === 1}
             style={{
-              padding: '8px 12px',
-              border: '1px solid #d1d5db',
-              borderRadius: '6px',
-              background: currentPage === 1 ? '#f9fafb' : 'white',
-              color: currentPage === 1 ? '#9ca3af' : '#374151',
-              cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
-              fontSize: '14px'
+              ...styles.paginationBtn,
+              ...(currentPage === 1 ? styles.paginationBtnDisabled : {})
+            }}
+            onMouseOver={(e) => {
+              if (currentPage !== 1) {
+                e.target.style.background = 'rgba(255,255,255,0.2)';
+                e.target.style.transform = 'translateY(-1px)';
+              }
+            }}
+            onMouseOut={(e) => {
+              if (currentPage !== 1) {
+                e.target.style.background = 'rgba(255,255,255,0.1)';
+                e.target.style.transform = 'translateY(0)';
+              }
             }}
           >
             ← Previous
           </button>
 
-          {/* Page Numbers */}
-          {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-            let pageNum;
-            if (totalPages <= 7) {
-              pageNum = i + 1;
-            } else if (currentPage <= 4) {
-              pageNum = i + 1;
-            } else if (currentPage >= totalPages - 3) {
-              pageNum = totalPages - 6 + i;
-            } else {
-              pageNum = currentPage - 3 + i;
-            }
+          <div style={styles.pageNumbers}>
+            {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+              let pageNum;
+              if (totalPages <= 7) {
+                pageNum = i + 1;
+              } else if (currentPage <= 4) {
+                pageNum = i + 1;
+              } else if (currentPage >= totalPages - 3) {
+                pageNum = totalPages - 6 + i;
+              } else {
+                pageNum = currentPage - 3 + i;
+              }
 
-            if (pageNum < 1 || pageNum > totalPages) return null;
+              if (pageNum < 1 || pageNum > totalPages) return null;
 
-            return (
-              <button
-                key={pageNum}
-                onClick={() => handlePageChange(pageNum)}
-                style={{
-                  padding: '8px 12px',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '6px',
-                  background: currentPage === pageNum ? '#2563eb' : 'white',
-                  color: currentPage === pageNum ? 'white' : '#374151',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  minWidth: '40px'
-                }}
-              >
-                {pageNum}
-              </button>
-            );
-          })}
+              return (
+                <button
+                  key={pageNum}
+                  onClick={() => handlePageChange(pageNum)}
+                  style={{
+                    ...styles.pageNumber,
+                    ...(currentPage === pageNum ? styles.pageNumberActive : {})
+                  }}
+                  onMouseOver={(e) => {
+                    if (currentPage !== pageNum) {
+                      e.target.style.background = 'rgba(255,255,255,0.2)';
+                    }
+                  }}
+                  onMouseOut={(e) => {
+                    if (currentPage !== pageNum) {
+                      e.target.style.background = 'rgba(255,255,255,0.1)';
+                    }
+                  }}
+                >
+                  {pageNum}
+                </button>
+              );
+            })}
+          </div>
 
           <button
             onClick={handleNextPage}
             disabled={currentPage === totalPages}
             style={{
-              padding: '8px 12px',
-              border: '1px solid #d1d5db',
-              borderRadius: '6px',
-              background: currentPage === totalPages ? '#f9fafb' : 'white',
-              color: currentPage === totalPages ? '#9ca3af' : '#374151',
-              cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
-              fontSize: '14px'
+              ...styles.paginationBtn,
+              ...(currentPage === totalPages ? styles.paginationBtnDisabled : {})
+            }}
+            onMouseOver={(e) => {
+              if (currentPage !== totalPages) {
+                e.target.style.background = 'rgba(255,255,255,0.2)';
+                e.target.style.transform = 'translateY(-1px)';
+              }
+            }}
+            onMouseOut={(e) => {
+              if (currentPage !== totalPages) {
+                e.target.style.background = 'rgba(255,255,255,0.1)';
+                e.target.style.transform = 'translateY(0)';
+              }
             }}
           >
             Next →
@@ -1169,77 +2576,91 @@ const extractParticipantMobiles = (participants) => {
       {/* Enhanced Modal */}
       {selected && (
         <div 
-          className="dash-premium-modal-overlay" 
+          style={styles.modalOverlay} 
           onClick={() => setSelected(null)}
         >
           <div 
-            className="dash-premium-modal" 
+            style={styles.modalContainer} 
             onClick={e => e.stopPropagation()}
           >
-            <div className="dash-premium-modal-header">
-              <div className="dash-premium-modal-header-content">
-                <div className="dash-premium-modal-trainer-avatar">
+            <div style={styles.modalHeader}>
+              <div style={styles.modalHeaderContent}>
+                <div style={styles.modalTrainerAvatar}>
                   {selected.trainerName?.charAt(0)?.toUpperCase() || '?'}
                 </div>
-                <div className="dash-premium-modal-trainer-info">
-                  <h2 className="dash-premium-modal-title">
+                <div style={styles.modalTrainerInfo}>
+                  <h2 style={styles.modalTitle}>
                     {selected.trainerName || "Training Details"}
                   </h2>
-                  <span className={`dash-premium-status dash-premium-status-large ${
-                    isActiveTraining(selected) ? 'active' : selected.status || 'pending'
-                  }`}>
-                    {isActiveTraining(selected) ? "Active" : (selected.status || 'Pending')}
+                  <span style={{
+                    ...styles.modalStatus,
+                    ...(isActiveTraining(selected) 
+                      ? styles.modalStatusActive 
+                      : selected.status === 'completed' 
+                        ? styles.modalStatusCompleted 
+                        : styles.modalStatusPending
+                    )
+                  }}>
+                    {isActiveTraining(selected) ? "⚡ Active" : `📌 ${selected.status || 'Pending'}`}
                   </span>
                 </div>
               </div>
               <button 
-                className="dash-premium-modal-close" 
+                style={styles.modalClose} 
                 onClick={() => setSelected(null)}
                 aria-label="Close modal"
+                onMouseOver={(e) => {
+                  e.target.style.background = '#e5e7eb';
+                  e.target.style.color = '#374151';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.background = '#f3f4f6';
+                  e.target.style.color = '#6b7280';
+                }}
               >
-                ×
+                ✕
               </button>
             </div>
 
-            <div className="dash-premium-modal-content">
-              <div className="dash-premium-modal-section">
-                <h3 className="dash-premium-section-title">Training Information</h3>
-                <div className="dash-premium-detail-grid">
-                  <div className="dash-premium-detail-row">
-                    <span className="dash-premium-detail-key">Trainer ID</span>
-                    <span className="dash-premium-detail-val">{selected.trainerId || "—"}</span>
+            <div style={styles.modalContent}>
+              <div style={styles.modalSection}>
+                <h3 style={styles.sectionTitle}>📋 Training Information</h3>
+                <div style={styles.detailGrid}>
+                  <div style={styles.detailRow}>
+                    <span style={styles.detailKey}>🆔 Trainer ID</span>
+                    <span style={styles.detailVal}>{selected.trainerId || "—"}</span>
                   </div>
-                  <div className="dash-premium-detail-row">
-                    <span className="dash-premium-detail-key">Start Date</span>
-                    <span className="dash-premium-detail-val">
+                  <div style={styles.detailRow}>
+                    <span style={styles.detailKey}>📅 Start Date</span>
+                    <span style={styles.detailVal}>
                       {formatDate(getStartDate(selected), 'modal start date')}
                     </span>
                   </div>
-                  <div className="dash-premium-detail-row">
-                    <span className="dash-premium-detail-key">Time</span>
-                    <span className="dash-premium-detail-val">{selected.time || "—"}</span>
+                  <div style={styles.detailRow}>
+                    <span style={styles.detailKey}>🕐 Time</span>
+                    <span style={styles.detailVal}>{selected.time || "—"}</span>
                   </div>
-                  <div className="dash-premium-detail-row">
-                    <span className="dash-premium-detail-key">Expire Date</span>
-                    <span className="dash-premium-detail-val">
+                  <div style={styles.detailRow}>
+                    <span style={styles.detailKey}>⏰ Expire Date</span>
+                    <span style={styles.detailVal}>
                       {formatDate(getExpireDate(selected), 'modal expire date')}
                     </span>
                   </div>
-                  <div className="dash-premium-detail-row">
-                    <span className="dash-premium-detail-key">Location</span>
-                    <span className="dash-premium-detail-val">{selected.location || "—"}</span>
+                  <div style={styles.detailRow}>
+                    <span style={styles.detailKey}>📍 Location</span>
+                    <span style={styles.detailVal}>{selected.location || "—"}</span>
                   </div>
-                  <div className="dash-premium-detail-row">
-                    <span className="dash-premium-detail-key">Venue</span>
-                    <span className="dash-premium-detail-val">{selected.venue || "—"}</span>
+                  <div style={styles.detailRow}>
+                    <span style={styles.detailKey}>🏢 Venue</span>
+                    <span style={styles.detailVal}>{selected.venue || "—"}</span>
                   </div>
                   {selected.products && selected.products.length > 0 && (
-                    <div className="dash-premium-detail-row dash-premium-detail-row-full">
-                      <span className="dash-premium-detail-key">Products</span>
-                      <span className="dash-premium-detail-val">
-                        <div className="dash-premium-products-list">
+                    <div style={{...styles.detailRow, ...styles.detailRowFull}}>
+                      <span style={styles.detailKey}>📦 Products</span>
+                      <span style={styles.detailVal}>
+                        <div style={styles.productsList}>
                           {selected.products.map((product, idx) => (
-                            <span key={idx} className="dash-premium-product-tag">
+                            <span key={idx} style={styles.productTag}>
                               {product}
                             </span>
                           ))}
@@ -1252,28 +2673,42 @@ const extractParticipantMobiles = (participants) => {
 
               {/* Participants Section */}
               {selected.participants && Object.keys(selected.participants).length > 0 && (
-                <div className="dash-premium-modal-section">
-                  <h3 className="dash-premium-section-title">
-                    Participants ({Object.keys(selected.participants).length})
+                <div style={styles.modalSection}>
+                  <h3 style={styles.sectionTitle}>
+                    👥 Participants ({Object.keys(selected.participants).length})
                   </h3>
-                  <div className="dash-premium-participants-grid">
+                  <div style={styles.participantsGrid}>
                     {Object.values(selected.participants).map((participant, i) => (
-                      <div key={i} className="dash-premium-participant-card">
-                        <div className="dash-premium-participant-avatar">
+                      <div 
+                        key={i} 
+                        style={styles.participantCard}
+                        onMouseOver={(e) => {
+                          e.currentTarget.style.background = '#f1f5f9';
+                          e.currentTarget.style.transform = 'translateY(-1px)';
+                        }}
+                        onMouseOut={(e) => {
+                          e.currentTarget.style.background = '#f8fafc';
+                          e.currentTarget.style.transform = 'translateY(0)';
+                        }}
+                      >
+                        <div style={styles.participantAvatar}>
                           {participant.name?.charAt(0)?.toUpperCase() || "?"}
                         </div>
-                        <div className="dash-premium-participant-info">
-                          <div className="dash-premium-participant-name">
+                        <div style={styles.participantInfo}>
+                          <div style={styles.participantName}>
                             {participant.name}
                           </div>
-                          <div className="dash-premium-participant-contact">
+                          <div style={styles.participantContact}>
                             {participant.email}
                           </div>
                         </div>
-                        <div className={`dash-premium-participant-status ${
-                          participant.status === 'confirmed' || participant.confirmedByTrainer 
-                            ? 'confirmed' : 'pending'
-                        }`}>
+                        <div style={{
+                          ...styles.participantStatus,
+                          ...(participant.status === 'confirmed' || participant.confirmedByTrainer 
+                            ? styles.participantStatusConfirmed 
+                            : styles.participantStatusPending
+                          )
+                        }}>
                           {participant.status === 'confirmed' || participant.confirmedByTrainer 
                             ? "✓" : "⏳"}
                         </div>

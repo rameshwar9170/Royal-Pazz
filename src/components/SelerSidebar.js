@@ -47,6 +47,7 @@ const SelerSidebar = ({ isOpen, toggleSidebar, activeMenu, setActiveMenu }) => {
     },
     { name: "Web Builder", path: "/dashboard/web-builder", icon: <FaShoppingCart /> },
     { name: "Withdraw", path: "/dashboard/withdrawal", icon: <FaShoppingCart /> },
+    { name: "DocumentVerification", path: "/dashboard/DocumentVerification", icon: <FaWrench /> },
   ];
 
   const handleLogout = async () => {

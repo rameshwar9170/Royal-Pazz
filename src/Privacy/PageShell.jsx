@@ -330,7 +330,7 @@ const PageShell = ({ title, children }) => {
       <div className="page-container">
         <header className="header">
           <div className="header-content">
-            <Link to="/" className="logo">🌿 Panchgiri Ayurveda</Link>
+            <Link to="/" className="logo"> ONDO</Link>
             <nav className="header-nav">
               {navItems.map((item) => (
                 <Link
@@ -389,7 +389,7 @@ const PageShell = ({ title, children }) => {
           <div className="footer-content">
             <div className="footer-inner">
               <div className="footer-copyright">
-                © {new Date().getFullYear()} Panchgiri Ayurveda. All rights reserved.
+                © {new Date().getFullYear()} ONDO All rights reserved.
               </div>
               <div className="footer-links">
                 <Link to="/policies/terms" className="footer-link">Terms</Link>

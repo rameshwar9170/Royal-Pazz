@@ -55,59 +55,52 @@ const CompanyUserList = () => {
     return () => unsubscribe();
   }, []);
 
+  // Define role mapping at the component level with proper exact matches
+  const roleMapping = {
+    'diamond': ['diamond agency', 'diamond distributor', 'diamond wholesaler'],
+    'agency': ['agency'],
+    'mega agency': ['mega agency'],
+    'diamond agency': ['diamond agency'],
+    'dealer': ['dealer'],
+    'mega dealer': ['mega dealer'],
+    'distributor': ['distributor'],
+    'mega distributor': ['mega distributor'],
+    'diamond distributor': ['diamond distributor'],
+    'wholesaler': ['wholesaler'],
+    'mega wholesaler': ['mega wholesaler'],
+    'diamond wholesaler': ['diamond wholesaler'],
+    'trainer': ['trainer'],
+    'subadmin': ['subadmin'],
+    'admin': ['admin'],
+    'manager': ['manager'],
+    'employee': ['employee'],
+  };
+
   // Filter, sort, and paginate users
-// Define role mapping at the component level
-// Define role mapping at the component level
-const roleMapping = {
-  'diamond': ['diamond agency', 'diamond distributor', 'diamond wholesaler'],
-  'agency': ['agency'], // Only exact match for agency
-  'mega agency': ['mega agency'], // Separate entry for mega agency
-  'diamond agency': ['diamond agency'], // Separate entry for diamond agency
-  'dealer': ['dealer'],
-  'mega dealer': ['mega dealer'],
-  'distributor': ['distributor'], // Only exact match for distributor
-  'mega distributor': ['mega distributor'],
-  'diamond distributor': ['diamond distributor'],
-  'wholesaler': ['wholesaler'], // Only exact match for wholesaler
-  'mega wholesaler': ['mega wholesaler'],
-  'diamond wholesaler': ['diamond wholesaler'],
-  'admin': ['admin'], // Only exact match for admin
-  'subadmin': ['subadmin'], // Separate entry for subadmin
-  'trainer': ['trainer'],
-  'manager': ['manager'],
-  'employee': ['employee'],
-  // Add other mappings as needed
-};
-
-// Filter, sort, and paginate users
-const processedUsers = users
-  .filter(user => {
-    const matchesSearch =
-      user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.phone?.includes(searchTerm);
-    
-    // Fixed role matching logic using roleMapping with exact matches
-    let matchesRole;
-    if (selectedRole === 'all') {
-      matchesRole = true;
-    } else if (roleMapping[selectedRole.toLowerCase()]) {
-      // Use role mapping for defined roles
-      matchesRole = roleMapping[selectedRole.toLowerCase()].includes(user.role?.toLowerCase());
-    } else {
-      // For roles not in mapping, use exact match only
-      matchesRole = user.role?.toLowerCase() === selectedRole.toLowerCase();
-    }
-    
-    return matchesSearch && matchesRole;
-  })
-  .sort((a, b) => {
-    const aValue = a[sortBy] || '';
-    const bValue = b[sortBy] || '';
-    const comparison = aValue.toString().localeCompare(bValue.toString());
-    return sortOrder === 'asc' ? comparison : -comparison;
-  });
-
+  const processedUsers = users
+    .filter(user => {
+      const matchesSearch =
+        user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.phone?.includes(searchTerm);
+      
+      let matchesRole;
+      if (selectedRole === 'all') {
+        matchesRole = true;
+      } else if (roleMapping[selectedRole.toLowerCase()]) {
+        matchesRole = roleMapping[selectedRole.toLowerCase()].includes(user.role?.toLowerCase());
+      } else {
+        matchesRole = user.role?.toLowerCase() === selectedRole.toLowerCase();
+      }
+      
+      return matchesSearch && matchesRole;
+    })
+    .sort((a, b) => {
+      const aValue = a[sortBy] || '';
+      const bValue = b[sortBy] || '';
+      const comparison = aValue.toString().localeCompare(bValue.toString());
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
 
   const totalPages = Math.ceil(processedUsers.length / usersPerPage);
   const displayedUsers = processedUsers.slice(
@@ -144,33 +137,32 @@ const processedUsers = users
     }
   };
 
-// Updated getRoleStats function with all role levels
-const getRoleStats = () => {
-  const stats = {
-    total: users.length,
-    agency: users.filter(user => user.role?.toLowerCase() === 'agency').length,
-    'mega agency': users.filter(user => user.role?.toLowerCase() === 'mega agency').length,
-    diamond: users.filter(user => user.role?.toLowerCase().includes('diamond')).length,
-    dealer: users.filter(user => user.role?.toLowerCase() === 'dealer').length,
-    'mega dealer': users.filter(user => user.role?.toLowerCase() === 'mega dealer').length,
-    distributor: users.filter(user => user.role?.toLowerCase() === 'distributor').length,
-    'mega distributor': users.filter(user => user.role?.toLowerCase() === 'mega distributor').length,
-    'diamond distributor': users.filter(user => user.role?.toLowerCase() === 'diamond distributor').length,
-    wholesaler: users.filter(user => user.role?.toLowerCase() === 'wholesaler').length,
-    'mega wholesaler': users.filter(user => user.role?.toLowerCase() === 'mega wholesaler').length,
-    'diamond wholesaler': users.filter(user => user.role?.toLowerCase() === 'diamond wholesaler').length,
-    trainer: users.filter(user => user.role?.toLowerCase() === 'trainer').length,
-    subadmin: users.filter(user => user.role?.toLowerCase() === 'subadmin').length,
-    admin: users.filter(user => user.role?.toLowerCase() === 'admin').length,
-    manager: users.filter(user => user.role?.toLowerCase() === 'manager').length,
-    employee: users.filter(user => user.role?.toLowerCase() === 'employee').length,
+  // Updated getRoleStats function with all role levels
+  const getRoleStats = () => {
+    const stats = {
+      total: users.length,
+      agency: users.filter(user => user.role?.toLowerCase() === 'agency').length,
+      'mega agency': users.filter(user => user.role?.toLowerCase() === 'mega agency').length,
+      'diamond agency': users.filter(user => user.role?.toLowerCase() === 'diamond agency').length,
+      diamond: users.filter(user => user.role?.toLowerCase().includes('diamond')).length,
+      dealer: users.filter(user => user.role?.toLowerCase() === 'dealer').length,
+      'mega dealer': users.filter(user => user.role?.toLowerCase() === 'mega dealer').length,
+      distributor: users.filter(user => user.role?.toLowerCase() === 'distributor').length,
+      'mega distributor': users.filter(user => user.role?.toLowerCase() === 'mega distributor').length,
+      'diamond distributor': users.filter(user => user.role?.toLowerCase() === 'diamond distributor').length,
+      wholesaler: users.filter(user => user.role?.toLowerCase() === 'wholesaler').length,
+      'mega wholesaler': users.filter(user => user.role?.toLowerCase() === 'mega wholesaler').length,
+      'diamond wholesaler': users.filter(user => user.role?.toLowerCase() === 'diamond wholesaler').length,
+      trainer: users.filter(user => user.role?.toLowerCase() === 'trainer').length,
+      subadmin: users.filter(user => user.role?.toLowerCase() === 'subadmin').length,
+      admin: users.filter(user => user.role?.toLowerCase() === 'admin').length,
+      manager: users.filter(user => user.role?.toLowerCase() === 'manager').length,
+      employee: users.filter(user => user.role?.toLowerCase() === 'employee').length,
+    };
+    return stats;
   };
-  return stats;
-};
-
 
   const roleStats = getRoleStats();
-  const uniqueRoles = [...new Set(users.map(user => user.role).filter(Boolean))];
 
   const fetchUserAdditionalData = async (userId) => {
     setFetchingAdditionalData(true);
@@ -199,10 +191,9 @@ const getRoleStats = () => {
         const userData = userSnapshot.val();
         salesData.personalSales = parseFloat(userData.MySales) || 0;
         
-    if (userData.analytics) {
-  salesData.totalSales = userData.analytics.totalSales || 0; // Add this line
-}
-
+        if (userData.analytics) {
+          salesData.totalSales = userData.analytics.totalSales || 0;
+        }
 
         if (userData.commissionHistory) {
           const commissions = Object.entries(userData.commissionHistory).map(([id, commission]) => ({
@@ -468,12 +459,10 @@ const getRoleStats = () => {
                 <div className="detail-items">
                   {userSalesData ? (
                     <>
-
-                               <div className="detail-item">
-  <span className="detail-label">Total Sales</span>
-  <span className="detail-value">{safeNumberFormat(userSalesData.totalSales)}</span>
-</div>
-
+                      <div className="detail-item">
+                        <span className="detail-label">Total Sales</span>
+                        <span className="detail-value">{safeNumberFormat(userSalesData.totalSales)}</span>
+                      </div>
                       <div className="detail-item">
                         <span className="detail-label">Total Earnings</span>
                         <span className="detail-value">{safeNumberFormat(userSalesData.personalSales)}</span>
@@ -482,8 +471,6 @@ const getRoleStats = () => {
                         <span className="detail-label">Team Commission</span>
                         <span className="detail-value">{safeNumberFormat(userSalesData.teamCommission)}</span>
                       </div>
-  
-
                       <div className="detail-item">
                         <span className="detail-label">Team Members</span>
                         <span className="detail-value">{userSalesData.teamMembers || 0}</span>
@@ -728,7 +715,7 @@ const getRoleStats = () => {
             font-weight: 400;
           }
 
-          /* Control Panel */
+          /* Control Panel - REDESIGNED */
           .control-panel {
             padding: 24px;
             background: #f8fafc;
@@ -737,22 +724,25 @@ const getRoleStats = () => {
 
           .control-row {
             display: flex;
-            flex-direction: column;
+            flex-direction: row;
             gap: 16px;
+            align-items: center;
+            flex-wrap: wrap;
             margin-bottom: 24px;
           }
 
           /* Search Container */
           .search-container {
+            flex: 3;
+            min-width: 240px;
             position: relative;
-            width: 100%;
           }
 
           .search-input {
             width: 100%;
-            padding: 16px 20px;
+            padding: 14px 50px 14px 20px;
             border: 2px solid #e2e8f0;
-            border-radius: 16px;
+            border-radius: 14px;
             font-size: 16px;
             background: white;
             transition: all 0.3s ease;
@@ -775,23 +765,11 @@ const getRoleStats = () => {
             font-size: 18px;
           }
 
-          /* Filter Group */
-          .filter-group {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-          }
-
-          .filter-row {
-            display: flex;
-            gap: 12px;
-            flex-wrap: wrap;
-          }
-
+          /* Select Dropdown */
           .select {
             flex: 1;
-            min-width: 0;
-            padding: 14px 16px;
+            min-width: 140px;
+            padding: 14px 40px 14px 16px;
             border: 2px solid #e2e8f0;
             border-radius: 14px;
             background: white;
@@ -803,7 +781,7 @@ const getRoleStats = () => {
             background-position: right 12px center;
             background-repeat: no-repeat;
             background-size: 16px;
-            padding-right: 40px;
+            box-sizing: border-box;
           }
 
           .select:focus {
@@ -818,12 +796,14 @@ const getRoleStats = () => {
             background: #e5e7eb;
             border-radius: 14px;
             padding: 4px;
-            width: fit-content;
-            margin: 0 auto;
+            gap: 4px;
+            flex: 0 0 200px;
+            min-width: 200px;
           }
 
           .toggle-button {
-            padding: 12px 20px;
+            flex: 1;
+            padding: 12px 16px;
             border: none;
             background: transparent;
             border-radius: 10px;
@@ -834,6 +814,7 @@ const getRoleStats = () => {
             color: #6b7280;
             display: flex;
             align-items: center;
+            justify-content: center;
             gap: 6px;
           }
 
@@ -853,7 +834,7 @@ const getRoleStats = () => {
 
           .stat-card {
             background: white;
-            // padding: 16px 12px;
+            padding: 16px 12px;
             border-radius: 16px;
             text-align: center;
             cursor: pointer;
@@ -891,9 +872,13 @@ const getRoleStats = () => {
           .stat-label {
             font-size: 0.75rem;
             opacity: 0.8;
-            color:black;
+            color: black;
             font-weight: 600;
             line-height: 1.2;
+          }
+
+          .stat-card.active .stat-label {
+            color: white;
           }
 
           /* Cards Grid */
@@ -1491,6 +1476,26 @@ const getRoleStats = () => {
           }
 
           /* Mobile Responsive Adjustments */
+          @media (max-width: 968px) {
+            .control-row {
+              flex-direction: column;
+              gap: 12px;
+            }
+
+            .search-container,
+            .select,
+            .view-toggle {
+              flex: none;
+              max-width: 100%;
+              width: 100%;
+            }
+
+            .view-toggle {
+              max-width: none;
+              min-width: auto;
+            }
+          }
+
           @media (max-width: 768px) {
             .user-list-wrapper {
               padding: 4px;
@@ -1585,26 +1590,13 @@ const getRoleStats = () => {
 
           @media (max-width: 480px) {
             .search-input {
-              font-size: 16px; /* Prevents zoom on iOS */
-              padding: 14px 16px;
-            }
-
-            .filter-group {
-              gap: 8px;
+              font-size: 16px;
+              padding: 12px 40px 12px 16px;
             }
 
             .select {
-              padding: 12px 14px;
+              padding: 12px 36px 12px 14px;
               font-size: 14px;
-            }
-
-            .view-toggle {
-              width: 100%;
-            }
-
-            .toggle-button {
-              flex: 1;
-              justify-content: center;
             }
 
             .user-card {
@@ -1723,8 +1715,7 @@ const getRoleStats = () => {
       
       <div className="container">
         <div className="header">
-   <h1 className="title" style={{ color: 'white' }}>User Directory</h1>
-
+          <h1 className="title" style={{ color: 'white' }}>User Directory</h1>
           <p className="subtitle">Manage and explore your team members</p>
         </div>
 
@@ -1741,137 +1732,148 @@ const getRoleStats = () => {
               <span className="search-icon">🔍</span>
             </div>
             
-            <div className="filter-group">
-              <div className="filter-row">
-                <select
-                  value={selectedRole}
-                  onChange={(e) => setSelectedRole(e.target.value)}
-                  className="select"
-                >
-                  <option value="all">All Roles</option>
-                  {uniqueRoles.map(role => (
-                    <option key={role} value={role}>{role}</option>
-                  ))}
-                </select>
+            <select
+              value={selectedRole}
+              onChange={(e) => setSelectedRole(e.target.value)}
+              className="select"
+            >
+              <option value="all">All Roles</option>
+              <option value="agency">Agency</option>
+              <option value="mega agency">Mega Agency</option>
+              <option value="diamond agency">Diamond Agency</option>
+              <option value="dealer">Dealer</option>
+              <option value="mega dealer">Mega Dealer</option>
+              <option value="distributor">Distributor</option>
+              <option value="mega distributor">Mega Distributor</option>
+              <option value="diamond distributor">Diamond Distributor</option>
+              <option value="wholesaler">Wholesaler</option>
+              <option value="mega wholesaler">Mega Wholesaler</option>
+              <option value="diamond wholesaler">Diamond Wholesaler</option>
+              <option value="diamond">All Diamond Roles</option>
+              <option value="trainer">Trainer</option>
+              <option value="subadmin">Sub Admin</option>
+              <option value="admin">Admin</option>
+              <option value="manager">Manager</option>
+              <option value="employee">Employee</option>
+            </select>
 
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="select"
-                >
-                  <option value="name">Sort by Name</option>
-                  <option value="email">Sort by Email</option>
-                  <option value="role">Sort by Role</option>
-                  <option value="createdAt">Sort by Date</option>
-                </select>
-              </div>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="select"
+            >
+              <option value="name">Sort by Name</option>
+              <option value="email">Sort by Email</option>
+              <option value="role">Sort by Role</option>
+              <option value="createdAt">Sort by Date</option>
+            </select>
 
-              <div className="view-toggle">
-                <button
-                  className={`toggle-button ${viewMode === 'cards' ? 'active' : ''}`}
-                  onClick={() => setViewMode('cards')}
-                >
-                  📊 Cards
-                </button>
-                <button
-                  className={`toggle-button ${viewMode === 'table' ? 'active' : ''}`}
-                  onClick={() => setViewMode('table')}
-                >
-                  📋 Table
-                </button>
-              </div>
+            <div className="view-toggle">
+              <button
+                className={`toggle-button ${viewMode === 'cards' ? 'active' : ''}`}
+                onClick={() => setViewMode('cards')}
+              >
+                📊 Cards
+              </button>
+              <button
+                className={`toggle-button ${viewMode === 'table' ? 'active' : ''}`}
+                onClick={() => setViewMode('table')}
+              >
+                📋 Table
+              </button>
             </div>
           </div>
 
           {/* Stats Row */}
           <div className="stats-row">
             <div className={`stat-card ${selectedRole === 'all' ? 'active' : ''}`} onClick={() => handleRoleFilter('all')}>
-              {/* <div className="stat-icon">👥</div> */}
               <div className="stat-number">{roleStats.total}</div>
               <div className="stat-label">Total Users</div>
             </div>
 
             <div className={`stat-card ${selectedRole === 'agency' ? 'active' : ''}`} onClick={() => handleRoleFilter('agency')}>
-              {/* <div className="stat-icon">🏢</div> */}
               <div className="stat-number">{roleStats.agency}</div>
               <div className="stat-label">Agency</div>
             </div>
 
-            <div className={`stat-card ${selectedRole === 'mega agency' ? 'active' : ''}`} onClick={() => handleRoleFilter('mega agency' )}>
-              {/* <div className="stat-icon">🏢⭐</div> */}
+            <div className={`stat-card ${selectedRole === 'mega agency' ? 'active' : ''}`} onClick={() => handleRoleFilter('mega agency')}>
               <div className="stat-number">{roleStats['mega agency']}</div>
               <div className="stat-label">Mega Agency</div>
             </div>
 
+            <div className={`stat-card ${selectedRole === 'diamond agency' ? 'active' : ''}`} onClick={() => handleRoleFilter('diamond agency')}>
+              <div className="stat-number">{roleStats['diamond agency']}</div>
+              <div className="stat-label">Diamond Agency</div>
+            </div>
+
             <div className={`stat-card ${selectedRole === 'diamond' ? 'active' : ''}`} onClick={() => handleRoleFilter('diamond')}>
-              {/* <div className="stat-icon">💎</div> */}
               <div className="stat-number">{roleStats.diamond}</div>
               <div className="stat-label">Diamond</div>
             </div>
 
             <div className={`stat-card ${selectedRole === 'dealer' ? 'active' : ''}`} onClick={() => handleRoleFilter('dealer')}>
-              {/* <div className="stat-icon">🛒</div> */}
               <div className="stat-number">{roleStats.dealer}</div>
               <div className="stat-label">Dealer</div>
             </div>
 
             <div className={`stat-card ${selectedRole === 'mega dealer' ? 'active' : ''}`} onClick={() => handleRoleFilter('mega dealer')}>
-              {/* <div className="stat-icon">🛒⭐</div> */}
               <div className="stat-number">{roleStats['mega dealer']}</div>
               <div className="stat-label">Mega Dealer</div>
             </div>
 
             <div className={`stat-card ${selectedRole === 'distributor' ? 'active' : ''}`} onClick={() => handleRoleFilter('distributor')}>
-              {/* <div className="stat-icon">📦</div> */}
               <div className="stat-number">{roleStats.distributor}</div>
               <div className="stat-label">Distributor</div>
             </div>
 
             <div className={`stat-card ${selectedRole === 'mega distributor' ? 'active' : ''}`} onClick={() => handleRoleFilter('mega distributor')}>
-              {/* <div className="stat-icon">📦⭐</div> */}
               <div className="stat-number">{roleStats['mega distributor']}</div>
               <div className="stat-label">Mega Distributor</div>
             </div>
 
             <div className={`stat-card ${selectedRole === 'diamond distributor' ? 'active' : ''}`} onClick={() => handleRoleFilter('diamond distributor')}>
-              {/* <div className="stat-icon">📦💎</div> */}
               <div className="stat-number">{roleStats['diamond distributor']}</div>
               <div className="stat-label">Diamond Distributor</div>
             </div>
 
             <div className={`stat-card ${selectedRole === 'wholesaler' ? 'active' : ''}`} onClick={() => handleRoleFilter('wholesaler')}>
-              {/* <div className="stat-icon">🏬</div> */}
               <div className="stat-number">{roleStats.wholesaler}</div>
               <div className="stat-label">Wholesaler</div>
             </div>
 
             <div className={`stat-card ${selectedRole === 'mega wholesaler' ? 'active' : ''}`} onClick={() => handleRoleFilter('mega wholesaler')}>
-              {/* <div className="stat-icon">🏬⭐</div> */}
               <div className="stat-number">{roleStats['mega wholesaler']}</div>
               <div className="stat-label">Mega Wholesaler</div>
             </div>
 
             <div className={`stat-card ${selectedRole === 'diamond wholesaler' ? 'active' : ''}`} onClick={() => handleRoleFilter('diamond wholesaler')}>
-              {/* <div className="stat-icon">🏬💎</div> */}
               <div className="stat-number">{roleStats['diamond wholesaler']}</div>
               <div className="stat-label">Diamond Wholesaler</div>
             </div>
-             <div className={`stat-card ${selectedRole === 'trainer' ? 'active' : ''}`} onClick={() => handleRoleFilter('trainer')}>
-              {/* <div className="stat-icon">🎓</div> */}
+
+            <div className={`stat-card ${selectedRole === 'trainer' ? 'active' : ''}`} onClick={() => handleRoleFilter('trainer')}>
               <div className="stat-number">{roleStats.trainer}</div>
               <div className="stat-label">Trainer</div>
             </div>
 
             <div className={`stat-card ${selectedRole === 'subadmin' ? 'active' : ''}`} onClick={() => handleRoleFilter('subadmin')}>
-              {/* <div className="stat-icon">🎓</div> */}
               <div className="stat-number">{roleStats.subadmin}</div>
-              <div className="stat-label">subadmin</div>
+              <div className="stat-label">Sub Admin</div>
             </div>
 
             <div className={`stat-card ${selectedRole === 'admin' ? 'active' : ''}`} onClick={() => handleRoleFilter('admin')}>
-              {/* <div className="stat-icon">👑</div> */}
               <div className="stat-number">{roleStats.admin}</div>
               <div className="stat-label">Admin</div>
+            </div>
+
+            <div className={`stat-card ${selectedRole === 'manager' ? 'active' : ''}`} onClick={() => handleRoleFilter('manager')}>
+              <div className="stat-number">{roleStats.manager}</div>
+              <div className="stat-label">Manager</div>
+            </div>
+
+            <div className={`stat-card ${selectedRole === 'employee' ? 'active' : ''}`} onClick={() => handleRoleFilter('employee')}>
+              <div className="stat-number">{roleStats.employee}</div>
+              <div className="stat-label">Employee</div>
             </div>
           </div>
         </div>

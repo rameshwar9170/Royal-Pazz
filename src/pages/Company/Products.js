@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ref as dbRef, push, onValue, set, remove, update, get } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { getAuth } from 'firebase/auth';
 import { db, storage } from '../../firebase/config';
 import {
   FaPlus, FaSearch, FaEdit, FaTrash, FaTimes, FaCheck, FaImage, FaTag,
@@ -8,7 +9,29 @@ import {
   FaWindowMinimize, FaWindowMaximize, FaArrowsAlt, FaExpand
 } from 'react-icons/fa';
 
-// Professional ProductCard Component
+// ✅ Create a placeholder image generator
+const createPlaceholderImage = (width = 300, height = 200, text = 'No Image') => {
+  return `data:image/svg+xml;base64,${btoa(`
+    <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100%" height="100%" fill="#f8f9fa"/>
+      <text x="50%" y="50%" font-family="Arial" font-size="16" fill="#6c757d" text-anchor="middle" dy=".3em">${text}</text>
+    </svg>
+  `)}`;
+};
+
+// Utility function to extract storage path from URL
+const getStoragePathFromUrl = (url) => {
+  try {
+    const decodedUrl = decodeURIComponent(url);
+    const pathMatch = decodedUrl.match(/o\/(.*?)\?/);
+    return pathMatch ? pathMatch[1] : null;
+  } catch (error) {
+    console.error('Error extracting path from URL:', error);
+    return null;
+  }
+};
+
+// ProductCard Component
 const ProductCard = ({ product, onEdit, onDelete, onToggleStatus }) => {
   const [mainImageUrl, setMainImageUrl] = useState('');
 
@@ -16,7 +39,7 @@ const ProductCard = ({ product, onEdit, onDelete, onToggleStatus }) => {
     if (product?.imageUrls?.length > 0) {
       setMainImageUrl(product.imageUrls[0]);
     } else {
-      setMainImageUrl('https://via.placeholder.com/300x200/f8f9fa/6c757d?text=No+Image');
+      setMainImageUrl(createPlaceholderImage());
     }
   }, [product]);
 
@@ -25,7 +48,6 @@ const ProductCard = ({ product, onEdit, onDelete, onToggleStatus }) => {
   const status = product.status || 'active';
   const stockLevel = Number(product.stock) || 0;
 
-  // Enhanced stock status with better display
   const getStockStatus = () => {
     if (stockLevel <= 0) return { className: 'out-of-stock', text: 'Out of Stock', icon: '⚠️' };
     if (stockLevel <= 5) return { className: 'low-stock', text: 'Low Stock', icon: '⚠️' };
@@ -45,9 +67,9 @@ const ProductCard = ({ product, onEdit, onDelete, onToggleStatus }) => {
       <div className="product-image">
         <img 
           src={mainImageUrl} 
-          alt={product.name}
+          alt={product.name || 'Product'}
           onError={(e) => {
-            e.target.src = 'https://via.placeholder.com/300x200/f8f9fa/6c757d?text=No+Image';
+            e.target.src = createPlaceholderImage();
           }}
         />
         {product.imageUrls?.length > 1 && (
@@ -116,6 +138,7 @@ function Product() {
     serialNumber: '',
     status: 'active',
     imageUrls: [],
+    imagePaths: [],
   };
 
   // State management
@@ -133,14 +156,14 @@ function Product() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [sortBy, setSortBy] = useState('newest');
 
-  // Enhanced draggable modal state
+  // Draggable modal state
   const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isFirstRender, setIsFirstRender] = useState(true);
   const modalRef = useRef(null);
 
-  // Load products from Firebase Realtime Database
+  // Load products from Firebase
   useEffect(() => {
     const productsRef = dbRef(db, 'HTAMS/company/products');
     const unsubscribe = onValue(productsRef, (snapshot) => {
@@ -150,9 +173,6 @@ function Product() {
         : [];
       setAllProducts(loadedProducts);
       console.log('Products loaded:', loadedProducts.length);
-    }, (error) => {
-      console.error('Error loading products:', error);
-      alert('❌ Failed to load products. Please check your internet connection.');
     });
     
     return () => unsubscribe();
@@ -185,7 +205,7 @@ function Product() {
     setFilteredProducts(filtered);
   }, [searchQuery, allProducts, filterStatus, sortBy]);
 
-  // Enhanced draggable functionality
+  // ✅ Draggable functionality
   const handleMouseDown = (e) => {
     if (e.target.closest('.draggable-handle') && !e.target.closest('.modal-controls')) {
       setIsDragging(true);
@@ -290,7 +310,7 @@ function Product() {
     return () => window.removeEventListener('resize', handleResize);
   }, [formVisible]);
 
-  // Utility functions
+  // ✅ Utility functions
   const resetFormState = () => {
     setForm(initialFormState);
     setImageFiles([]);
@@ -303,55 +323,11 @@ function Product() {
     setModalPosition({ x: 0, y: 0 });
   };
 
-  // Event handlers
   const handleCancel = () => resetFormState();
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleImageChange = (e) => {
-    const files = Array.from(e.target.files);
-    
-    // Validate files
-    const validFiles = [];
-    const maxSize = 5 * 1024 * 1024; // 5MB
-    
-    for (const file of files) {
-      // Check file type
-      if (!file.type.startsWith('image/')) {
-        alert(`❌ ${file.name} is not an image file. Please select only images.`);
-        continue;
-      }
-      
-      // Check file size
-      if (file.size > maxSize) {
-        alert(`❌ ${file.name} is too large (${(file.size / 1024 / 1024).toFixed(2)}MB). Maximum size is 5MB.`);
-        continue;
-      }
-      
-      validFiles.push(file);
-    }
-    
-    if (validFiles.length > 0) {
-      setImageFiles(prev => [...prev, ...validFiles]);
-      console.log(`✅ Added ${validFiles.length} valid image(s)`);
-    }
-    
-    // Reset file input
-    e.target.value = '';
-  };
-
-  const handleRemoveExistingImage = (urlToRemove) => {
-    setForm(prev => ({ 
-      ...prev, 
-      imageUrls: prev.imageUrls.filter(url => url !== urlToRemove) 
-    }));
-  };
-
-  const handleRemoveNewImage = (index) => {
-    setImageFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const toggleMinimize = (e) => {
@@ -369,86 +345,156 @@ function Product() {
     handleCancel();
   };
 
-  // Validation function
-  const validateForm = () => {
-    if (!form.name.trim()) {
-      alert('❌ Product name is required');
-      return false;
-    }
-    if (!form.category.trim()) {
-      alert('❌ Category is required');
-      return false;
-    }
-    if (!form.serialNumber.trim()) {
-      alert('❌ Serial number is required');
-      return false;
-    }
-    if (!form.price || parseFloat(form.price) <= 0) {
-      alert('❌ Valid price is required');
-      return false;
-    }
-    if (!form.stock || parseInt(form.stock) < 0) {
-      alert('❌ Valid stock quantity is required');
-      return false;
-    }
-    return true;
-  };
-
-  // Enhanced image upload to Firebase Storage
-  const uploadImagesToStorage = async () => {
-    const imageUrls = [];
+  // ✅ Image handling functions
+  const handleImageChange = (e) => {
+    const files = Array.from(e.target.files);
+    const validFiles = [];
     
-    if (imageFiles.length === 0) {
-      return imageUrls;
-    }
-    
-    console.log(`📤 Starting upload of ${imageFiles.length} images to Firebase Storage...`);
-    
-    for (let i = 0; i < imageFiles.length; i++) {
-      const file = imageFiles[i];
-      const timestamp = Date.now();
-      const randomId = Math.floor(Math.random() * 10000);
-      
-      // Clean filename and create unique path
-      const cleanFileName = file.name.replace(/[^a-zA-Z0-9.]/g, '_');
-      const imagePath = `product_images/${form.serialNumber}_${timestamp}_${randomId}_${cleanFileName}`;
-      
-      try {
-        console.log(`📤 Uploading image ${i + 1}/${imageFiles.length}: ${imagePath}`);
-        
-        // Create storage reference
-        const imageRef = storageRef(storage, imagePath);
-        
-        // Upload file to Firebase Storage
-        const uploadResult = await uploadBytes(imageRef, file);
-        console.log(`✅ Upload successful:`, uploadResult.metadata.name);
-        
-        // Get download URL
-        const downloadURL = await getDownloadURL(uploadResult.ref);
-        console.log(`🔗 Download URL obtained:`, downloadURL);
-        
-        imageUrls.push(downloadURL);
-        
-        // Update progress
-        const progressPercent = Math.round(((i + 1) / imageFiles.length) * 100);
-        setUploadProgress(progressPercent);
-        console.log(`📊 Upload progress: ${progressPercent}%`);
-        
-      } catch (uploadError) {
-        console.error(`❌ Error uploading image ${i + 1}:`, uploadError);
-        throw new Error(`Failed to upload image "${file.name}": ${uploadError.message}`);
+    for (const file of files) {
+      if (file.type.startsWith('image/') && file.size < 10 * 1024 * 1024) {
+        validFiles.push(file);
+      } else {
+        alert(`❌ ${file.name} is either not an image or too large (max 10MB)`);
       }
     }
     
-    console.log(`✅ All ${imageFiles.length} images uploaded successfully`);
-    return imageUrls;
+    if (validFiles.length > 0) {
+      setImageFiles(prev => [...prev, ...validFiles]);
+    }
+    
+    e.target.value = '';
   };
 
-  // Enhanced submit handler with proper Firebase integration
+  const handleRemoveExistingImage = (urlToRemove) => {
+    setForm(prev => ({ 
+      ...prev, 
+      imageUrls: prev.imageUrls.filter(url => url !== urlToRemove),
+      imagePaths: prev.imagePaths ? prev.imagePaths.filter((_, index) => prev.imageUrls[index] !== urlToRemove) : []
+    }));
+  };
+
+  const handleRemoveNewImage = (index) => {
+    setImageFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // ✅ Upload function
+  const uploadImagesToStorage = async () => {
+    const imageUrls = [];
+    const imagePaths = [];
+    
+    if (imageFiles.length === 0) {
+      return { imageUrls, imagePaths };
+    }
+    
+    console.log(`📤 Starting upload of ${imageFiles.length} images...`);
+    
+    for (let i = 0; i < imageFiles.length; i++) {
+      const file = imageFiles[i];
+      
+      const fileName = `product_${Date.now()}_${i}.jpg`;
+      const imagePath = `product_images/${fileName}`;
+      
+      try {
+        console.log(`📤 Uploading ${i + 1}/${imageFiles.length}...`);
+        
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        
+        const processedBlob = await new Promise((resolve, reject) => {
+          img.onload = () => {
+            const maxSize = 800;
+            let { width, height } = img;
+            
+            if (width > height) {
+              if (width > maxSize) {
+                height = height * (maxSize / width);
+                width = maxSize;
+              }
+            } else {
+              if (height > maxSize) {
+                width = width * (maxSize / height);
+                height = maxSize;
+              }
+            }
+            
+            canvas.width = width;
+            canvas.height = height;
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            canvas.toBlob(resolve, 'image/jpeg', 0.7);
+          };
+          img.onerror = reject;
+          img.src = URL.createObjectURL(file);
+        });
+        
+        const imageRef = storageRef(storage, imagePath);
+        const uploadResult = await uploadBytes(imageRef, processedBlob);
+        const downloadURL = await getDownloadURL(uploadResult.ref);
+        
+        imageUrls.push(downloadURL);
+        imagePaths.push(imagePath);
+        
+        const progressPercent = Math.round(((i + 1) / imageFiles.length) * 100);
+        setUploadProgress(progressPercent);
+        
+        console.log(`✅ Upload ${i + 1} successful`);
+        
+      } catch (error) {
+        console.error(`❌ Upload failed:`, error);
+        throw new Error(`Upload failed: ${error.message}`);
+      }
+    }
+    
+    return { imageUrls, imagePaths };
+  };
+
+  // ✅ Test Firebase function
+  const testFirebaseUpload = async () => {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 100;
+      canvas.height = 100;
+      const ctx = canvas.getContext('2d');
+      
+      ctx.fillStyle = '#4CAF50';
+      ctx.fillRect(0, 0, 100, 100);
+      ctx.fillStyle = '#fff';
+      ctx.font = '16px Arial';
+      ctx.fillText('TEST', 30, 55);
+      
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+      
+      const testPath = `test_${Date.now()}.jpg`;
+      const testRef = storageRef(storage, testPath);
+      
+      console.log('🧪 Testing upload...');
+      const result = await uploadBytes(testRef, blob);
+      const url = await getDownloadURL(result.ref);
+      
+      console.log('✅ Test successful:', url);
+      alert('✅ Firebase Storage is working! You can now upload product images.');
+      
+      await deleteObject(testRef);
+      
+    } catch (error) {
+      console.error('❌ Test failed:', error);
+      alert(`❌ Firebase test failed: ${error.message}`);
+    }
+  };
+
+  // ✅ Submit handler
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!validateForm()) {
+    if (!form.name.trim() || !form.category.trim() || !form.serialNumber.trim() || !form.price || !form.stock) {
+      alert('❌ Please fill all required fields');
+      return;
+    }
+
+    const auth = getAuth();
+    if (!auth.currentUser) {
+      alert('❌ You must be logged in to upload images');
       return;
     }
 
@@ -456,46 +502,15 @@ function Product() {
     setUploadProgress(0);
     
     try {
-      console.log('🚀 Starting product save process...');
-      
-      // Start with existing image URLs
       let finalImageUrls = [...(form.imageUrls || [])];
+      let finalImagePaths = [...(form.imagePaths || [])];
       
-      // Handle image deletion for editing products
-      if (editingKey) {
-        console.log('✏️ Editing existing product, checking for deleted images...');
-        
-        const originalProductSnap = await get(dbRef(db, `HTAMS/company/products/${editingKey}`));
-        const originalProduct = originalProductSnap.val();
-        
-        if (originalProduct?.imageUrls) {
-          // Find URLs that were removed
-          const urlsToDelete = originalProduct.imageUrls.filter(
-            url => !form.imageUrls?.includes(url)
-          );
-          
-          // Delete removed images from Firebase Storage
-          for (const url of urlsToDelete) {
-            try {
-              console.log(`🗑️ Deleting removed image: ${url}`);
-              await deleteObject(storageRef(storage, url));
-              console.log('✅ Image deleted successfully');
-            } catch (deleteError) {
-              console.log("⚠️ Image might not exist or already deleted:", deleteError.message);
-            }
-          }
-        }
-      }
-      
-      // Upload new images to Firebase Storage
       if (imageFiles.length > 0) {
-        console.log(`📤 Uploading ${imageFiles.length} new images...`);
-        const newImageUrls = await uploadImagesToStorage();
+        const { imageUrls: newImageUrls, imagePaths: newImagePaths } = await uploadImagesToStorage();
         finalImageUrls = [...finalImageUrls, ...newImageUrls];
-        console.log(`✅ Total images after upload: ${finalImageUrls.length}`);
+        finalImagePaths = [...finalImagePaths, ...newImagePaths];
       }
       
-      // Prepare product data for Realtime Database
       const productData = { 
         name: form.name.trim(),
         category: form.category.trim(),
@@ -503,49 +518,32 @@ function Product() {
         price: parseFloat(form.price),
         stock: parseInt(form.stock),
         status: form.status || 'active',
-        imageUrls: finalImageUrls, // Store Firebase Storage URLs
+        imageUrls: finalImageUrls,
+        imagePaths: finalImagePaths,
         timestamp: Date.now(),
         createdAt: editingKey ? (await get(dbRef(db, `HTAMS/company/products/${editingKey}/createdAt`))).val() || Date.now() : Date.now(),
         updatedAt: Date.now()
       };
       
-      console.log('💾 Saving product data to Realtime Database:', productData);
-      
-      // Save to Firebase Realtime Database
       if (editingKey) {
         await set(dbRef(db, `HTAMS/company/products/${editingKey}`), productData);
-        console.log('✅ Product updated successfully in database');
         alert('✅ Product updated successfully!');
       } else {
-        const newProductRef = await push(dbRef(db, 'HTAMS/company/products'), productData);
-        console.log('✅ New product added successfully with ID:', newProductRef.key);
+        await push(dbRef(db, 'HTAMS/company/products'), productData);
         alert('✅ Product added successfully!');
       }
       
-      // Reset form and close modal
       resetFormState();
       
     } catch (error) {
       console.error('❌ Error saving product:', error);
-      
-      let errorMessage = 'Failed to save product. ';
-      if (error.code === 'storage/unauthorized') {
-        errorMessage += 'Storage permission denied. Please check Firebase Storage rules.';
-      } else if (error.code === 'permission-denied') {
-        errorMessage += 'Database permission denied. Please check Firebase Database rules.';
-      } else if (error.message.includes('network')) {
-        errorMessage += 'Network error. Please check your internet connection.';
-      } else {
-        errorMessage += error.message || 'Please try again.';
-      }
-      
-      alert(`❌ ${errorMessage}`);
+      alert(`❌ ${error.message}`);
       setIsLoading(false);
     }
   };
 
+  // ✅ Product handlers
   const handleEdit = (product) => {
-    console.log('✏️ Editing product:', product.name);
     setForm({ 
       name: product.name || '',
       category: product.category || '',
@@ -553,7 +551,8 @@ function Product() {
       price: product.price || '',
       stock: product.stock || '',
       status: product.status || 'active',
-      imageUrls: product.imageUrls || []
+      imageUrls: product.imageUrls || [],
+      imagePaths: product.imagePaths || []
     });
     setImageFiles([]);
     setEditingKey(product.key);
@@ -565,14 +564,10 @@ function Product() {
   const handleToggleStatus = async (product) => {
     try {
       const newStatus = (product.status || 'active') === 'active' ? 'inactive' : 'active';
-      console.log(`🔄 Toggling product status: ${product.status} → ${newStatus}`);
-      
       await update(dbRef(db, `HTAMS/company/products/${product.key}`), { 
         status: newStatus,
         updatedAt: Date.now()
       });
-      
-      console.log('✅ Status updated successfully');
     } catch (error) {
       console.error('❌ Error updating status:', error);
       alert(`❌ Failed to update status: ${error.message}`);
@@ -580,34 +575,22 @@ function Product() {
   };
 
   const handleDelete = async (product) => {
-    const confirmMessage = `❗ Delete "${product.name}"?\n\n` +
-      `This will permanently remove:\n` +
-      `• Product details from database\n` +
-      `• All associated images from storage\n\n` +
-      `This action cannot be undone!`;
-    
-    if (window.confirm(confirmMessage)) {
+    if (window.confirm(`❗ Delete "${product.name}"? This cannot be undone!`)) {
       try {
-        console.log('🗑️ Deleting product:', product.name);
-        
-        // Delete all images from Firebase Storage
         if (product.imageUrls?.length > 0) {
-          console.log(`🗑️ Deleting ${product.imageUrls.length} images from storage...`);
-          
           for (const url of product.imageUrls) {
             try {
-              await deleteObject(storageRef(storage, url));
-              console.log('✅ Image deleted from storage:', url);
+              const storagePath = getStoragePathFromUrl(url);
+              if (storagePath) {
+                await deleteObject(storageRef(storage, storagePath));
+              }
             } catch (deleteError) {
-              console.log('⚠️ Image might not exist:', deleteError.message);
+              console.log('⚠️ Error deleting image:', deleteError.message);
             }
           }
         }
         
-        // Remove product from Realtime Database
         await remove(dbRef(db, `HTAMS/company/products/${product.key}`));
-        console.log('✅ Product deleted from database');
-        
         alert('✅ Product deleted successfully!');
         
       } catch (error) {
@@ -635,10 +618,26 @@ function Product() {
           </h1>
           <p className="subtitle">Manage your product inventory</p>
         </div>
-        <button className="add-btn" onClick={showModal}>
-          <FaPlus />
-          Add Product
-        </button>
+        <div>
+          {/* <button 
+            onClick={testFirebaseUpload}
+            style={{
+              marginRight: '10px',
+              background: '#2196F3',
+              color: 'white',
+              border: 'none',
+              padding: '10px 15px',
+              borderRadius: '5px',
+              cursor: 'pointer'
+            }}
+          >
+            🧪 Test Firebase
+          </button> */}
+          <button className="add-btn" onClick={showModal}>
+            <FaPlus />
+            Add Product
+          </button>
+        </div>
       </div>
 
       {/* Controls Section */}
@@ -694,7 +693,7 @@ function Product() {
         </div>
       </div>
 
-      {/* Enhanced Perfect Draggable Modal */}
+      {/* Modal */}
       {formVisible && (
         <div
           ref={modalRef}
@@ -825,7 +824,7 @@ function Product() {
                   </div>
                 </div>
 
-                {/* Enhanced Image Upload Section */}
+                {/* Image Upload Section */}
                 <div className="image-section">
                   <label>Product Images</label>
                   <input
@@ -844,7 +843,7 @@ function Product() {
                     <FaUpload /> Choose Images
                   </label>
                   <small className="upload-hint">
-                    Max 5MB per image. Supported: JPG, PNG, GIF
+                    Max 10MB per image. Images will be saved to product_images/ folder.
                   </small>
 
                   {(form.imageUrls?.length > 0 || imageFiles.length > 0) && (
@@ -886,7 +885,7 @@ function Product() {
                   )}
                 </div>
 
-                {/* Enhanced Progress Section */}
+                {/* Progress Section */}
                 {isLoading && (
                   <div className="progress-section">
                     <div className="progress-bar">
@@ -960,6 +959,8 @@ function Product() {
           </div>
         )}
       </div>
+
+   
 
       {/* Complete Perfect CSS Styles with Fixed Minimize Functionality */}
       <style jsx>{`

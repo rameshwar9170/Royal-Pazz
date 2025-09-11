@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
 import { ref, get, update, push, runTransaction } from 'firebase/database';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../../firebase/config';
-import { FaUser, FaEnvelope, FaPhone, FaMapMarkerAlt, FaIdCard, FaCamera, FaShieldAlt, FaCheck, FaSpinner } from 'react-icons/fa';
+import { db } from '../../firebase/config'; // storage removed
+import { FaUser, FaEnvelope, FaPhone, FaMapMarkerAlt, FaShieldAlt, FaCheck, FaSpinner } from 'react-icons/fa';
 
 // Module-level cache keyed by training id
 const cachedTrainingData = {};
@@ -20,20 +19,6 @@ const JoinTraining = () => {
   const [training, setTraining] = useState(null);
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // OTP verification states
-  const [requestId, setRequestId] = useState('');
-  const [otpLoading, setOtpLoading] = useState(false);
-  const [verifyingOtp, setVerifyingOtp] = useState(false);
-
-  // File upload states
-  const [uploadingFiles, setUploadingFiles] = useState(false);
-
-  // Name validation states
-  const [nameMatched, setNameMatched] = useState(false);
-  const [nameMatchError, setNameMatchError] = useState('');
-
-  // Field validation errors
   const [fieldErrors, setFieldErrors] = useState({});
 
   const [participant, setParticipant] = useState({
@@ -46,30 +31,7 @@ const JoinTraining = () => {
     city: '',
     state: '',
     pin: '',
-    aadhar: '',
-    aadharOtp: '',
-    pan: '',
-    panPhoto: null,
-    passportPhoto: null,
-    panPhotoUrl: '',
-    passportPhotoUrl: '',
-    otpSent: false,
-    isOtpVerified: false,
-    firmPan: '',
-    aadharOwnerName: '',
-    aadharOwnerAadhar: '',
-    verifiedName: '',
-    verifiedGender: '',
-    verifiedDob: '',
   });
-
-  const [passportPhotoError, setPassportPhotoError] = useState('');
-  const [panPhotoError, setPanPhotoError] = useState('');
-
-  // Backend proxy URLs
-  const BACKEND_BASE_URL = 'https://kycapi-udqmpp6qhq-uc.a.run.app';
-  const GENERATE_OTP_URL = `${BACKEND_BASE_URL}/api/generate-otp`;
-  const VERIFY_OTP_URL = `${BACKEND_BASE_URL}/api/verify-otp`;
 
   // Field validation functions
   const validateName = (name) => {
@@ -153,37 +115,10 @@ const JoinTraining = () => {
     return '';
   };
 
-  const validateAadhar = (aadhar) => {
-    const aadharRegex = /^\d{12}$/;
-    if (!aadhar) return 'Aadhaar number is required';
-    if (!/^\d+$/.test(aadhar)) return 'Aadhaar number can only contain digits';
-    if (!aadharRegex.test(aadhar)) return 'Enter a valid 12-digit Aadhaar number';
-    if (/^(\d)\1{11}$/.test(aadhar)) return 'Aadhaar number cannot have all same digits';
-    return '';
-  };
-
-  const validatePan = (pan) => {
-    const panRegex = /^[A-Z]{5}\d{4}[A-Z]$/;
-    if (!pan) return 'PAN number is required';
-    if (pan.length !== 10) return 'PAN number must be exactly 10 characters';
-    if (pan !== pan.toUpperCase()) return 'PAN number must be in uppercase';
-    if (!panRegex.test(pan)) return 'Enter a valid PAN number (e.g., ABCDE1234F)';
-    return '';
-  };
-
-  const validateOtp = (otp) => {
-    const otpRegex = /^\d{6}$/;
-    if (!otp) return 'OTP is required';
-    if (!/^\d+$/.test(otp)) return 'OTP can only contain digits';
-    if (!otpRegex.test(otp)) return 'Enter a valid 6-digit OTP';
-    return '';
-  };
-
   // Helper function to validate field
   const validateField = (name, value) => {
     switch (name) {
       case 'name':
-      case 'aadharOwnerName':
         return validateName(value);
       case 'firmName':
         return validateFirmName(value);
@@ -199,77 +134,11 @@ const JoinTraining = () => {
         return validateState(value);
       case 'pin':
         return validatePin(value);
-      case 'aadhar':
-      case 'aadharOwnerAadhar':
-        return validateAadhar(value);
-      case 'pan':
-      case 'firmPan':
-        return validatePan(value);
-      case 'aadharOtp':
-        return validateOtp(value);
       default:
         return '';
     }
   };
 
-  // Helper function to normalize names for comparison
-  const normalizeName = (name) => {
-    if (!name) return '';
-    return name
-      .toLowerCase()
-      .trim()
-      .replace(/[^\w\s]/g, '') // Remove special characters
-      .replace(/\s+/g, ' ') // Replace multiple spaces with single space
-      .split(' ')
-      .filter(word => word.length > 0)
-      .sort() // Sort words to handle different order
-      .join(' ');
-  };
-
-  // Helper function to check if names match
-  const checkNameMatch = (enteredName, aadhaarName) => {
-    if (!enteredName || !aadhaarName) return false;
-
-    const normalizedEntered = normalizeName(enteredName);
-    const normalizedAadhaar = normalizeName(aadhaarName);
-
-    // Direct match
-    if (normalizedEntered === normalizedAadhaar) return true;
-
-    // Check if entered name is contained in aadhaar name or vice versa
-    const enteredWords = normalizedEntered.split(' ');
-    const aadhaarWords = normalizedAadhaar.split(' ');
-
-    // Check if at least 70% of words match
-    const commonWords = enteredWords.filter(word =>
-      aadhaarWords.some(aadhaarWord =>
-        aadhaarWord.includes(word) || word.includes(aadhaarWord)
-      )
-    );
-
-    const matchPercentage = commonWords.length / Math.max(enteredWords.length, aadhaarWords.length);
-    return matchPercentage >= 0.7; // At least 70% match required
-  };
-
-  // Function to validate name without re-verification
-  const validateNameMatch = () => {
-    if (!participant.isOtpVerified || !participant.verifiedName) return;
-
-    const enteredName = formMode === 'user' ? participant.name : participant.aadharOwnerName;
-    const aadhaarName = participant.verifiedName;
-
-    if (checkNameMatch(enteredName, aadhaarName)) {
-      setNameMatched(true);
-      setNameMatchError('');
-      setMessage(`Name verification successful! Your entered name matches with Aadhaar records. You can now proceed to submit the form.`);
-    } else {
-      setNameMatched(false);
-      setNameMatchError(`Name mismatch! Entered: "${enteredName}" vs Aadhaar: "${aadhaarName}". Please check and correct your name.`);
-      setMessage('');
-    }
-  };
-
-  // Cache referrer so it doesn't trigger multiple updates
   useEffect(() => {
     const referrer = getQueryParam('ref');
     if (referrer) setParticipant((p) => ({ ...p, referredBy: referrer }));
@@ -307,238 +176,6 @@ const JoinTraining = () => {
     fetchTraining();
   }, [id, location.search]);
 
-  // Effect to validate name when user changes name after OTP verification
-  useEffect(() => {
-    if (participant.isOtpVerified && participant.verifiedName) {
-      validateNameMatch();
-    }
-  }, [participant.name, participant.aadharOwnerName, participant.isOtpVerified, participant.verifiedName, formMode]);
-
-  // Upload file to Firebase Storage
-  const uploadFileToStorage = async (file, path) => {
-    try {
-      const fileRef = storageRef(storage, path);
-      const snapshot = await uploadBytes(fileRef, file);
-      const downloadURL = await getDownloadURL(snapshot.ref);
-      return downloadURL;
-    } catch (error) {
-      console.error('File upload error:', error);
-      throw error;
-    }
-  };
-
-  const handleChange = async (e) => {
-    const { name, value, files } = e.target;
-
-    if (name === 'passportPhoto' && files && files[0]) {
-      const file = files[0];
-
-      // Check file type
-      if (!file.type.startsWith('image/')) {
-        setPassportPhotoError('Please upload only image files (JPG, PNG, etc.).');
-        setParticipant((prev) => ({ ...prev, passportPhoto: null }));
-        return;
-      }
-
-      // Allow only files up to 100 KB
-      if (file.size > 100 * 1024) {
-        setPassportPhotoError('Photo must be less than or equal to 100 KB.');
-        setParticipant((prev) => ({ ...prev, passportPhoto: null }));
-        return;
-      }
-
-      // ✅ Valid file
-      setPassportPhotoError('');
-      setParticipant((prev) => ({ ...prev, passportPhoto: file }));
-      return;
-    }
-
-    if (name === 'panPhoto' && files && files[0]) {
-      const file = files[0];
-
-      // Check file type
-      if (!file.type.startsWith('image/')) {
-        setPanPhotoError('Please upload only image files (JPG, PNG, etc.).');
-        setParticipant((prev) => ({ ...prev, panPhoto: null }));
-        return;
-      }
-
-      if (file.size > 100 * 1024) {
-        setPanPhotoError('PAN card photo must be 100 KB or less.');
-        setParticipant((prev) => ({ ...prev, panPhoto: null }));
-        return;
-      }
-      setPanPhotoError('');
-      setParticipant((prev) => ({ ...prev, panPhoto: file }));
-      return;
-    }
-
-    // For text inputs, validate and update
-    let processedValue = value;
-
-    // Apply field-specific processing
-    switch (name) {
-      case 'name':
-      case 'aadharOwnerName':
-      case 'city':
-      case 'state':
-        // Only allow letters and single spaces for names and locations
-        processedValue = value.replace(/[^a-zA-Z\s]/g, '').replace(/\s+/g, ' ');
-        break;
-      case 'firmName':
-        // Allow letters, numbers, spaces, and common business characters
-        processedValue = value.replace(/[^a-zA-Z0-9\s&.-]/g, '').replace(/\s+/g, ' ');
-        break;
-      case 'mobile':
-        // Only allow digits, limit to 10 digits
-        processedValue = value.replace(/\D/g, '').slice(0, 10);
-        break;
-      case 'email':
-        // Convert to lowercase and trim
-        processedValue = value.toLowerCase().trim();
-        break;
-      case 'pin':
-        // Only allow digits, limit to 6 digits
-        processedValue = value.replace(/\D/g, '').slice(0, 6);
-        break;
-      case 'aadhar':
-      case 'aadharOwnerAadhar':
-        // Only allow digits, limit to 12 digits
-        processedValue = value.replace(/\D/g, '').slice(0, 12);
-        break;
-      case 'pan':
-      case 'firmPan':
-        // Convert to uppercase, limit to 10 characters
-        processedValue = value.toUpperCase().slice(0, 10);
-        break;
-      case 'aadharOtp':
-        // Only allow digits, limit to 6 digits
-        processedValue = value.replace(/\D/g, '').slice(0, 6);
-        break;
-      case 'address':
-        // Allow alphanumeric, spaces, and common address characters
-        processedValue = value.replace(/[^a-zA-Z0-9\s,./\-#()]/g, '').replace(/\s+/g, ' ');
-        break;
-      default:
-        break;
-    }
-
-    // Update participant data
-    setParticipant((prev) => ({ ...prev, [name]: processedValue }));
-
-    // Validate the field
-    const error = validateField(name, processedValue);
-    setFieldErrors(prev => ({
-      ...prev,
-      [name]: error
-    }));
-  };
-
-  // Real Aadhaar OTP Generation via backend proxy
-  const sendOtp = async () => {
-    const aadharToCheck = formMode === 'firm' && participant.aadharOwnerAadhar ? participant.aadharOwnerAadhar : participant.aadhar;
-    
-    const aadharError = validateAadhar(aadharToCheck);
-    if (aadharError) {
-      setMessage(aadharError);
-      return;
-    }
-
-    setOtpLoading(true);
-    setMessage('Sending OTP to your Aadhaar-linked mobile...');
-
-    try {
-      const response = await fetch(GENERATE_OTP_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ id_number: aadharToCheck }),
-      });
-
-      const data = await response.json();
-      console.log('OTP Generate Response:', data);
-
-      if (data.status_code === 200 && data.status === 'success') {
-        setRequestId(data.request_id);
-        setParticipant((prev) => ({ ...prev, otpSent: true }));
-        setMessage('OTP sent successfully to your Aadhaar-linked mobile number!');
-      } else if (data.status_code === 400) {
-        const errorMessage = data.data?.message || 'Unknown error occurred';
-        if (data.data?.otp_sent) {
-          setMessage('OTP sent but with an issue: ' + errorMessage);
-          setParticipant((prev) => ({ ...prev, otpSent: true }));
-        } else {
-          setMessage('Error: ' + errorMessage);
-        }
-      } else {
-        setMessage('Error: ' + (data.message || 'Unknown error occurred'));
-      }
-    } catch (error) {
-      console.error('OTP Generation Error:', error);
-      setMessage('Network error. Please check your connection and try again.');
-    } finally {
-      setOtpLoading(false);
-    }
-  };
-
-  // Real Aadhaar OTP Verification via backend proxy with name matching
-  const verifyOtp = async () => {
-    if (!requestId || !participant.aadharOtp) {
-      setMessage('Please enter the OTP received on your mobile.');
-      return;
-    }
-
-    const otpError = validateOtp(participant.aadharOtp);
-    if (otpError) {
-      setMessage(otpError);
-      return;
-    }
-
-    setVerifyingOtp(true);
-    setMessage('Verifying OTP and fetching Aadhaar details...');
-
-    try {
-      const response = await fetch(VERIFY_OTP_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          request_id: requestId,
-          otp: participant.aadharOtp
-        }),
-      });
-
-      const data = await response.json();
-      console.log('OTP Verification Response:', data);
-
-      if (data.status_code === 200 && data.status === 'success' && data.data) {
-        const verifiedData = data.data;
-
-        // Update participant data with verified information
-        setParticipant((prev) => ({
-          ...prev,
-          isOtpVerified: true,
-          verifiedName: verifiedData.full_name || 'N/A',
-          verifiedGender: verifiedData.gender || 'N/A',
-          verifiedDob: verifiedData.dob || 'N/A'
-        }));
-
-        // Name matching will be handled by useEffect automatically
-        setMessage('Aadhaar OTP verified successfully! Checking name match...');
-      } else {
-        const errorMessage = data.message || 'Verification failed due to unknown error';
-        setMessage('Verification failed: ' + errorMessage);
-      }
-    } catch (error) {
-      console.error('OTP Verification Error:', error);
-      setMessage('Network error during verification. Please try again.');
-    } finally {
-      setVerifyingOtp(false);
-    }
-  };
-
   // Centralized single call email existence check
   const checkEmailExists = async (email) => {
     const emailKey = email.toLowerCase().replace(/\./g, ',');
@@ -555,19 +192,55 @@ const JoinTraining = () => {
     }
   };
 
+  const handleChange = async (e) => {
+    const { name, value } = e.target;
+    let processedValue = value;
+
+    // Apply field-specific processing
+    switch (name) {
+      case 'name':
+      case 'city':
+      case 'state':
+        processedValue = value.replace(/[^a-zA-Z\s]/g, '').replace(/\s+/g, ' ');
+        break;
+      case 'firmName':
+        processedValue = value.replace(/[^a-zA-Z0-9\s&.-]/g, '').replace(/\s+/g, ' ');
+        break;
+      case 'mobile':
+        processedValue = value.replace(/\D/g, '').slice(0, 10);
+        break;
+      case 'email':
+        processedValue = value.toLowerCase().trim();
+        break;
+      case 'pin':
+        processedValue = value.replace(/\D/g, '').slice(0, 6);
+        break;
+      case 'address':
+        processedValue = value.replace(/[^a-zA-Z0-9\s,./\-#()]/g, '').replace(/\s+/g, ' ');
+        break;
+      default:
+        break;
+    }
+
+    setParticipant((prev) => ({ ...prev, [name]: processedValue }));
+
+    const error = validateField(name, processedValue);
+    setFieldErrors(prev => ({
+      ...prev,
+      [name]: error
+    }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
 
-    const requiredFieldsUser = ['name', 'mobile', 'email', 'address', 'city', 'state', 'pin', 'aadhar', 'pan'];
-    const requiredFieldsFirm = ['firmName', 'mobile', 'email', 'address', 'city', 'state', 'pin', 'firmPan', 'aadharOwnerName', 'aadharOwnerAadhar'];
-
+    const requiredFieldsUser = ['name', 'mobile', 'email', 'address', 'city', 'state', 'pin'];
+    const requiredFieldsFirm = ['firmName', 'mobile', 'email', 'address', 'city', 'state', 'pin'];
     const requiredFields = formMode === 'user' ? requiredFieldsUser : requiredFieldsFirm;
 
-    // Validate all required fields
     let hasErrors = false;
     const newFieldErrors = {};
-
     for (const field of requiredFields) {
       const error = validateField(field, participant[field]);
       if (error) {
@@ -584,179 +257,88 @@ const JoinTraining = () => {
       return;
     }
 
-    if (!participant.passportPhoto || !participant.panPhoto) {
-      setMessage('Please upload both passport photo and PAN card photo.');
-      setIsSubmitting(false);
-      return;
-    }
-
-    if (passportPhotoError || panPhotoError) {
-      setMessage('Please fix photo upload errors.');
-      setIsSubmitting(false);
-      return;
-    }
-
-    if (!participant.isOtpVerified) {
-      setMessage('Please verify Aadhaar OTP before submitting.');
-      setIsSubmitting(false);
-      return;
-    }
-
-    // Critical validation: Check if name is matched
-    if (!nameMatched) {
-      setMessage('Cannot submit form: Name verification failed. Your entered name must match with your Aadhaar card exactly.');
-      setIsSubmitting(false);
-      return;
-    }
-
     setMessage('Checking if email is already registered...');
     if (await checkEmailExists(participant.email)) {
       setIsSubmitting(false);
       return;
     }
 
-    setMessage('Uploading photos to Firebase Storage...');
-    setUploadingFiles(true);
+    const trainingRef = ref(db, `HTAMS/company/trainings/${id}`);
+    let canJoin = false;
 
-    try {
-      // Upload files to Firebase Storage
-      const timestamp = Date.now();
-      const passportPhotoPath = `trainings/${id}/participants/passport_photos/${timestamp}_${participant.passportPhoto.name}`;
-      const panPhotoPath = `trainings/${id}/participants/pan_photos/${timestamp}_${participant.panPhoto.name}`;
-
-      const [passportPhotoUrl, panPhotoUrl] = await Promise.all([
-        uploadFileToStorage(participant.passportPhoto, passportPhotoPath),
-        uploadFileToStorage(participant.panPhoto, panPhotoPath)
-      ]);
-
-      setParticipant(prev => ({
-        ...prev,
-        passportPhotoUrl,
-        panPhotoUrl
-      }));
-
-      setMessage('Photos uploaded successfully. Processing registration...');
-      setUploadingFiles(false);
-
-      // Continue with registration process
-      const trainingRef = ref(db, `HTAMS/company/trainings/${id}`);
-      let canJoin = false;
-
-      await runTransaction(trainingRef, (data) => {
-        if (data) {
-          if ((data.joinedCount || 0) >= (data.candidates || 0)) return undefined;
-          return { ...data, joinedCount: (data.joinedCount || 0) + 1 };
-        }
-        return data;
-      }).then(r => { canJoin = r.committed; });
-
-      if (!canJoin) {
-        setMessage('All slots are filled for this training.');
-        await update(trainingRef, { expiresAt: Date.now() });
-        setIsSubmitting(false);
-        return;
+    await runTransaction(trainingRef, (data) => {
+      if (data) {
+        if ((data.joinedCount || 0) >= (data.candidates || 0)) return undefined;
+        return { ...data, joinedCount: (data.joinedCount || 0) + 1 };
       }
+      return data;
+    }).then(r => { canJoin = r.committed; });
 
-      setMessage('Saving your registration...');
-
-      const pKey = push(ref(db, `HTAMS/company/trainings/${id}/participants`)).key;
-      const emailKey = participant.email.toLowerCase().replace(/\./g, ',');
-
-      // Base data differs by mode
-      const baseData = formMode === 'user'
-        ? {
-          name: participant.name,
-          aadhar: participant.aadhar,
-          pan: participant.pan,
-          aadhaar_verification: {
-            verified_name: participant.verifiedName,
-            verified_gender: participant.verifiedGender,
-            verified_dob: participant.verifiedDob,
-            verified_at: Date.now(),
-            status: 'verified',
-            name_matched: true,
-            entered_name: participant.name
-          }
-        }
-        : {
-          firmName: participant.firmName,
-          name: participant.firmName,
-          firmPan: participant.firmPan,
-          aadharOwnerName: participant.aadharOwnerName,
-          aadharOwnerAadhar: participant.aadharOwnerAadhar,
-          aadhaar_verification: {
-            verified_name: participant.verifiedName,
-            verified_gender: participant.verifiedGender,
-            verified_dob: participant.verifiedDob,
-            verified_at: Date.now(),
-            status: 'verified',
-            owner_name: participant.aadharOwnerName,
-            name_matched: true,
-            entered_name: participant.aadharOwnerName
-          }
-        };
-
-      const newParticipant = {
-        ...baseData,
-        mobile: participant.mobile,
-        email: participant.email,
-        referredBy: participant.referredBy,
-        address: participant.address,
-        city: participant.city,
-        state: participant.state,
-        pin: participant.pin,
-        passportPhotoUrl: passportPhotoUrl,
-        panPhotoUrl: panPhotoUrl,
-        trainingId: id,
-        joinedAt: Date.now(),
-        status: 'joined',
-        confirmedByTrainer: false,
-        formMode,
-      };
-
-      const updates = {};
-      updates[`HTAMS/company/trainings/${id}/participants/${pKey}`] = newParticipant;
-      // updates[`HTAMS/users/${id}/${pKey}`] = newParticipant;
-      updates[`HTAMS/emails/${emailKey}`] = { trainingId: id, type: 'training', timestamp: Date.now() };
-      updates[`HTAMS/company/trainings/${id}/updatedAt`] = Date.now();
-
-      await update(ref(db), updates);
-
-      setMessage('Successfully joined the training with verified Aadhaar and name matching! Welcome aboard!');
-
-      // Reset form
-      setParticipant({
-        name: '', firmName: '', mobile: '', email: '', referredBy: participant.referredBy, address: '', city: '', state: '', pin: '',
-        aadhar: '', aadharOtp: '', pan: '', panPhoto: null, passportPhoto: null, panPhotoUrl: '', passportPhotoUrl: '',
-        otpSent: false, isOtpVerified: false, firmPan: '', aadharOwnerName: '', aadharOwnerAadhar: '',
-        verifiedName: '', verifiedGender: '', verifiedDob: ''
-      });
-      setRequestId('');
-      setNameMatched(false);
-      setNameMatchError('');
-      setFieldErrors({});
-
-    } catch (error) {
-      console.error('Registration Error:', error);
-      setMessage('Registration failed. Please try again or contact support.');
-      setUploadingFiles(false);
+    if (!canJoin) {
+      setMessage('All slots are filled for this training.');
+      await update(trainingRef, { expiresAt: Date.now() });
+      setIsSubmitting(false);
+      return;
     }
 
+    setMessage('Saving your registration...');
+
+    const pKey = push(ref(db, `HTAMS/company/trainings/${id}/participants`)).key;
+    const emailKey = participant.email.toLowerCase().replace(/\./g, ',');
+
+    const baseData = formMode === 'user'
+      ? { name: participant.name }
+      : { firmName: participant.firmName, name: participant.firmName };
+
+    const newParticipant = {
+      ...baseData,
+      mobile: participant.mobile,
+      email: participant.email,
+      referredBy: participant.referredBy,
+      address: participant.address,
+      city: participant.city,
+      state: participant.state,
+      pin: participant.pin,
+      trainingId: id,
+      joinedAt: Date.now(),
+      status: 'joined',
+      confirmedByTrainer: false,
+      formMode,
+    };
+
+    const updates = {};
+    updates[`HTAMS/company/trainings/${id}/participants/${pKey}`] = newParticipant;
+    updates[`HTAMS/emails/${emailKey}`] = { trainingId: id, type: 'training', timestamp: Date.now() };
+    updates[`HTAMS/company/trainings/${id}/updatedAt`] = Date.now();
+
+    await update(ref(db), updates);
+
+    setMessage('Successfully joined the training!');
+    setParticipant({
+      name: '',
+      firmName: '',
+      mobile: '',
+      email: '',
+      referredBy: participant.referredBy,
+      address: '',
+      city: '',
+      state: '',
+      pin: '',
+    });
+    setFieldErrors({});
     setIsSubmitting(false);
   };
 
   return (
     <div className="join-training-container">
-      {/* Header */}
       <div className="page-header">
         <h1 className="page-title">
           <FaShieldAlt className="title-icon" />
           Join Training Program
         </h1>
-        <p className="page-subtitle">Complete your secure registration with Aadhaar verification</p>
+        <p className="page-subtitle">Complete your registration</p>
       </div>
 
-      {/* Form Mode Selector */}
       <div className="form-mode-section">
         <div className="mode-selector">
           <button
@@ -776,7 +358,6 @@ const JoinTraining = () => {
         </div>
       </div>
 
-      {/* Training Details */}
       {training && (
         <div className="training-details-card">
           <h3 className="card-title">Training Details</h3>
@@ -795,7 +376,9 @@ const JoinTraining = () => {
             </div>
             <div className="detail-item">
               <span className="detail-label">Available Slots</span>
-              <span className="detail-value">{(training.candidates || 0) - (training.joinedCount || 0)} / {training.candidates || 0}</span>
+              <span className="detail-value">
+                {(training.candidates || 0) - (training.joinedCount || 0)} / {training.candidates || 0}
+              </span>
             </div>
             {training.expireDate && (
               <div className="detail-item">
@@ -807,9 +390,7 @@ const JoinTraining = () => {
         </div>
       )}
 
-      {/* Registration Form */}
       <form onSubmit={handleSubmit} className="registration-form">
-        {/* Personal Information Section */}
         <div className="form-section">
           <h3 className="section-title">
             <FaUser className="section-icon" />
@@ -820,24 +401,18 @@ const JoinTraining = () => {
               <div className="form-group">
                 <label className="form-label">
                   <FaUser className="label-icon" />
-                  Full Name * (Must match Aadhaar exactly)
+                  Full Name *
                 </label>
                 <input
                   type="text"
                   name="name"
-                  placeholder="Enter your full name as on Aadhaar card"
+                  placeholder="Your full name"
                   value={participant.name}
                   onChange={handleChange}
                   required
-                  className={`form-input ${
-                    fieldErrors.name ? 'error' : 
-                    nameMatchError ? 'error' : 
-                    nameMatched ? 'success' : ''
-                  }`}
+                  className={`form-input ${fieldErrors.name ? 'error' : ''}`}
                 />
                 {fieldErrors.name && <div className="error-message">{fieldErrors.name}</div>}
-                {!fieldErrors.name && nameMatchError && <div className="error-message">{nameMatchError}</div>}
-                {!fieldErrors.name && nameMatched && <div className="success-message">Name matches with Aadhaar records ✓</div>}
               </div>
             ) : (
               <div className="form-group">
@@ -848,7 +423,7 @@ const JoinTraining = () => {
                 <input
                   type="text"
                   name="firmName"
-                  placeholder="Enter firm/organization name"
+                  placeholder="Firm/organization name"
                   value={participant.firmName}
                   onChange={handleChange}
                   required
@@ -906,7 +481,6 @@ const JoinTraining = () => {
           </div>
         </div>
 
-        {/* Address Information Section */}
         <div className="form-section">
           <h3 className="section-title">
             <FaMapMarkerAlt className="section-icon" />
@@ -972,272 +546,15 @@ const JoinTraining = () => {
           </div>
         </div>
 
-        {/* Aadhaar Owner Info for firm */}
-        {formMode === 'firm' && (
-          <div className="form-section">
-            <h3 className="section-title">
-              <FaIdCard className="section-icon" />
-              Aadhaar Owner Information
-            </h3>
-            <div className="form-grid">
-              <div className="form-group">
-                <label className="form-label">
-                  <FaUser className="label-icon" />
-                  Aadhaar Owner Name * (Must match Aadhaar exactly)
-                </label>
-                <input
-                  type="text"
-                  name="aadharOwnerName"
-                  placeholder="Aadhaar owner's full name as on Aadhaar card"
-                  value={participant.aadharOwnerName}
-                  onChange={handleChange}
-                  required
-                  className={`form-input ${
-                    fieldErrors.aadharOwnerName ? 'error' : 
-                    nameMatchError ? 'error' : 
-                    nameMatched ? 'success' : ''
-                  }`}
-                />
-                {fieldErrors.aadharOwnerName && <div className="error-message">{fieldErrors.aadharOwnerName}</div>}
-                {!fieldErrors.aadharOwnerName && nameMatchError && <div className="error-message">{nameMatchError}</div>}
-                {!fieldErrors.aadharOwnerName && nameMatched && <div className="success-message">Name matches with Aadhaar records ✓</div>}
-              </div>
-              <div className="form-group">
-                <label className="form-label">
-                  <FaIdCard className="label-icon" />
-                  Aadhaar Owner Number *
-                </label>
-                <input
-                  type="text"
-                  name="aadharOwnerAadhar"
-                  placeholder="Aadhaar number of owner"
-                  value={participant.aadharOwnerAadhar}
-                  onChange={handleChange}
-                  maxLength="12"
-                  required
-                  className={`form-input ${fieldErrors.aadharOwnerAadhar ? 'error' : ''}`}
-                />
-                {fieldErrors.aadharOwnerAadhar && <div className="error-message">{fieldErrors.aadharOwnerAadhar}</div>}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Aadhaar Verification Section */}
-        <div className="form-section verification-section">
-          <h3 className="section-title">
-            <FaShieldAlt className="section-icon" />
-            Aadhaar Verification
-          </h3>
-          <div className="verification-grid">
-            {formMode === 'user' && (
-              <div className="form-group">
-                <label className="form-label">
-                  <FaIdCard className="label-icon" />
-                  Aadhaar Number *
-                </label>
-                <input
-                  type="text"
-                  name="aadhar"
-                  placeholder="Enter 12-digit Aadhaar number"
-                  value={participant.aadhar}
-                  onChange={handleChange}
-                  maxLength="12"
-                  required
-                  disabled={participant.otpSent}
-                  className={`form-input ${fieldErrors.aadhar ? 'error' : ''}`}
-                />
-                {fieldErrors.aadhar && <div className="error-message">{fieldErrors.aadhar}</div>}
-              </div>
-            )}
-
-            {!participant.otpSent ? (
-              <div className="verification-actions">
-                <button
-                  type="button"
-                  className={`action-button primary ${otpLoading ? 'loading' : ''}`}
-                  onClick={sendOtp}
-                  disabled={otpLoading}
-                >
-                  {otpLoading ? (
-                    <>
-                      <FaSpinner className="spinner" />
-                      Sending OTP...
-                    </>
-                  ) : (
-                    <>
-                      <FaShieldAlt />
-                      Send OTP
-                    </>
-                  )}
-                </button>
-              </div>
-            ) : (
-              <div className="otp-verification">
-                <div className="form-group">
-                  <label className="form-label">Enter OTP *</label>
-                  <input
-                    type="text"
-                    name="aadharOtp"
-                    placeholder="Enter 6-digit OTP from your mobile"
-                    value={participant.aadharOtp}
-                    onChange={handleChange}
-                    maxLength="6"
-                    disabled={participant.isOtpVerified}
-                    className={`form-input ${fieldErrors.aadharOtp ? 'error' : ''}`}
-                  />
-                  {fieldErrors.aadharOtp && <div className="error-message">{fieldErrors.aadharOtp}</div>}
-                </div>
-                <button
-                  type="button"
-                  className={`action-button ${participant.isOtpVerified ? 'success' : verifyingOtp ? 'loading' : 'primary'}`}
-                  onClick={verifyOtp}
-                  disabled={participant.isOtpVerified || verifyingOtp}
-                >
-                  {participant.isOtpVerified ? (
-                    <>
-                      <FaCheck />
-                      OTP Verified
-                    </>
-                  ) : verifyingOtp ? (
-                    <>
-                      <FaSpinner className="spinner" />
-                      Verifying...
-                    </>
-                  ) : (
-                    <>
-                      <FaShieldAlt />
-                      Verify OTP
-                    </>
-                  )}
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Show verified Aadhaar details */}
-          {participant.isOtpVerified && participant.verifiedName && (
-            <div className={`verified-details ${nameMatched ? 'success' : 'error'}`}>
-              <h4>{nameMatched ? 'Name Verification Successful' : 'Name Verification Required'}</h4>
-              <div className="verification-details-grid">
-                <div className="verification-detail">
-                  <span className="detail-label">Entered Name:</span>
-                  <span className="detail-value">{formMode === 'user' ? participant.name : participant.aadharOwnerName}</span>
-                </div>
-                <div className="verification-detail">
-                  <span className="detail-label">Aadhaar Name:</span>
-                  <span className="detail-value">{participant.verifiedName}</span>
-                </div>
-                <div className="verification-detail">
-                  <span className="detail-label">Date of Birth:</span>
-                  <span className="detail-value">{participant.verifiedDob}</span>
-                </div>
-                <div className="verification-detail">
-                  <span className="detail-label">Gender:</span>
-                  <span className="detail-value">{participant.verifiedGender}</span>
-                </div>
-              </div>
-              {!nameMatched && (
-                <div className="name-mismatch-warning">
-                  <p><strong>Instructions:</strong> Please correct your name in the form above to match exactly with your Aadhaar card. The system will automatically validate the match once you update your name.</p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Document Information Section */}
-        <div className="form-section">
-          <h3 className="section-title">
-            <FaIdCard className="section-icon" />
-            Document Information
-          </h3>
-          <div className="form-grid">
-            {formMode === 'user' ? (
-              <div className="form-group">
-                <label className="form-label">
-                  <FaIdCard className="label-icon" />
-                  PAN Card Number *
-                </label>
-                <input
-                  type="text"
-                  name="pan"
-                  placeholder="Enter PAN card number (e.g., ABCDE1234F)"
-                  value={participant.pan}
-                  onChange={handleChange}
-                  style={{ textTransform: 'uppercase' }}
-                  maxLength="10"
-                  required
-                  className={`form-input ${fieldErrors.pan ? 'error' : ''}`}
-                />
-                {fieldErrors.pan && <div className="error-message">{fieldErrors.pan}</div>}
-              </div>
-            ) : (
-              <div className="form-group">
-                <label className="form-label">
-                  <FaIdCard className="label-icon" />
-                  Firm PAN Card Number *
-                </label>
-                <input
-                  type="text"
-                  name="firmPan"
-                  placeholder="Enter firm/organization PAN (e.g., ABCDE1234F)"
-                  value={participant.firmPan}
-                  onChange={handleChange}
-                  style={{ textTransform: 'uppercase' }}
-                  maxLength="10"
-                  required
-                  className={`form-input ${fieldErrors.firmPan ? 'error' : ''}`}
-                />
-                {fieldErrors.firmPan && <div className="error-message">{fieldErrors.firmPan}</div>}
-              </div>
-            )}
-            <div className="form-group">
-              <label className="form-label">
-                <FaIdCard className="label-icon" />
-                PAN Card Photo *
-              </label>
-              <input
-                type="file"
-                accept="image/*"
-                name="panPhoto"
-                onChange={handleChange}
-                required
-                className="form-input file-input"
-              />
-              <small className="help-text">Clear photo of your PAN card (JPG, PNG, max 100KB)</small>
-              {panPhotoError && <div className="error-message">{panPhotoError}</div>}
-            </div>
-            <div className="form-group">
-              <label className="form-label">
-                <FaCamera className="label-icon" />
-                Passport Size Photo *
-              </label>
-              <input
-                type="file"
-                accept="image/*"
-                name="passportPhoto"
-                onChange={handleChange}
-                required
-                className="form-input file-input"
-              />
-              <small className="help-text">Upload passport size photo (JPG, PNG, max 100KB)</small>
-              {passportPhotoError && <div className="error-message">{passportPhotoError}</div>}
-            </div>
-          </div>
-        </div>
-
         <button
           type="submit"
-          className={`submit-button ${isSubmitting || uploadingFiles || !nameMatched ? 'disabled' : ''}`}
-          disabled={isSubmitting || !training || uploadingFiles || !nameMatched}
+          className={`submit-button ${isSubmitting ? 'disabled' : ''}`}
+          disabled={isSubmitting || !training}
         >
-          {!nameMatched ? (
-            'Complete Name Verification First'
-          ) : isSubmitting ? (
+          {isSubmitting ? (
             <>
               <FaSpinner className="spinner" />
-              {uploadingFiles ? 'Uploading Photos...' : 'Processing...'}
+              Processing...
             </>
           ) : (
             <>
@@ -1250,16 +567,18 @@ const JoinTraining = () => {
 
       {message && (
         <div className={`notification ${
-          message.includes('successfully') || message.includes('Welcome') || message.includes('successful')
+          message.includes('Successfully') || message.includes('success')
             ? 'success'
-            : message.includes('Checking') || message.includes('Uploading') || message.includes('Verifying') || message.includes('Sending') || message.includes('Processing')
+            : message.includes('Checking') || message.includes('Processing')
               ? 'info'
               : 'error'
         }`}>
           {message}
         </div>
       )}
-  
+
+      
+
 
       <style jsx>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');

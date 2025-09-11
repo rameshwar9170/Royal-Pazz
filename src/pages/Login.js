@@ -627,7 +627,7 @@ const Login = () => {
           </div>
 
           {/* Simple Footer - Only Copyright and Terms */}
-          {/* <div className="simple-footer">
+          <div className="simple-footer">
             <div className="copyright-text">
               © {new Date().getFullYear()} Panchgiri Ayurveda. All rights reserved.
             </div>
@@ -637,7 +637,7 @@ const Login = () => {
             >
               Terms & Conditions
             </span>
-          </div> */}
+          </div>
         </div>
       </div>
     </>

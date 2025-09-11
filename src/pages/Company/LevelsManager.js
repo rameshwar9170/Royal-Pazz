@@ -1403,9 +1403,9 @@ const LevelsManager = () => {
         <div className="header">
           <div className="header-content">
             <h1>🏢 Panchgiri Levels Management System</h1>
-            <button onClick={handleLogout} className="logout-btn">
+            {/* <button onClick={handleLogout} className="logout-btn">
               🔒 Logout
-            </button>
+            </button> */}
           </div>
           
           {message && (
