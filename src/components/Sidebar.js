@@ -110,7 +110,7 @@
             <button className="mobile-toggle-btn" onClick={toggleSidebar}>
               {isOpen ? <FaTimes size={22}/> : <FaBars size={22}/>}
             </button>
-            <h1 className="mobile-title">Panchagiri</h1>
+            <h1 className="mobile-title">ONDO</h1>
           </div>
         )}
 

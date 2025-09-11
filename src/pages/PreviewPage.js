@@ -727,7 +727,7 @@ export default function PreviewPage() {
 
                         <div className="preview-footer__bottom">
                             <p>&copy; 2025 {owner.name || 'Professional Profile'}. All rights reserved.</p>
-                            <p>Powered by <strong>Panchagiri</strong> - Professional Site Creator</p>
+                            <p>Powered by <strong>ONDO</strong> - Professional Site Creator</p>
                         </div>
                     </div>
                 </div>

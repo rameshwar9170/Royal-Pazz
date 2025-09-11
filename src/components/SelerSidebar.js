@@ -75,7 +75,7 @@ const SelerSidebar = ({ isOpen, toggleSidebar, activeMenu, setActiveMenu }) => {
           <button className="mobile-toggle-btn" onClick={toggleSidebar}>
             {isOpen ? <FaTimes /> : <FaBars />}
           </button>
-          <h1 className="mobile-title">Panchagiri</h1>
+          <h1 className="mobile-title">ONDO</h1>
         </div>
       )}
 
@@ -147,7 +147,7 @@ const SelerSidebar = ({ isOpen, toggleSidebar, activeMenu, setActiveMenu }) => {
 
 
 
-      
+
     </>
   );
 };

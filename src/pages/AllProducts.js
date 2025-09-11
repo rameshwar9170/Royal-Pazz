@@ -611,7 +611,7 @@ const AllProducts = () => {
       doc.setTextColor(70, 130, 180);
       doc.setFontSize(24);
       doc.setFont('helvetica', 'bold');
-      doc.text("Panchagiri Store", leftMargin, 35);
+      doc.text(" ONDO", leftMargin, 35);
 
       // Company Message
       doc.setFontSize(14);
