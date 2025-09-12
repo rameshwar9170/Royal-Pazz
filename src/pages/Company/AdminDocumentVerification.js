@@ -559,7 +559,7 @@ const AdminDocumentVerification = () => {
           </div>
           
           <div className="filter-buttons">
-             <button 
+              <button 
               className={filter === 'all' ? 'active' : ''}
               onClick={() => setFilter('all')}
             >
@@ -571,7 +571,7 @@ const AdminDocumentVerification = () => {
             >
               🚨 Pending ({pendingCount})
             </button>
-           
+          
             <button 
               className={filter === 'approved' ? 'active approved' : ''}
               onClick={() => setFilter('approved')}
@@ -720,7 +720,7 @@ const AdminDocumentVerification = () => {
                     <div className="clean-doc-header">
                       <h3>
                         {getDocumentTypeLabel(docType)}
-                        {doc.uploaded && <span className="uploaded-indicator">📎 Uploaded</span>}
+                        {doc.uploaded && <span className="uploaded-indicator">📎 padding</span>}
                       </h3>
                       <span 
                         className={`clean-status-badge ${doc.status}`}

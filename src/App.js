@@ -49,6 +49,8 @@ import WithdrawMoney from './pages/WithdrawMoney';
 import WithdrawRequests from './pages/Company/WithdrawRequests';
 import DocumentVerification from './pages/DocumentVerification';
 import AdminDocumentVerification from './pages/Company/AdminDocumentVerification';
+import VideoSharingSystem from './pages/Company/VideoSharingSystem ';
+import AdminVideoSharing from './pages/Company/AdminVideoSharing';
 
   function PrivateRoute({ children, allowedRoles }) {
     const { currentUser, loading } = useContext(AuthContext);
@@ -179,6 +181,7 @@ import AdminDocumentVerification from './pages/Company/AdminDocumentVerification
             <Route path="web-builder" element={<DemoPage />} />
             <Route path="withdrawal" element={<WithdrawMoney />} />
             <Route path="DocumentVerification" element={<DocumentVerification />} />
+            <Route path="video-sharing" element={<VideoSharingSystem />} />
           </Route>
 
           {/* Company Dashboard */}
@@ -203,6 +206,7 @@ import AdminDocumentVerification from './pages/Company/AdminDocumentVerification
             <Route path="total-trainers" element={<FetchTrainers />} />
             <Route path="levels" element={<LevelsManager />} />
             <Route path="withdraw-requests" element={<WithdrawRequests />} />
+            <Route path="video-sharingss" element={<AdminVideoSharing />} />
             {/* REMOVED: This was causing the error */}
             {/* <Route path="/user-reports/:userId" element={<UserReports />} /> */}
           </Route>

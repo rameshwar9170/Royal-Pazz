@@ -33,7 +33,6 @@ function Employees() {
       bankName: ''
     }
   });
-
   const [employees, setEmployees] = useState({});
   const [filteredEmployees, setFilteredEmployees] = useState({});
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -43,6 +42,54 @@ function Employees() {
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+
+  // WhatsApp API Configuration
+  const WHATSAPP_API_URL = 'https://webhook.whatapi.in/webhook/68bff44c0686f623b6e1a678';
+
+  // Generate Employee ID
+  const generateEmployeeId = () => {
+    return 'EMP' + Date.now().toString().slice(-6);
+  };
+
+  // Send WhatsApp Welcome Message
+const sendEmployeeWelcomeMessage = async (employeeData, employeeId) => {
+  try {
+    // Use only first name (before the first space)
+    const firstName = employeeData.name.split(' ')[0];
+    
+   
+const simpleMessage = `employee,${employeeData.name.replace(/\s+/g, '')},${employeeData.role},${employeeId}`;
+    
+    const formatPhoneNumber = (phoneNumber) => {
+      let cleaned = phoneNumber.replace(/[^\d]/g, '');
+      if (cleaned.length === 10) {
+        return '91' + cleaned;
+      }
+      return cleaned;
+    };
+
+    const formattedNumber = formatPhoneNumber(employeeData.mobile);
+    const apiUrl = `https://webhook.whatapi.in/webhook/68bff44c0686f623b6e1a678?number=${formattedNumber}&message=${simpleMessage}`;
+    
+    console.log('👤 Using first name only:', firstName);
+    console.log('📤 Message:', simpleMessage);
+    
+    const newTab = window.open(apiUrl, '_blank');
+    setTimeout(() => {
+      if (newTab) newTab.close();
+    }, 3000);
+    
+    return { success: true };
+    
+  } catch (error) {
+    console.error('Error:', error);
+    throw error;
+  }
+};
+
+
+
+
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
   
@@ -123,7 +170,7 @@ function Employees() {
         } else {
           const selectedDate = new Date(value);
           const today = new Date();
-          today.setHours(23, 59, 59, 999); // End of today
+          today.setHours(23, 59, 59, 999);
           if (selectedDate > today) {
             error = 'Joining date cannot be in the future';
           }
@@ -165,24 +212,19 @@ function Employees() {
   const formatInput = (name, value) => {
     switch (name) {
       case 'mobile':
-        // Only allow digits, max 10
         return value.replace(/\D/g, '').slice(0, 10);
         
       case 'aadhar':
-        // Only allow digits, max 12
         return value.replace(/\D/g, '').slice(0, 12);
         
       case 'accountNo':
-        // Only allow digits, max 18
         return value.replace(/\D/g, '').slice(0, 18);
         
       case 'ifscCode':
-        // Convert to uppercase, only alphanumeric, max 11
         return value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 11);
         
       case 'name':
       case 'bankName':
-        // Only allow letters and spaces, trim multiple spaces
         return value.replace(/[^a-zA-Z\s]/g, '').replace(/\s+/g, ' ');
         
       default:
@@ -234,7 +276,6 @@ function Employees() {
         }
       }));
       
-      // Validate and set error for salary account fields
       const error = validateField(name, formattedValue);
       setErrors(prev => ({
         ...prev,
@@ -246,7 +287,6 @@ function Employees() {
         [name]: formattedValue
       }));
       
-      // Validate and set error for regular fields
       const error = validateField(name, formattedValue);
       setErrors(prev => ({
         ...prev,
@@ -258,7 +298,6 @@ function Employees() {
   const validateForm = () => {
     const newErrors = {};
     
-    // Validate all fields
     Object.keys(form).forEach(key => {
       if (key === 'salaryAccount') {
         Object.keys(form.salaryAccount).forEach(subKey => {
@@ -271,10 +310,8 @@ function Employees() {
       }
     });
     
-    // Check for duplicate mobile and aadhar
     const existingEmployees = Object.entries(employees);
     
-    // Check mobile duplication
     const mobileExists = existingEmployees.find(([id, emp]) => 
       emp.mobile === form.mobile && (!editingId || id !== editingId)
     );
@@ -282,7 +319,6 @@ function Employees() {
       newErrors.mobile = 'This mobile number is already registered';
     }
     
-    // Check aadhar duplication
     const aadharExists = existingEmployees.find(([id, emp]) => 
       emp.aadhar === form.aadhar && (!editingId || id !== editingId)
     );
@@ -294,34 +330,116 @@ function Employees() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!validateForm()) {
-      alert('Please fix all validation errors before submitting');
-      return;
+  // Modified Submit Function with WhatsApp Integration
+
+  const testWhatsAppDelivery = async () => {
+  const testNumbers = [
+    '919309253549', // Your main number
+    form.mobile // Current form number
+  ];
+  
+  for (const number of testNumbers) {
+    if (number) {
+      console.log(`\n🧪 Testing delivery to: ${number}`);
+      
+      try {
+        const testMessage = `Test message from HTAMS system
+Time: ${new Date().toLocaleString()}
+This is a delivery test.`;
+        
+        const encodedMessage = encodeURIComponent(testMessage);
+        const apiUrl = `https://webhook.whatapi.in/webhook/68bff44c0686f623b6e1a678?number=${number}&message=${encodedMessage}`;
+        
+        const response = await fetch(apiUrl);
+        const result = await response.json();
+        
+        console.log(`📊 Result for ${number}:`, result);
+        
+        if (result.accepted) {
+          console.log(`✅ Message accepted for ${number} - Check your phone in 1-2 minutes`);
+        } else {
+          console.log(`❌ Message rejected for ${number}`);
+        }
+        
+      } catch (error) {
+        console.log(`🚨 Error testing ${number}:`, error.message);
+      }
+      
+      // Wait 2 seconds between tests to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 2000));
     }
+  }
+};
+
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  
+  if (!validateForm()) {
+    alert('Please fix all validation errors before submitting');
+    return;
+  }
+  
+  setLoading(true);
+  
+  try {
+    const employeeId = editingId || generateEmployeeId();
     
-    setLoading(true);
+    const employeeData = {
+      ...form,
+      employeeId: employeeId,
+      registrationDate: new Date().toISOString(),
+      status: 'active'
+    };
 
     const employeeRef = editingId
       ? ref(db, `HTAMS/company/Employees/${editingId}`)
       : ref(db, 'HTAMS/company/Employees/');
-
+    
     const action = editingId ? set : push;
+    
+    // Save to Firebase
+    await action(employeeRef, employeeData);
+    
+    if (!editingId) {
+      // Send WhatsApp message with working format
+      try {
+        const whatsappResult = await sendEmployeeWelcomeMessage(employeeData, employeeId);
+        
+        alert(`🎉 Employee Added Successfully!
 
-    try {
-      await action(employeeRef, form);
-      alert(editingId ? 'Employee updated successfully!' : 'Employee added successfully!');
-      localStorage.removeItem('htamsEmployees');
-      resetForm();
-      setIsFormVisible(false);
-    } catch (err) {
-      alert('Error: ' + err.message);
-    } finally {
-      setLoading(false);
+✅ Saved to database: ${employeeData.name}
+🆔 Employee ID: ${employeeId}
+📱 WhatsApp sent to: ${form.mobile}
+🌐 Browser will auto-close
+
+Welcome message sent automatically!`);
+        
+      } catch (whatsappError) {
+        console.error('WhatsApp sending failed:', whatsappError);
+        alert(`✅ Employee added successfully!
+
+🆔 Employee ID: ${employeeId}
+⚠️ WhatsApp message could not be sent.
+
+You can send it manually from the employee details.`);
+      }
+    } else {
+      alert('Employee updated successfully!');
     }
-  };
+    
+    localStorage.removeItem('htamsEmployees');
+    resetForm();
+    setIsFormVisible(false);
+    
+  } catch (err) {
+    console.error('Error saving employee:', err);
+    alert('Error: ' + err.message);
+  } finally {
+    setLoading(false);
+  }
+};
+
+
 
   const handleEdit = (id, emp) => {
     setForm(emp);
@@ -369,43 +487,150 @@ function Employees() {
     setFilteredEmployees(employees);
   };
 
+  // Manual WhatsApp Message Sending
+  const sendManualWelcomeMessage = async (employee, employeeId) => {
+    try {
+      setLoading(true);
+      await sendEmployeeWelcomeMessage(employee, employeeId);
+      alert(`✅ Welcome message sent successfully to ${employee.mobile}!`);
+    } catch (error) {
+      alert(`❌ Failed to send WhatsApp message to ${employee.mobile}.\nPlease try again later.`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="employee-management">
-      <div className="page-header">
-        <div className="header-content">
+    <div className="employee-management" style={{
+      backgroundColor: '#0a0a0a',
+      color: '#ffffff',
+      minHeight: '100vh',
+      fontFamily: 'Arial, sans-serif'
+    }}>
+      // Add this in your component's button section
+{process.env.NODE_ENV === 'development' && (
+  <button
+    onClick={testWhatsAppDelivery}
+    style={{
+      padding: '12px 20px',
+      backgroundColor: '#17a2b8',
+      color: 'white',
+      border: 'none',
+      borderRadius: '5px',
+      cursor: 'pointer',
+      fontSize: '16px',
+      marginLeft: '10px'
+    }}
+  >
+    🧪 Test WhatsApp Delivery
+  </button>
+)}
+
+      <div className="page-header" style={{
+        padding: '20px',
+        backgroundColor: '#1a1a2e',
+        borderBottom: '2px solid #0f3460'
+      }}>
+        <div className="header-content" style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
           <div className="header-left">
-            <h1 className="page-title">
+            <h1 className="page-title" style={{
+              fontSize: '28px',
+              margin: '0',
+              color: '#00ff00',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px'
+            }}>
               <FaUser className="page-icon" />
               Employee Management
             </h1>
-            <p className="page-subtitle">Manage your team members and their information</p>
+            <p className="page-subtitle" style={{
+              color: '#888',
+              margin: '5px 0',
+              fontSize: '14px'
+            }}>Manage your team members and their information</p>
           </div>
           <div className="header-right">
-            <div className="total-employees-card">
-              <div className="total-employees-number">{Object.keys(employees).length}</div>
-              <div className="total-employees-label">TOTAL EMPLOYEES</div>
+            <div className="total-employees-card" style={{
+              backgroundColor: '#16213e',
+              padding: '15px 20px',
+              borderRadius: '10px',
+              textAlign: 'center',
+              border: '1px solid #0f3460'
+            }}>
+              <div className="total-employees-number" style={{
+                fontSize: '24px',
+                fontWeight: 'bold',
+                color: '#00ff00'
+              }}>{Object.keys(employees).length}</div>
+              <div className="total-employees-label" style={{
+                fontSize: '12px',
+                color: '#888'
+              }}>TOTAL EMPLOYEES</div>
             </div>
           </div>
         </div>
       </div>
 
       {isFormVisible && (
-        <div className="form-container">
-          <div className="form-header">
-            <h2 className="form-title">
+        <div className="form-container" style={{
+          padding: '20px',
+          backgroundColor: '#1a1a2e',
+          margin: '20px',
+          borderRadius: '10px',
+          border: '1px solid #0f3460'
+        }}>
+          <div className="form-header" style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '20px',
+            paddingBottom: '15px',
+            borderBottom: '1px solid #16213e'
+          }}>
+            <h2 className="form-title" style={{
+              color: '#00ff00',
+              margin: '0'
+            }}>
               {editingId ? 'Edit Employee' : 'Add New Employee'}
             </h2>
-            <button onClick={toggleForm} className="close-btn">
+            <button onClick={toggleForm} className="close-btn" style={{
+              backgroundColor: '#dc3545',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              padding: '8px 12px',
+              cursor: 'pointer'
+            }}>
               <FaTimes />
             </button>
           </div>
           
           <form onSubmit={handleSubmit} className="employee-form">
-            <div className="form-section">
-              <h3 className="section-title">Personal Information</h3>
-              <div className="form-grid">
+            <div className="form-section" style={{ marginBottom: '30px' }}>
+              <h3 className="section-title" style={{
+                color: '#00ff00',
+                marginBottom: '15px',
+                fontSize: '18px'
+              }}>Personal Information</h3>
+              <div className="form-grid" style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+                gap: '20px'
+              }}>
                 <div className="form-group">
-                  <label htmlFor="name" className="form-label">
+                  <label htmlFor="name" className="form-label" style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginBottom: '8px',
+                    color: '#fff',
+                    fontSize: '14px'
+                  }}>
                     <FaUser className="label-icon" />
                     Full Name *
                   </label>
@@ -417,13 +642,33 @@ function Employees() {
                     onChange={handleChange}
                     placeholder="Enter full name"
                     required
-                    className={`form-input ${errors.name ? 'error' : ''}`}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      backgroundColor: '#16213e',
+                      color: 'white',
+                      border: `1px solid ${errors.name ? '#dc3545' : '#0f3460'}`,
+                      borderRadius: '5px',
+                      fontSize: '16px'
+                    }}
                   />
-                  {errors.name && <span className="error-message">{errors.name}</span>}
+                  {errors.name && <span style={{
+                    color: '#dc3545',
+                    fontSize: '12px',
+                    marginTop: '5px',
+                    display: 'block'
+                  }}>{errors.name}</span>}
                 </div>
-
+                
                 <div className="form-group">
-                  <label htmlFor="mobile" className="form-label">
+                  <label htmlFor="mobile" className="form-label" style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginBottom: '8px',
+                    color: '#fff',
+                    fontSize: '14px'
+                  }}>
                     <FaPhone className="label-icon" />
                     Mobile Number *
                   </label>
@@ -435,13 +680,33 @@ function Employees() {
                     onChange={handleChange}
                     placeholder="10-digit mobile number"
                     required
-                    className={`form-input ${errors.mobile ? 'error' : ''}`}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      backgroundColor: '#16213e',
+                      color: 'white',
+                      border: `1px solid ${errors.mobile ? '#dc3545' : '#0f3460'}`,
+                      borderRadius: '5px',
+                      fontSize: '16px'
+                    }}
                   />
-                  {errors.mobile && <span className="error-message">{errors.mobile}</span>}
+                  {errors.mobile && <span style={{
+                    color: '#dc3545',
+                    fontSize: '12px',
+                    marginTop: '5px',
+                    display: 'block'
+                  }}>{errors.mobile}</span>}
                 </div>
-
+                
                 <div className="form-group">
-                  <label htmlFor="email" className="form-label">
+                  <label htmlFor="email" className="form-label" style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginBottom: '8px',
+                    color: '#fff',
+                    fontSize: '14px'
+                  }}>
                     <FaEnvelope className="label-icon" />
                     Email Address
                   </label>
@@ -452,13 +717,33 @@ function Employees() {
                     value={form.email}
                     onChange={handleChange}
                     placeholder="Enter email address"
-                    className={`form-input ${errors.email ? 'error' : ''}`}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      backgroundColor: '#16213e',
+                      color: 'white',
+                      border: `1px solid ${errors.email ? '#dc3545' : '#0f3460'}`,
+                      borderRadius: '5px',
+                      fontSize: '16px'
+                    }}
                   />
-                  {errors.email && <span className="error-message">{errors.email}</span>}
+                  {errors.email && <span style={{
+                    color: '#dc3545',
+                    fontSize: '12px',
+                    marginTop: '5px',
+                    display: 'block'
+                  }}>{errors.email}</span>}
                 </div>
-
+                
                 <div className="form-group">
-                  <label htmlFor="aadhar" className="form-label">
+                  <label htmlFor="aadhar" className="form-label" style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginBottom: '8px',
+                    color: '#fff',
+                    fontSize: '14px'
+                  }}>
                     <FaIdCard className="label-icon" />
                     Aadhar Number *
                   </label>
@@ -470,18 +755,46 @@ function Employees() {
                     onChange={handleChange}
                     placeholder="12-digit Aadhar number"
                     required
-                    className={`form-input ${errors.aadhar ? 'error' : ''}`}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      backgroundColor: '#16213e',
+                      color: 'white',
+                      border: `1px solid ${errors.aadhar ? '#dc3545' : '#0f3460'}`,
+                      borderRadius: '5px',
+                      fontSize: '16px'
+                    }}
                   />
-                  {errors.aadhar && <span className="error-message">{errors.aadhar}</span>}
+                  {errors.aadhar && <span style={{
+                    color: '#dc3545',
+                    fontSize: '12px',
+                    marginTop: '5px',
+                    display: 'block'
+                  }}>{errors.aadhar}</span>}
                 </div>
               </div>
             </div>
 
-            <div className="form-section">
-              <h3 className="section-title">Job Information</h3>
-              <div className="form-grid">
+            <div className="form-section" style={{ marginBottom: '30px' }}>
+              <h3 className="section-title" style={{
+                color: '#00ff00',
+                marginBottom: '15px',
+                fontSize: '18px'
+              }}>Job Information</h3>
+              <div className="form-grid" style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+                gap: '20px'
+              }}>
                 <div className="form-group">
-                  <label htmlFor="role" className="form-label">
+                  <label htmlFor="role" className="form-label" style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginBottom: '8px',
+                    color: '#fff',
+                    fontSize: '14px'
+                  }}>
                     <FaBriefcase className="label-icon" />
                     Role *
                   </label>
@@ -491,7 +804,15 @@ function Employees() {
                     value={form.role}
                     onChange={handleChange}
                     required
-                    className={`form-input ${errors.role ? 'error' : ''}`}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      backgroundColor: '#16213e',
+                      color: 'white',
+                      border: `1px solid ${errors.role ? '#dc3545' : '#0f3460'}`,
+                      borderRadius: '5px',
+                      fontSize: '16px'
+                    }}
                   >
                     <option value="">Select Role</option>
                     <option value="Technician">Technician</option>
@@ -501,11 +822,23 @@ function Employees() {
                     <option value="Trainer">Trainer</option>
                     <option value="Manager">Manager</option>
                   </select>
-                  {errors.role && <span className="error-message">{errors.role}</span>}
+                  {errors.role && <span style={{
+                    color: '#dc3545',
+                    fontSize: '12px',
+                    marginTop: '5px',
+                    display: 'block'
+                  }}>{errors.role}</span>}
                 </div>
-
+                
                 <div className="form-group">
-                  <label htmlFor="joiningDate" className="form-label">
+                  <label htmlFor="joiningDate" className="form-label" style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginBottom: '8px',
+                    color: '#fff',
+                    fontSize: '14px'
+                  }}>
                     <FaCalendar className="label-icon" />
                     Joining Date *
                   </label>
@@ -517,13 +850,33 @@ function Employees() {
                     onChange={handleChange}
                     required
                     max={new Date().toISOString().split('T')[0]}
-                    className={`form-input ${errors.joiningDate ? 'error' : ''}`}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      backgroundColor: '#16213e',
+                      color: 'white',
+                      border: `1px solid ${errors.joiningDate ? '#dc3545' : '#0f3460'}`,
+                      borderRadius: '5px',
+                      fontSize: '16px'
+                    }}
                   />
-                  {errors.joiningDate && <span className="error-message">{errors.joiningDate}</span>}
+                  {errors.joiningDate && <span style={{
+                    color: '#dc3545',
+                    fontSize: '12px',
+                    marginTop: '5px',
+                    display: 'block'
+                  }}>{errors.joiningDate}</span>}
                 </div>
-
+                
                 <div className="form-group">
-                  <label htmlFor="shift" className="form-label">
+                  <label htmlFor="shift" className="form-label" style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginBottom: '8px',
+                    color: '#fff',
+                    fontSize: '14px'
+                  }}>
                     <FaClock className="label-icon" />
                     Shift/Working Time
                   </label>
@@ -534,17 +887,40 @@ function Employees() {
                     value={form.shift}
                     onChange={handleChange}
                     placeholder="e.g., 9 AM - 6 PM"
-                    className="form-input"
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      backgroundColor: '#16213e',
+                      color: 'white',
+                      border: '1px solid #0f3460',
+                      borderRadius: '5px',
+                      fontSize: '16px'
+                    }}
                   />
                 </div>
               </div>
             </div>
 
-            <div className="form-section">
-              <h3 className="section-title">Bank Details</h3>
-              <div className="form-grid">
+            <div className="form-section" style={{ marginBottom: '30px' }}>
+              <h3 className="section-title" style={{
+                color: '#00ff00',
+                marginBottom: '15px',
+                fontSize: '18px'
+              }}>Bank Details</h3>
+              <div className="form-grid" style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+                gap: '20px'
+              }}>
                 <div className="form-group">
-                  <label htmlFor="bankName" className="form-label">
+                  <label htmlFor="bankName" className="form-label" style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginBottom: '8px',
+                    color: '#fff',
+                    fontSize: '14px'
+                  }}>
                     <FaUniversity className="label-icon" />
                     Bank Name *
                   </label>
@@ -556,13 +932,33 @@ function Employees() {
                     onChange={handleChange}
                     placeholder="Enter bank name"
                     required
-                    className={`form-input ${errors.bankName ? 'error' : ''}`}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      backgroundColor: '#16213e',
+                      color: 'white',
+                      border: `1px solid ${errors.bankName ? '#dc3545' : '#0f3460'}`,
+                      borderRadius: '5px',
+                      fontSize: '16px'
+                    }}
                   />
-                  {errors.bankName && <span className="error-message">{errors.bankName}</span>}
+                  {errors.bankName && <span style={{
+                    color: '#dc3545',
+                    fontSize: '12px',
+                    marginTop: '5px',
+                    display: 'block'
+                  }}>{errors.bankName}</span>}
                 </div>
-
+                
                 <div className="form-group">
-                  <label htmlFor="accountNo" className="form-label">
+                  <label htmlFor="accountNo" className="form-label" style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginBottom: '8px',
+                    color: '#fff',
+                    fontSize: '14px'
+                  }}>
                     Account Number *
                   </label>
                   <input
@@ -573,13 +969,33 @@ function Employees() {
                     onChange={handleChange}
                     placeholder="Enter account number (9-18 digits)"
                     required
-                    className={`form-input ${errors.accountNo ? 'error' : ''}`}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      backgroundColor: '#16213e',
+                      color: 'white',
+                      border: `1px solid ${errors.accountNo ? '#dc3545' : '#0f3460'}`,
+                      borderRadius: '5px',
+                      fontSize: '16px'
+                    }}
                   />
-                  {errors.accountNo && <span className="error-message">{errors.accountNo}</span>}
+                  {errors.accountNo && <span style={{
+                    color: '#dc3545',
+                    fontSize: '12px',
+                    marginTop: '5px',
+                    display: 'block'
+                  }}>{errors.accountNo}</span>}
                 </div>
-
+                
                 <div className="form-group">
-                  <label htmlFor="ifscCode" className="form-label">
+                  <label htmlFor="ifscCode" className="form-label" style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginBottom: '8px',
+                    color: '#fff',
+                    fontSize: '14px'
+                  }}>
                     IFSC Code *
                   </label>
                   <input
@@ -590,26 +1006,62 @@ function Employees() {
                     onChange={handleChange}
                     placeholder="e.g., SBIN0001234"
                     required
-                    className={`form-input ${errors.ifscCode ? 'error' : ''}`}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      backgroundColor: '#16213e',
+                      color: 'white',
+                      border: `1px solid ${errors.ifscCode ? '#dc3545' : '#0f3460'}`,
+                      borderRadius: '5px',
+                      fontSize: '16px'
+                    }}
                   />
-                  {errors.ifscCode && <span className="error-message">{errors.ifscCode}</span>}
+                  {errors.ifscCode && <span style={{
+                    color: '#dc3545',
+                    fontSize: '12px',
+                    marginTop: '5px',
+                    display: 'block'
+                  }}>{errors.ifscCode}</span>}
                 </div>
               </div>
             </div>
 
-            <div className="form-actions">
+            <div className="form-actions" style={{
+              display: 'flex',
+              gap: '15px',
+              justifyContent: 'flex-end',
+              paddingTop: '20px',
+              borderTop: '1px solid #16213e'
+            }}>
               <button 
                 type="button" 
                 onClick={toggleForm} 
-                className="secondary-btn"
                 disabled={loading}
+                style={{
+                  padding: '12px 24px',
+                  backgroundColor: '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '5px',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  fontSize: '16px'
+                }}
               >
                 Cancel
               </button>
               <button 
                 type="submit" 
-                className="primary-btn"
                 disabled={loading}
+                style={{
+                  padding: '12px 24px',
+                  backgroundColor: loading ? '#666' : '#0f3460',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '5px',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  fontSize: '16px',
+                  fontWeight: 'bold'
+                }}
               >
                 {loading ? 'Saving...' : (editingId ? 'Update Employee' : 'Add Employee')}
               </button>
@@ -618,105 +1070,255 @@ function Employees() {
         </div>
       )}
 
-      <div className="content-container">
-        <div className="search-section">
-          <div className="search-container">
-            <div className="search-input-wrapper">
-              <FaSearch className="search-icon" />
+      <div className="content-container" style={{ padding: '20px' }}>
+        <div className="search-section" style={{ marginBottom: '20px' }}>
+          <div className="search-container" style={{
+            display: 'flex',
+            gap: '15px',
+            alignItems: 'center',
+            flexWrap: 'wrap'
+          }}>
+            <div className="search-input-wrapper" style={{
+              position: 'relative',
+              flex: '1',
+              minWidth: '250px'
+            }}>
+              <FaSearch style={{
+                position: 'absolute',
+                left: '12px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: '#888'
+              }} />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search by name, mobile, or role..."
-                className="search-input"
                 onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                style={{
+                  width: '100%',
+                  padding: '12px 12px 12px 40px',
+                  backgroundColor: '#16213e',
+                  color: 'white',
+                  border: '1px solid #0f3460',
+                  borderRadius: '5px',
+                  fontSize: '16px'
+                }}
               />
               {searchQuery && (
-                <button onClick={clearSearch} className="clear-btn">
+                <button onClick={clearSearch} style={{
+                  position: 'absolute',
+                  right: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  color: '#888',
+                  cursor: 'pointer'
+                }}>
                   <FaTimes />
                 </button>
               )}
             </div>
-            <button onClick={handleSearch} className="search-btn">
+            <button onClick={handleSearch} style={{
+              padding: '12px 20px',
+              backgroundColor: '#0f3460',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              cursor: 'pointer',
+              fontSize: '16px'
+            }}>
               Search
             </button>
-            <button onClick={toggleForm} className="primary-btn add-btn">
-              <FaPlus className="btn-icon" />
-              <span className="btn-text">{isFormVisible ? 'Cancel' : 'Add Employee'}</span>
+            <button onClick={toggleForm} style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '12px 20px',
+              backgroundColor: '#00ff00',
+              color: '#000',
+              border: 'none',
+              borderRadius: '5px',
+              cursor: 'pointer',
+              fontSize: '16px',
+              fontWeight: 'bold'
+            }}>
+              <FaPlus />
+              {isFormVisible ? 'Cancel' : 'Add Employee'}
             </button>
           </div>
         </div>
 
         <div className="table-section">
-          <div className="table-header">
-            <h3 className="table-title">All Employees ({Object.keys(filteredEmployees).length})</h3>
+          <div className="table-header" style={{
+            marginBottom: '15px',
+            padding: '15px',
+            backgroundColor: '#1a1a2e',
+            borderRadius: '10px',
+            border: '1px solid #0f3460'
+          }}>
+            <h3 className="table-title" style={{
+              color: '#00ff00',
+              margin: '0'
+            }}>All Employees ({Object.keys(filteredEmployees).length})</h3>
           </div>
           
           {/* Mobile Card View */}
-          <div className="mobile-cards">
+          <div className="mobile-cards" style={{
+            display: 'block',
+            '@media (min-width: 768px)': {
+              display: 'none'
+            }
+          }}>
             {Object.entries(filteredEmployees).map(([id, emp]) => (
-              <div key={id} className="employee-card" onClick={() => handleRowClick(emp)}>
-                <div className="card-header">
+              <div key={id} 
+                onClick={() => handleRowClick(emp)}
+                style={{
+                  backgroundColor: '#1a1a2e',
+                  border: '1px solid #0f3460',
+                  borderRadius: '10px',
+                  padding: '15px',
+                  marginBottom: '15px',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseEnter={(e) => e.target.style.borderColor = '#00ff00'}
+                onMouseLeave={(e) => e.target.style.borderColor = '#0f3460'}
+              >
+                <div className="card-header" style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  marginBottom: '10px'
+                }}>
                   <div className="employee-info">
-                    <div className="employee-name">{emp.name}</div>
-                    <div className="employee-id">ID: {emp.aadhar}</div>
+                    <div className="employee-name" style={{
+                      fontWeight: 'bold',
+                      fontSize: '16px',
+                      color: '#fff'
+                    }}>{emp.name}</div>
+                    <div className="employee-id" style={{
+                      fontSize: '12px',
+                      color: '#888'
+                    }}>ID: {emp.employeeId || emp.aadhar}</div>
                   </div>
-                  <span className={`role-badge ${emp.role.toLowerCase()}`}>
+                  <span style={{
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    backgroundColor: '#0f3460',
+                    color: '#00ff00'
+                  }}>
                     {emp.role.toUpperCase()}
                   </span>
                 </div>
                 <div className="card-body">
-                  <div className="contact-info">
-                    <div className="contact-item">
-                      <FaPhone className="contact-icon" />
+                  <div className="contact-info" style={{ marginBottom: '10px' }}>
+                    <div className="contact-item" style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      marginBottom: '5px',
+                      fontSize: '14px'
+                    }}>
+                      <FaPhone style={{ color: '#00ff00' }} />
                       <span>{emp.mobile}</span>
                     </div>
-                    <div className="contact-item">
-                      <FaEnvelope className="contact-icon" />
+                    <div className="contact-item" style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: '14px'
+                    }}>
+                      <FaEnvelope style={{ color: '#00ff00' }} />
                       <span>{emp.email || 'N/A'}</span>
                     </div>
                   </div>
                   <div className="employment-info">
-                    <div className="info-item">
-                      <FaCalendar className="info-icon" />
+                    <div className="info-item" style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      marginBottom: '5px',
+                      fontSize: '14px'
+                    }}>
+                      <FaCalendar style={{ color: '#00ff00' }} />
                       <span>{new Date(emp.joiningDate).toLocaleDateString()}</span>
                     </div>
-                    <div className="info-item">
-                      <FaClock className="info-icon" />
+                    <div className="info-item" style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: '14px'
+                    }}>
+                      <FaClock style={{ color: '#00ff00' }} />
                       <span>{emp.shift || 'N/A'}</span>
                     </div>
                   </div>
                 </div>
-                <div className="card-actions">
+                <div className="card-actions" style={{
+                  display: 'flex',
+                  gap: '10px',
+                  marginTop: '15px',
+                  paddingTop: '10px',
+                  borderTop: '1px solid #16213e'
+                }}>
                   <button
-                    className="action-btn view-btn"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleRowClick(emp);
                     }}
+                    style={{
+                      padding: '8px 12px',
+                      backgroundColor: '#17a2b8',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '12px'
+                    }}
                     title="View Employee"
                   >
-                    👁️
+                    👁️ View
                   </button>
                   <button
-                    className="action-btn edit-btn"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleEdit(id, emp);
                     }}
+                    style={{
+                      padding: '8px 12px',
+                      backgroundColor: '#ffc107',
+                      color: '#000',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '12px'
+                    }}
                     title="Edit Employee"
                   >
-                    ✏️
+                    ✏️ Edit
                   </button>
                   <button
-                    className="action-btn delete-btn"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleDelete(id, emp.name);
                     }}
+                    style={{
+                      padding: '8px 12px',
+                      backgroundColor: '#dc3545',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '12px'
+                    }}
                     title="Delete Employee"
                   >
-                    🗑️
+                    🗑️ Delete
                   </button>
                 </div>
               </div>
@@ -724,67 +1326,183 @@ function Employees() {
           </div>
 
           {/* Desktop Table View */}
-          <div className="table-container">
-            <table className="employee-table">
+          <div className="table-container" style={{
+            backgroundColor: '#1a1a2e',
+            borderRadius: '10px',
+            border: '1px solid #0f3460',
+            overflow: 'hidden'
+          }}>
+            <table style={{
+              width: '100%',
+              borderCollapse: 'collapse'
+            }}>
               <thead>
-                <tr>
-                  <th>EMPLOYEE</th>
-                  <th>ROLE</th>
-                  <th>CONTACT</th>
-                  <th>JOINING DATE</th>
-                  <th>SHIFT</th>
-                  <th>ACTIONS</th>
+                <tr style={{ backgroundColor: '#16213e' }}>
+                  <th style={{
+                    padding: '15px',
+                    textAlign: 'left',
+                    color: '#00ff00',
+                    fontWeight: 'bold',
+                    borderBottom: '1px solid #0f3460'
+                  }}>EMPLOYEE</th>
+                  <th style={{
+                    padding: '15px',
+                    textAlign: 'left',
+                    color: '#00ff00',
+                    fontWeight: 'bold',
+                    borderBottom: '1px solid #0f3460'
+                  }}>ROLE</th>
+                  <th style={{
+                    padding: '15px',
+                    textAlign: 'left',
+                    color: '#00ff00',
+                    fontWeight: 'bold',
+                    borderBottom: '1px solid #0f3460'
+                  }}>CONTACT</th>
+                  <th style={{
+                    padding: '15px',
+                    textAlign: 'left',
+                    color: '#00ff00',
+                    fontWeight: 'bold',
+                    borderBottom: '1px solid #0f3460'
+                  }}>JOINING DATE</th>
+                  <th style={{
+                    padding: '15px',
+                    textAlign: 'left',
+                    color: '#00ff00',
+                    fontWeight: 'bold',
+                    borderBottom: '1px solid #0f3460'
+                  }}>SHIFT</th>
+                  <th style={{
+                    padding: '15px',
+                    textAlign: 'left',
+                    color: '#00ff00',
+                    fontWeight: 'bold',
+                    borderBottom: '1px solid #0f3460'
+                  }}>ACTIONS</th>
                 </tr>
               </thead>
               <tbody>
                 {Object.entries(filteredEmployees).map(([id, emp]) => (
-                  <tr key={id} onClick={() => handleRowClick(emp)} className="employee-row">
-                    <td className="name-cell">
+                  <tr key={id} 
+                    onClick={() => handleRowClick(emp)}
+                    style={{
+                      cursor: 'pointer',
+                      transition: 'background-color 0.3s ease'
+                    }}
+                    onMouseEnter={(e) => e.target.parentNode.style.backgroundColor = '#16213e'}
+                    onMouseLeave={(e) => e.target.parentNode.style.backgroundColor = 'transparent'}
+                  >
+                    <td style={{
+                      padding: '15px',
+                      borderBottom: '1px solid #16213e'
+                    }}>
                       <div className="employee-info">
-                        <div className="employee-name">{emp.name}</div>
-                        <div className="employee-id">ID: {emp.aadhar}</div>
+                        <div style={{
+                          fontWeight: 'bold',
+                          color: '#fff'
+                        }}>{emp.name}</div>
+                        <div style={{
+                          fontSize: '12px',
+                          color: '#888'
+                        }}>ID: {emp.employeeId || emp.aadhar}</div>
                       </div>
                     </td>
-                    <td>
-                      <span className={`role-badge ${emp.role.toLowerCase()}`}>
+                    <td style={{
+                      padding: '15px',
+                      borderBottom: '1px solid #16213e'
+                    }}>
+                      <span style={{
+                        padding: '6px 12px',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        fontWeight: 'bold',
+                        backgroundColor: '#0f3460',
+                        color: '#00ff00'
+                      }}>
                         {emp.role.toUpperCase()}
                       </span>
                     </td>
-                    <td className="contact-cell">
+                    <td style={{
+                      padding: '15px',
+                      borderBottom: '1px solid #16213e'
+                    }}>
                       <div className="contact-info">
-                        <div className="phone">📞 {emp.mobile}</div>
-                        <div className="email">📧 {emp.email || 'N/A'}</div>
+                        <div style={{
+                          fontSize: '14px',
+                          marginBottom: '3px'
+                        }}>📞 {emp.mobile}</div>
+                        <div style={{
+                          fontSize: '14px',
+                          color: '#888'
+                        }}>📧 {emp.email || 'N/A'}</div>
                       </div>
                     </td>
-                    <td>{new Date(emp.joiningDate).toLocaleDateString()}</td>
-                    <td>{emp.shift || 'N/A'}</td>
-                    <td>
-                      <div className="action-buttons">
+                    <td style={{
+                      padding: '15px',
+                      borderBottom: '1px solid #16213e'
+                    }}>{new Date(emp.joiningDate).toLocaleDateString()}</td>
+                    <td style={{
+                      padding: '15px',
+                      borderBottom: '1px solid #16213e'
+                    }}>{emp.shift || 'N/A'}</td>
+                    <td style={{
+                      padding: '15px',
+                      borderBottom: '1px solid #16213e'
+                    }}>
+                      <div className="action-buttons" style={{
+                        display: 'flex',
+                        gap: '8px'
+                      }}>
                         <button
-                          className="action-btn view-btn"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleRowClick(emp);
+                          }}
+                          style={{
+                            padding: '6px 10px',
+                            backgroundColor: '#17a2b8',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '12px'
                           }}
                           title="View Employee"
                         >
                           👁️
                         </button>
                         <button
-                          className="action-btn edit-btn"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleEdit(id, emp);
+                          }}
+                          style={{
+                            padding: '6px 10px',
+                            backgroundColor: '#ffc107',
+                            color: '#000',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '12px'
                           }}
                           title="Edit Employee"
                         >
                           ✏️
                         </button>
                         <button
-                          className="action-btn delete-btn"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleDelete(id, emp.name);
+                          }}
+                          style={{
+                            padding: '6px 10px',
+                            backgroundColor: '#dc3545',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '12px'
                           }}
                           title="Delete Employee"
                         >
@@ -799,1137 +1517,96 @@ function Employees() {
           </div>
 
           {Object.keys(filteredEmployees).length === 0 && (
-            <div className="empty-state">
-              <FaUser className="empty-icon" />
-              <h3>No employees found</h3>
-              <p>Try adjusting your search criteria or add a new employee.</p>
+            <div className="empty-state" style={{
+              textAlign: 'center',
+              padding: '60px 20px',
+              backgroundColor: '#1a1a2e',
+              borderRadius: '10px',
+              border: '1px solid #0f3460'
+            }}>
+              <FaUser style={{
+                fontSize: '48px',
+                color: '#666',
+                marginBottom: '20px'
+              }} />
+              <h3 style={{
+                color: '#fff',
+                marginBottom: '10px'
+              }}>No employees found</h3>
+              <p style={{
+                color: '#888'
+              }}>Try adjusting your search criteria or add a new employee.</p>
             </div>
           )}
         </div>
       </div>
 
-      {selectedEmployee && (
-        <div className="modal-overlay" onClick={closeDetails}>
-          <div className="employee-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3 className="modal-title">Employee Details</h3>
-              <button onClick={closeDetails} className="modal-close-btn">
-                <FaTimes />
-              </button>
-            </div>
+    {selectedEmployee && (
+  <div className="modal-overlay" onClick={closeDetails}>
+    <div className="employee-modal" onClick={(e) => e.stopPropagation()}>
+      {/* Your existing modal content */}
+      
+      <div className="modal-actions" style={{ 
+        marginTop: '30px', 
+        padding: '20px', 
+        borderTop: '1px solid #16213e',
+        display: 'flex', 
+        gap: '15px', 
+        justifyContent: 'flex-end' 
+      }}>
+        <button
+          onClick={() => {
+            const welcomeMessage = `🎉 Welcome Message 🎉
+
+Hello ${selectedEmployee.name}!
+
+Welcome to HTAMS Company!
+
+👤 Your Details:
+🆔 Employee ID: ${selectedEmployee.employeeId || selectedEmployee.aadhar}
+📧 Email: ${selectedEmployee.email || 'Not provided'}
+🏢 Role: ${selectedEmployee.role}
+📅 Joining Date: ${new Date(selectedEmployee.joiningDate).toLocaleDateString()}
+
+🔐 Login Credentials:
+👤 Username: ${selectedEmployee.email || selectedEmployee.mobile}
+🔑 Temporary Password: ${selectedEmployee.mobile}
+
+Welcome to the HTAMS family! 🎊
+- HTAMS Management Team`;
+
+            const encodedMessage = encodeURIComponent(welcomeMessage);
+            const formattedNumber = selectedEmployee.mobile.replace(/[^\d]/g, '');
+            const finalNumber = formattedNumber.startsWith('91') ? formattedNumber : '91' + formattedNumber;
             
-            <div className="modal-body">
-              <div className="employee-info-grid">
-                <div className="info-section">
-                  <h4>Personal Information</h4>
-                  <div className="info-item">
-                    <FaUser className="info-icon" />
-                    <div>
-                      <span className="info-label">Name</span>
-                      <span className="info-value">{selectedEmployee.name}</span>
-                    </div>
-                  </div>
-                  <div className="info-item">
-                    <FaPhone className="info-icon" />
-                    <div>
-                      <span className="info-label">Mobile</span>
-                      <span className="info-value">{selectedEmployee.mobile}</span>
-                    </div>
-                  </div>
-                  <div className="info-item">
-                    <FaEnvelope className="info-icon" />
-                    <div>
-                      <span className="info-label">Email</span>
-                      <span className="info-value">{selectedEmployee.email || 'N/A'}</span>
-                    </div>
-                  </div>
-                  <div className="info-item">
-                    <FaIdCard className="info-icon" />
-                    <div>
-                      <span className="info-label">Aadhar</span>
-                      <span className="info-value">{selectedEmployee.aadhar}</span>
-                    </div>
-                  </div>
-                </div>
+            const whatsappUrl = `https://web.whatsapp.com/send?phone=${finalNumber}&text=${encodedMessage}`;
+            window.open(whatsappUrl, '_blank');
+          }}
+          style={{ 
+            backgroundColor: '#25D366', 
+            border: 'none',
+            padding: '12px 24px',
+            borderRadius: '8px',
+            color: 'white',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            fontSize: '16px',
+            fontWeight: 'bold'
+          }}
+        >
+          📱 Send WhatsApp Message
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
-                <div className="info-section">
-                  <h4>Job Information</h4>
-                  <div className="info-item">
-                    <FaBriefcase className="info-icon" />
-                    <div>
-                      <span className="info-label">Role</span>
-                      <span className="info-value">{selectedEmployee.role}</span>
-                    </div>
-                  </div>
-                  <div className="info-item">
-                    <FaCalendar className="info-icon" />
-                    <div>
-                      <span className="info-label">Joining Date</span>
-                      <span className="info-value">
-                        {new Date(selectedEmployee.joiningDate).toLocaleDateString()}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="info-item">
-                    <FaClock className="info-icon" />
-                    <div>
-                      <span className="info-label">Shift</span>
-                      <span className="info-value">{selectedEmployee.shift || 'N/A'}</span>
-                    </div>
-                  </div>
-                </div>
 
-                <div className="info-section">
-                  <h4>Bank Details</h4>
-                  <div className="info-item">
-                    <FaUniversity className="info-icon" />
-                    <div>
-                      <span className="info-label">Bank Name</span>
-                      <span className="info-value">
-                        {selectedEmployee.salaryAccount?.bankName || 'N/A'}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="info-item">
-                    <div>
-                      <span className="info-label">Account Number</span>
-                      <span className="info-value">
-                        {selectedEmployee.salaryAccount?.accountNo || 'N/A'}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="info-item">
-                    <div>
-                      <span className="info-label">IFSC Code</span>
-                      <span className="info-value">
-                        {selectedEmployee.salaryAccount?.ifscCode || 'N/A'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
-<style jsx>{`
-  /* Base and layout */
-  .employee-management {
-    background-color: #f0f4ff;
-    min-height: 100vh;
-    padding: 0;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    color: #223344;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
 
-  .page-header {
-    background: #f0f4ff;
-    padding: 1.25rem 1.25rem 2.5rem;
-    color: #223344;
-    position: relative;
-    overflow: hidden;
-    border-bottom: 1px solid #d1d9f2;
-  }
 
-  .header-content {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    position: relative;
-    z-index: 1;
-    max-width: 1200px;
-    margin: 0 auto;
-    gap: 1.25rem;
-    flex-wrap: wrap;
-  }
-
-  .header-left {
-    flex: 1 1 280px;
-    min-width: 0;
-  }
-
-  .page-title {
-    font-size: clamp(1.75rem, 4vw, 2.25rem);
-    font-weight: 800;
-    margin: 0;
-    display: flex;
-    align-items: center;
-    gap: 0.85rem;
-    color: #1a202c;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
-  }
-
-  .page-icon {
-    font-size: clamp(1.5rem, 3vw, 1.75rem);
-    color: #4f67f5;
-  }
-
-  .page-subtitle {
-    font-size: clamp(1rem, 2.5vw, 1.125rem);
-    color: #4a5568;
-    margin: 0.6rem 0 0 0;
-    font-weight: 500;
-    letter-spacing: 0.015em;
-  }
-
-  .header-right {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    min-width: 160px;
-  }
-
-  .total-employees-card {
-    background: linear-gradient(135deg, #4f67f5 0%, #6a88ff 100%);
-    color: white;
-    padding: 1.25rem 2rem;
-    border-radius: 14px;
-    text-align: center;
-    min-width: 160px;
-    box-shadow: 0 12px 28px rgba(79, 103, 245, 0.35);
-    user-select: none;
-    font-feature-settings: "tnum";
-  }
-
-  .total-employees-number {
-    font-size: clamp(2rem, 6vw, 3rem);
-    font-weight: 900;
-    margin: 0;
-    line-height: 1;
-    letter-spacing: 0.03em;
-    font-variant-numeric: tabular-nums;
-    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
-  }
-
-  .total-employees-label {
-    font-size: clamp(0.8rem, 2.25vw, 1rem);
-    font-weight: 700;
-    margin: 0.6rem 0 0 0;
-    opacity: 0.95;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    font-family: 'Segoe UI Black', 'Arial Black', Arial, sans-serif;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-  }
-
-  /* Buttons */
-  .primary-btn,
-  .secondary-btn {
-    border-radius: 10px;
-    font-size: clamp(1rem, 2.5vw, 1.05rem);
-    font-weight: 700;
-    cursor: pointer;
-    padding: 0.85rem 1.4rem;
-    transition: background-color 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-      box-shadow 0.35s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s ease;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.65rem;
-    white-space: nowrap;
-    user-select: none;
-  }
-
-  .primary-btn {
-    background: linear-gradient(135deg, #4f67f5 0%, #7686ff 100%);
-    color: white;
-    border: none;
-    box-shadow: 0 6px 18px rgba(79, 103, 245, 0.45);
-    outline-offset: 3px;
-  }
-
-  .primary-btn:hover:not(:disabled) {
-    background: linear-gradient(135deg, #4861e6, #667aff);
-    box-shadow: 0 8px 24px rgba(79, 103, 245, 0.6);
-    transform: translateY(-2px);
-  }
-
-  .primary-btn:focus-visible {
-    outline: 3px solid #9baafb;
-    outline-offset: 3px;
-  }
-
-  .secondary-btn {
-    background: #e8ebff;
-    color: #4a5568;
-    border: 2.5px solid #b7bdff;
-    font-weight: 600;
-    box-shadow: none;
-    outline-offset: 2px;
-  }
-
-  .secondary-btn:hover:not(:disabled) {
-    background: #c4caff;
-    color: #333;
-    border-color: #9aaaff;
-    box-shadow: 0 0 8px 2px rgba(93, 103, 255, 0.35);
-  }
-
-  .secondary-btn:focus-visible {
-    outline: 3px solid #a3b3ff;
-    outline-offset: 2px;
-  }
-
-  .primary-btn:disabled,
-  .secondary-btn:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-    box-shadow: none;
-  }
-
-  .btn-icon {
-    font-size: 1rem;
-    flex-shrink: 0;
-    user-select: none;
-    pointer-events: none;
-    color: inherit;
-  }
-
-  .btn-text {
-    display: inline;
-  }
-
-  /* Form container */
-  .form-container {
-    background: white;
-    margin: -1.25rem 1.25rem 1.5rem;
-    border-radius: 16px;
-    box-shadow: 0 18px 44px rgba(34, 50, 68, 0.12);
-    position: relative;
-    z-index: 2;
-  }
-
-  .form-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1.75rem 2rem 1rem;
-    border-bottom: 1px solid #d1d9f2;
-    margin-bottom: 1.5rem;
-  }
-
-  .form-title {
-    font-size: clamp(1.45rem, 3vw, 1.75rem);
-    font-weight: 800;
-    color: #1a202c;
-    margin: 0;
-    letter-spacing: 0.02em;
-  }
-
-  .close-btn {
-    background: #f2f6ff;
-    border: none;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #657ea3;
-    transition: background-color 0.25s ease, color 0.25s ease;
-    flex-shrink: 0;
-  }
-
-  .close-btn:hover,
-  .close-btn:focus-visible {
-    background: #dbe7ff;
-    color: #3a4a7e;
-    outline: none;
-  }
-
-  /* Form styles */
-  .employee-form {
-    padding: 0 2rem 2rem;
-  }
-
-  .form-section {
-    margin-bottom: 2.5rem;
-  }
-
-  .section-title {
-    font-size: clamp(1.2rem, 2.5vw, 1.35rem);
-    font-weight: 700;
-    color: #1a202c;
-    margin: 0 0 1.15rem 0;
-    padding-bottom: 0.6rem;
-    border-bottom: 3px solid #e3e9fe;
-    letter-spacing: 0.03em;
-  }
-
-  .form-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 1.2rem 2rem;
-  }
-
-  .form-group {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .form-label {
-    font-size: 0.95rem;
-    font-weight: 700;
-    color: #344054;
-    margin-bottom: 0.6rem;
-    display: flex;
-    align-items: center;
-    gap: 0.65rem;
-    user-select: none;
-  }
-
-  .label-icon {
-    color: #4961f7;
-    font-size: 1rem;
-    flex-shrink: 0;
-  }
-
-  input.form-input,
-  select.form-input {
-    width: 100%;
-    padding: 0.85rem 1rem;
-    border: 2.5px solid #d1d9f2;
-    border-radius: 12px;
-    font-size: 1.05rem;
-    font-weight: 500;
-    transition: border-color 0.3s ease, box-shadow 0.3s ease;
-    background-color: #feffff;
-    color: #1a202c;
-    font-family: inherit;
-  }
-
-  input.form-input::placeholder,
-  select.form-input::placeholder {
-    color: #718096;
-  }
-
-  input.form-input:focus,
-  select.form-input:focus {
-    outline: none;
-    border-color: #4961f7;
-    box-shadow: 0 0 0 4px rgba(73, 97, 247, 0.2);
-  }
-
-  input.form-input.error,
-  select.form-input.error {
-    border-color: #f44336;
-    box-shadow: 0 0 0 4px rgba(244, 67, 54, 0.18);
-    background-color: #ffebeb;
-  }
-
-  .error-message {
-    color: #f44336;
-    font-size: 0.8rem;
-    margin-top: 0.35rem;
-    font-weight: 600;
-    line-height: 1.1;
-    user-select: none;
-  }
-
-  /* Form actions */
-  .form-actions {
-    display: flex;
-    gap: 1.5rem;
-    justify-content: flex-end;
-    margin-top: 3rem;
-    padding-top: 2rem;
-    border-top: 1.5px solid #d1d9f2;
-    flex-wrap: wrap;
-  }
-
-  /* Content container */
-  .content-container {
-    max-width: 1200px;
-    margin: 0 auto 2rem;
-    padding: 0 1rem;
-  }
-
-  /* Search section */
-  .search-section {
-    margin-bottom: 2rem;
-  }
-
-  .search-container {
-    background: white;
-    padding: 1.25rem 1.5rem;
-    border-radius: 16px;
-    box-shadow: 0 6px 14px rgba(34, 50, 68, 0.1);
-    display: flex;
-    gap: 1.15rem;
-    align-items: flex-end;
-    flex-wrap: wrap;
-  }
-
-  .search-input-wrapper {
-    position: relative;
-    flex: 1 1 300px;
-    min-width: 220px;
-  }
-
-  .search-icon {
-    position: absolute;
-    left: 1rem;
-    top: 50%;
-    transform: translateY(-50%);
-    color: #8a9bc9;
-    font-size: 1rem;
-    pointer-events: none;
-  }
-
-  .search-input {
-    width: 100%;
-    padding: 1rem 1rem 1rem 3.2rem;
-    border: 2.5px solid #c3ccee;
-    border-radius: 14px;
-    font-size: 1.1rem;
-    font-weight: 600;
-    font-family: inherit;
-    color: #2a374d;
-    transition: border-color 0.3s ease, box-shadow 0.3s ease;
-  }
-
-  .search-input::placeholder {
-    color: #a0abc9;
-    font-weight: 500;
-  }
-
-  .search-input:focus {
-    outline: none;
-    border-color: #4f67f5;
-    box-shadow: 0 0 0 5px rgba(79, 103, 245, 0.25);
-  }
-
-  .clear-btn {
-    position: absolute;
-    right: 0.6rem;
-    top: 50%;
-    transform: translateY(-50%);
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: #8a9bc9;
-    padding: 0.3rem;
-    border-radius: 6px;
-    transition: color 0.2s ease, background-color 0.2s ease;
-  }
-
-  .clear-btn:hover,
-  .clear-btn:focus-visible {
-    color: #3551b0;
-    background: #dae2ff;
-    outline: none;
-  }
-
-  .search-btn {
-    background: #4f67f5;
-    color: white;
-    border: none;
-    padding: 1rem 1.5rem;
-    border-radius: 14px;
-    cursor: pointer;
-    font-size: 1.1rem;
-    font-weight: 700;
-    white-space: nowrap;
-    transition: background-color 0.3s ease, box-shadow 0.3s ease, transform 0.2s ease;
-    box-shadow: 0 6px 14px rgba(79, 103, 245, 0.5);
-  }
-
-  .search-btn:hover,
-  .search-btn:focus-visible {
-    background: #3851d3;
-    box-shadow: 0 8px 20px rgba(52, 71, 188, 0.6);
-    transform: translateY(-2px);
-    outline: none;
-  }
-
-  .add-btn {
-    flex-shrink: 0;
-  }
-
-  /* Table section */
-  .table-section {
-    background: white;
-    border-radius: 16px;
-    box-shadow: 0 8px 24px rgba(34, 50, 68, 0.12);
-    overflow: hidden;
-  }
-
-  .table-header {
-    padding: 1.25rem 2rem;
-    border-bottom: 1px solid #d1d9f2;
-  }
-
-  .table-title {
-    font-size: clamp(1.25rem, 3vw, 1.4rem);
-    font-weight: 900;
-    color: #1a202c;
-    margin: 0;
-    letter-spacing: 0.04em;
-  }
-
-  /* Mobile card view */
-  .mobile-cards {
-    display: none;
-    padding: 1.2rem;
-    gap: 1.25rem;
-    flex-direction: column;
-  }
-
-  .employee-card {
-    background: #f1f5ff;
-    border-radius: 16px;
-    padding: 1.3rem 1.5rem;
-    border: 1px solid #ccd6f6;
-    cursor: pointer;
-    transition: box-shadow 0.3s ease, transform 0.3s ease;
-    box-shadow: 0 5px 20px rgba(100, 120, 255, 0.1);
-  }
-
-  .employee-card:hover,
-  .employee-card:focus-within {
-    box-shadow: 0 8px 28px rgba(79, 103, 245, 0.3);
-    transform: translateY(-3px);
-    outline: none;
-  }
-
-  .card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 1.25rem;
-  }
-
-  .card-body {
-    margin-bottom: 1.2rem;
-  }
-
-  .contact-info {
-    margin-bottom: 1rem;
-  }
-
-  .contact-item {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    margin-bottom: 0.6rem;
-    font-size: 0.95rem;
-    color: #344054;
-    user-select: text;
-  }
-
-  .contact-icon {
-    color: #4f67f5;
-    font-size: 0.8rem;
-    width: 14px;
-  }
-
-  .employment-info {
-    display: flex;
-    gap: 1.3rem;
-    flex-wrap: wrap;
-    color: #475569;
-  }
-
-  .info-item {
-    display: flex;
-    align-items: center;
-    gap: 0.65rem;
-    font-size: 0.9rem;
-  }
-
-  .info-icon {
-    color: #4f67f5;
-    font-size: 0.8rem;
-    width: 14px;
-  }
-
-  .card-actions {
-    display: flex;
-    gap: 0.7rem;
-    justify-content: flex-end;
-  }
-
-  /* Desktop table view */
-  .table-container {
-    overflow-x: auto;
-  }
-
-  .employee-table {
-    width: 100%;
-    border-collapse: separate;
-    border-spacing: 0 10px;
-    background-clip: padding-box;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .employee-table th {
-    background: #364fc7;
-    color: white;
-    padding: 1.3rem 1.5rem;
-    text-align: left;
-    font-weight: 700;
-    font-size: 0.9rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    border-top-left-radius: 12px;
-    border-top-right-radius: 12px;
-  }
-
-  .employee-table td {
-    padding: 1.25rem 1.5rem;
-    vertical-align: middle;
-    background: white;
-    color: #2a374d;
-    font-weight: 600;
-    font-size: 1rem;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgb(115 125 170 / 0.08);
-    user-select: text;
-  }
-
-  .employee-row {
-    cursor: pointer;
-    transition: background-color 0.25s ease;
-    vertical-align: middle;
-  }
-
-  .employee-row:hover,
-  .employee-row:focus-within {
-    background-color: #f1f3ff;
-    outline: none;
-  }
-
-  .name-cell {
-    font-weight: 700;
-  }
-
-  .employee-info {
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
-  }
-
-  .employee-name {
-    font-size: 1.1rem;
-    font-weight: 800;
-    color: #1e293b;
-  }
-
-  .employee-id {
-    font-size: 0.82rem;
-    color: #64748b;
-    user-select: none;
-  }
-
-  .contact-cell {
-    font-size: 0.9rem;
-  }
-
-  .contact-info {
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
-  }
-
-  .phone,
-  .email {
-    display: flex;
-    align-items: center;
-    gap: 0.3rem;
-    font-size: 0.9rem;
-    user-select: text;
-    color: #394867;
-  }
-
-  /* Role badges */
-  .role-badge {
-    display: inline-block;
-    padding: 0.3rem 0.9rem;
-    border-radius: 9999px;
-    font-size: 0.75rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.035em;
-    user-select: none;
-    box-shadow: 0 2px 8px rgb(0 0 0 / 0.07);
-  }
-
-  .role-badge.technician {
-    background-color: #4f67f5;
-    color: white;
-  }
-
-  .role-badge.sales {
-    background-color: #22c55e;
-    color: white;
-  }
-
-  .role-badge.service {
-    background-color: #fbbf24;
-    color: white;
-  }
-
-  .role-badge.admin {
-    background-color: #e11d48;
-    color: white;
-  }
-
-  .role-badge.trainer {
-    background-color: #7c3aed;
-    color: white;
-  }
-
-  .role-badge.manager {
-    background-color: #ef4444;
-    color: white;
-  }
-
-  .action-buttons {
-    display: flex;
-    gap: 0.7rem;
-  }
-
-  .action-btn {
-    width: 36px;
-    height: 36px;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1rem;
-    transition: background-color 0.25s ease, transform 0.25s ease;
-  }
-
-  .action-btn:focus-visible {
-    outline: 3px solid #5167f5;
-    outline-offset: 3px;
-  }
-
-  .view-btn {
-    background-color: #4f67f5;
-    color: white;
-  }
-
-  .view-btn:hover,
-  .view-btn:focus-visible {
-    background-color: #3c52d6;
-    transform: translateY(-1px);
-  }
-
-  .edit-btn {
-    background-color: #fbbf24;
-    color: #3f3f46;
-  }
-
-  .edit-btn:hover,
-  .edit-btn:focus-visible {
-    background-color: #eab308;
-    transform: translateY(-1px);
-    color: #27272a;
-  }
-
-  .delete-btn {
-    background-color: #ef4444;
-    color: white;
-  }
-
-  .delete-btn:hover,
-  .delete-btn:focus-visible {
-    background-color: #dc2626;
-    transform: translateY(-1px);
-  }
-
-  /* Empty state */
-  .empty-state {
-    text-align: center;
-    padding: 3.5rem 1.5rem;
-    color: #64748b;
-  }
-
-  .empty-icon {
-    font-size: 3.5rem;
-    color: #cbd5e0;
-    margin-bottom: 1.2rem;
-  }
-
-  .empty-state h3 {
-    font-size: 1.35rem;
-    font-weight: 700;
-    margin: 0 0 0.7rem 0;
-  }
-
-  .empty-state p {
-    font-size: 1.1rem;
-    margin: 0;
-    font-weight: 500;
-  }
-
-  /* Modal overlay and content */
-  .modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: rgba(15, 23, 42, 0.75);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 1200;
-    backdrop-filter: blur(6px);
-    padding: 1.25rem;
-  }
-
-  .employee-modal {
-    background: white;
-    border-radius: 24px;
-    box-shadow: 0 35px 80px rgba(30, 42, 91, 0.3);
-    max-width: 850px;
-    min-width: 320px;
-    width: 100%;
-    max-height: 90vh;
-    overflow-y: auto;
-  }
-
-  .modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 2rem 2rem 1.25rem;
-    border-bottom: 1.2px solid #d1d9f2;
-  }
-
-  .modal-title {
-    font-size: clamp(1.5rem, 3vw, 1.8rem);
-    font-weight: 900;
-    color: #111827;
-    margin: 0;
-    letter-spacing: 0.04em;
-  }
-
-  .modal-close-btn {
-    background: #f0f4ff;
-    border: none;
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #64748b;
-    transition: background-color 0.2s ease, color 0.2s ease;
-    flex-shrink: 0;
-  }
-
-  .modal-close-btn:hover,
-  .modal-close-btn:focus-visible {
-    background: #dbe7ff;
-    color: #344eab;
-    outline: none;
-  }
-
-  .modal-body {
-    padding: 2rem;
-  }
-
-  .employee-info-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 2rem 2.5rem;
-  }
-
-  .info-section {
-    background: #f2f7ff;
-    padding: 1.5rem;
-    border-radius: 18px;
-  }
-
-  .info-section h4 {
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: #192029;
-    margin: 0 0 1.25rem 0;
-    padding-bottom: 0.8rem;
-    border-bottom: 3px solid #d9e1ff;
-    letter-spacing: 0.02em;
-  }
-
-  .info-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 1rem;
-    margin-bottom: 1.4rem;
-  }
-
-  .info-item:last-child {
-    margin-bottom: 0;
-  }
-
-  .info-icon {
-    color: #3f51c7;
-    font-size: 1.1rem;
-    margin-top: 0.25rem;
-    flex-shrink: 0;
-    user-select: none;
-  }
-
-  .info-item > div {
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-    min-width: 0;
-  }
-
-  .info-label {
-    font-size: 0.82rem;
-    font-weight: 700;
-    color: #57606a;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    user-select: none;
-  }
-
-  .info-value {
-    font-size: 0.95rem;
-    color: #192029;
-    font-weight: 600;
-    word-break: break-word;
-    user-select: text;
-  }
-
-  /* Responsive breakpoints */
-  @media (max-width: 1024px) {
-    .form-grid {
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    }
-
-    .search-container {
-      flex-direction: column;
-      align-items: stretch;
-    }
-
-    .search-input-wrapper {
-      max-width: none;
-      order: 1;
-    }
-
-    .search-btn {
-      order: 2;
-      margin-top: 0.7rem;
-    }
-
-    .add-btn {
-      order: 3;
-      margin-top: 0.7rem;
-      align-self: flex-start;
-    }
-  }
-
-  @media (max-width: 768px) {
-    .page-header {
-      padding: 1rem 0.75rem 1.75rem;
-    }
-
-    .header-content {
-      flex-direction: column;
-      align-items: center;
-      text-align: center;
-      gap: 1.25rem;
-    }
-
-    .header-left {
-      flex: none;
-    }
-
-    .total-employees-card {
-      min-width: 140px;
-      padding: 1rem 1.5rem;
-    }
-
-    .form-container {
-      margin: -1rem 0.75rem 1rem;
-      border-radius: 14px;
-    }
-
-    .content-container {
-      padding: 0 0.75rem;
-    }
-
-    .form-grid {
-      grid-template-columns: 1fr;
-    }
-
-    .form-actions {
-      flex-direction: column-reverse;
-      gap: 1rem;
-    }
-
-    .btn-text {
-      display: none;
-    }
-
-    /* Show mobile cards, hide table */
-    .mobile-cards {
-      display: flex;
-    }
-
-    .table-container {
-      display: none;
-    }
-
-    .employee-info-grid {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  @media (max-width: 480px) {
-    .page-header {
-      padding: 0.75rem 0.5rem 1rem;
-    }
-
-    .form-container {
-      margin: -0.75rem 0.5rem 0.75rem;
-      border-radius: 12px;
-    }
-
-    .content-container {
-      padding: 0 0.5rem;
-    }
-
-    .search-container,
-    .mobile-cards,
-    .form-header,
-    .employee-form {
-      padding: 0.75rem;
-    }
-
-    .total-employees-card {
-      padding: 0.75rem 1rem;
-      min-width: 120px;
-    }
-
-    .employee-card {
-      padding: 0.75rem 1rem;
-      border-radius: 14px;
-    }
-
-    .modal-body {
-      padding: 1rem;
-    }
-
-    .info-section {
-      padding: 0.75rem;
-      border-radius: 14px;
-    }
-  }
-`}</style>
 
     </div>
   );
