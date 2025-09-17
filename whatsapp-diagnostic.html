@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp API Diagnostic Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f0f2f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 { color: #25d366; text-align: center; }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+        input, button {
+            padding: 10px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        button {
+            background: #25d366;
+            color: white;
+            cursor: pointer;
+            border: none;
+        }
+        button:hover { background: #1da851; }
+        .log {
+            background: #000;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            height: 200px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+        .warning { color: #ff6b35; font-weight: bold; }
+        .success { color: #25d366; font-weight: bold; }
+        .error { color: #ff0000; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 WhatsApp API Diagnostic Tool</h1>
+        
+        <div class="section">
+            <h3>📱 Phone Number Setup</h3>
+            <input type="text" id="phoneNumber" placeholder="Enter 10-digit number (e.g., 7058779785)" value="7058779785">
+            <button onclick="validateNumber()">Validate Number</button>
+            <div id="numberStatus"></div>
+        </div>
+
+        <div class="section">
+            <h3>🧪 API Tests</h3>
+            <button onclick="testAPIConnection()">Test API Connection</button>
+            <button onclick="sendSimpleMessage()">Send Simple Message</button>
+            <button onclick="sendTestMessage()">Send Test Message</button>
+            <button onclick="checkAPIStatus()">Check API Status</button>
+        </div>
+
+        <div class="section">
+            <h3>📋 Troubleshooting Checklist</h3>
+            <div id="checklist">
+                <div>✅ API returns 200 status</div>
+                <div>✅ Response shows {"accepted":true}</div>
+                <div class="warning">⚠️ Message not appearing in WhatsApp</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>📊 Test Results</h3>
+            <div id="testLog" class="log">
+                <div>WhatsApp API Diagnostic Tool Ready...</div>
+                <div>Enter your phone number and run tests above.</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>🔧 Common Solutions</h3>
+            <ul>
+                <li><strong>Wait 2-5 minutes:</strong> API messages can have delays</li>
+                <li><strong>Check WhatsApp Web:</strong> Messages appear faster there</li>
+                <li><strong>Verify phone number:</strong> Must be active on WhatsApp</li>
+                <li><strong>Check internet:</strong> Both sender and receiver need connection</li>
+                <li><strong>API limitations:</strong> Free tier may have restrictions</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'https://webhook.whatapi.in/webhook/68c51d1c0686f623b6e54f55';
+        
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('testLog');
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : '';
+            logDiv.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function validateNumber() {
+            const phone = document.getElementById('phoneNumber').value.trim();
+            const statusDiv = document.getElementById('numberStatus');
+            
+            if (!phone) {
+                statusDiv.innerHTML = '<span class="error">❌ Please enter a phone number</span>';
+                return false;
+            }
+            
+            const cleanPhone = phone.replace(/\D/g, '');
+            
+            if (cleanPhone.length !== 10) {
+                statusDiv.innerHTML = '<span class="error">❌ Must be exactly 10 digits</span>';
+                return false;
+            }
+            
+            statusDiv.innerHTML = `<span class="success">✅ Valid: +91${cleanPhone}</span>`;
+            log(`Phone number validated: +91${cleanPhone}`, 'success');
+            return cleanPhone;
+        }
+
+        async function testAPIConnection() {
+            log('🔍 Testing API connection...');
+            
+            try {
+                const response = await fetch(API_URL + '?test=connection');
+                log(`📡 API Status: ${response.status} ${response.statusText}`);
+                
+                if (response.ok) {
+                    log('✅ API is reachable', 'success');
+                } else {
+                    log('❌ API connection failed', 'error');
+                }
+            } catch (error) {
+                log(`❌ Connection error: ${error.message}`, 'error');
+            }
+        }
+
+        async function sendSimpleMessage() {
+            const phone = validateNumber();
+            if (!phone) return;
+            
+            const message = 'Hi';
+            const url = `${API_URL}?number=91${phone}&message=${encodeURIComponent(message)}`;
+            
+            log(`📱 Sending simple message to +91${phone}...`);
+            log(`🔗 URL: ${url.substring(0, 80)}...`);
+            
+            try {
+                const response = await fetch(url);
+                const result = await response.text();
+                
+                log(`📊 Status: ${response.status}`);
+                log(`📄 Response: ${result}`);
+                
+                if (response.ok && result.includes('accepted')) {
+                    log('✅ Message sent successfully! Check WhatsApp in 2-5 minutes.', 'success');
+                } else {
+                    log('❌ Message sending failed', 'error');
+                }
+            } catch (error) {
+                log(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function sendTestMessage() {
+            const phone = validateNumber();
+            if (!phone) return;
+            
+            const message = `🧪 WhatsApp API Test
+            
+Time: ${new Date().toLocaleString()}
+Phone: +91${phone}
+Status: Testing API delivery
+
+If you see this message, the API is working! ✅`;
+            
+            const url = `${API_URL}?number=91${phone}&message=${encodeURIComponent(message)}`;
+            
+            log(`📱 Sending detailed test message to +91${phone}...`);
+            
+            try {
+                const response = await fetch(url);
+                const result = await response.text();
+                
+                log(`📊 Status: ${response.status}`);
+                log(`📄 Response: ${result}`);
+                
+                if (response.ok) {
+                    log('✅ Test message sent! Check WhatsApp now.', 'success');
+                    log('⏰ If no message appears in 5 minutes, there may be an API issue.', 'warning');
+                } else {
+                    log('❌ Test message failed', 'error');
+                }
+            } catch (error) {
+                log(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function checkAPIStatus() {
+            log('🔍 Checking API service status...');
+            
+            const testNumbers = ['919999999999', '918888888888']; // Invalid test numbers
+            
+            for (const testNum of testNumbers) {
+                try {
+                    const url = `${API_URL}?number=${testNum}&message=test`;
+                    const response = await fetch(url);
+                    const result = await response.text();
+                    
+                    log(`Test ${testNum}: ${response.status} - ${result}`);
+                } catch (error) {
+                    log(`Test ${testNum}: Error - ${error.message}`);
+                }
+            }
+            
+            log('📋 API status check completed');
+        }
+
+        // Auto-validate number on page load
+        window.onload = function() {
+            validateNumber();
+            log('🚀 Diagnostic tool loaded. Run tests to check WhatsApp API.', 'success');
+        };
+    </script>
+</body>
+</html>

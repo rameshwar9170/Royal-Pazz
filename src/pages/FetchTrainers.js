@@ -143,6 +143,28 @@ export default function Dashboard() {
 
   // Edit training function
   const handleEditTraining = (training) => {
+    // Check if training can be edited
+    if (!canEditTraining(training)) {
+      alert('⚠️ Cannot edit this training - The registration link has expired!');
+      return;
+    }
+
+    // Additional warning if link expires soon
+    if (training.expireDate) {
+      const now = new Date();
+      const expire = new Date(training.expireDate);
+      const hoursUntilExpiry = (expire.getTime() - now.getTime()) / (1000 * 60 * 60);
+      
+      if (hoursUntilExpiry <= 24 && hoursUntilExpiry > 0) {
+        const confirmEdit = window.confirm(
+          `⚠️ Warning: Registration link expires in ${getTimeUntilExpiry(training)}!\n\n` +
+          'After expiration, participants won\'t be able to register and you won\'t be able to edit this training.\n\n' +
+          'Do you want to continue editing?'
+        );
+        if (!confirmEdit) return;
+      }
+    }
+
     setEditingTraining(training);
     setForm({
       location: training.location || '',
@@ -192,7 +214,8 @@ export default function Dashboard() {
     endDate.setHours(0, 0, 0, 0);
     expireDate.setHours(0, 0, 0, 0);
 
-    if (startDate < today) {
+    // For editing existing training, allow past dates if they were already set
+    if (!editingTraining && startDate < today) {
       return { valid: false, message: 'Training start date cannot be before today' };
     }
 
@@ -200,8 +223,21 @@ export default function Dashboard() {
       return { valid: false, message: 'Training end date cannot be before start date' };
     }
 
-    if (expireDate < today) {
+    // For editing, allow extending expire date even if original has passed
+    if (!editingTraining && expireDate < today) {
       return { valid: false, message: 'Link expiration date cannot be before today' };
+    }
+
+    // When editing, allow expire date to be extended beyond today
+    if (editingTraining && expireDate < today) {
+      const confirmExtend = window.confirm(
+        '⚠️ The expiration date you selected is in the past.\n\n' +
+        'This will immediately expire the registration link.\n\n' +
+        'Do you want to set a future date instead?'
+      );
+      if (confirmExtend) {
+        return { valid: false, message: 'Please select a future expiration date' };
+      }
     }
 
     if (expireDate >= startDate) {
@@ -346,7 +382,7 @@ export default function Dashboard() {
     
     const matchesStatus = filterStatus === 'all' || 
       (filterStatus === 'active' && isActiveTraining(t)) ||
-      (filterStatus === 'pending' && t.status === 'pending') ||
+      // (filterStatus === 'pending' && t.status === 'pending') ||
       (filterStatus === 'completed' && t.status === 'completed');
     
     return matchesSearch && matchesStatus;
@@ -404,6 +440,32 @@ export default function Dashboard() {
     const now = new Date();
     const expire = new Date(training.expireDate);
     return now <= expire;
+  };
+
+  // Function to check if training can be edited (before link expires)
+  const canEditTraining = (training) => {
+    if (!training.expireDate) return true; // No expire date means always editable
+    const now = new Date();
+    const expire = new Date(training.expireDate);
+    return now <= expire; // Can edit if link hasn't expired yet
+  };
+
+  // Function to get time remaining until link expires
+  const getTimeUntilExpiry = (training) => {
+    if (!training.expireDate) return null;
+    const now = new Date();
+    const expire = new Date(training.expireDate);
+    const diffMs = expire.getTime() - now.getTime();
+    
+    if (diffMs <= 0) return 'Expired';
+    
+    const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (days > 0) return `${days}d ${hours}h remaining`;
+    if (hours > 0) return `${hours}h ${minutes}m remaining`;
+    return `${minutes}m remaining`;
   };
 
   // Pagination handlers
@@ -502,7 +564,7 @@ const styles = {
   // Root container - fully responsive
   dashPremiumRoot: {
     minHeight: '100vh',
-    background: 'linear-gradient(135deg, #5566b1ff 0%, #8759b1ff 100%)',
+    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
     fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
     padding: 'clamp(10px, 3vw, 20px)',
     boxSizing: 'border-box',
@@ -606,7 +668,7 @@ const styles = {
     transition: 'all 0.3s ease',
     boxSizing: 'border-box',
     background: 'rgba(255,255,255,0.95)',
-    color: '#374151',
+    color: '#1e293b',
     minHeight: '52px',
     fontWeight: '500',
     boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
@@ -619,7 +681,7 @@ const styles = {
     transform: 'translateY(-50%)',
     background: 'transparent',
     border: 'none',
-    color: '#6b7280',
+    color: '#64748b',
     fontSize: '18px',
     cursor: 'pointer',
     padding: '4px',
@@ -647,7 +709,7 @@ const styles = {
     borderRadius: 'clamp(10px, 2vw, 14px)',
     fontSize: 'clamp(14px, 3vw, 16px)',
     background: 'rgba(255,255,255,0.95)',
-    color: '#374151',
+    color: '#1e293b',
     cursor: 'pointer',
     transition: 'all 0.3s ease',
     boxSizing: 'border-box',
@@ -690,17 +752,17 @@ const styles = {
   },
 
   actionBtnPrimary: {
-    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+    background: 'linear-gradient(135deg, #6366f1, #5855eb)',
     color: 'white',
   },
 
   actionBtnDanger: {
-    background: 'linear-gradient(135deg, #dc2626, #b91c1c)',
+    background: 'linear-gradient(135deg, #ef4444, #dc2626)',
     color: 'white',
   },
 
   actionBtnSuccess: {
-    background: 'linear-gradient(135deg, #059669, #047857)',
+    background: 'linear-gradient(135deg, #10b981, #059669)',
     color: 'white',
   },
 
@@ -773,7 +835,7 @@ const styles = {
   formTitle: {
     fontSize: 'clamp(1.3rem, 4vw, 1.8rem)',
     fontWeight: '700',
-    color: '#1f2937',
+    color: '#1e293b',
     margin: 0,
   },
 
@@ -800,17 +862,18 @@ const styles = {
 
   formLabel: {
     fontWeight: '600',
-    color: '#374151',
+    color: '#1e293b',
     fontSize: 'clamp(13px, 3vw, 14px)',
   },
 
   formInput: {
     padding: '12px 16px',
-    border: '2px solid #e5e7eb',
+    border: '2px solid #e2e8f0',
     borderRadius: 'clamp(8px, 2vw, 10px)',
     fontSize: 'clamp(13px, 3vw, 14px)',
     transition: 'all 0.2s ease',
     background: 'white',
+    color: '#1e293b',
     width: '100%',
     boxSizing: 'border-box',
     minHeight: '44px',
@@ -818,18 +881,19 @@ const styles = {
 
   formSelect: {
     padding: '12px 16px',
-    border: '2px solid #e5e7eb',
+    border: '2px solid #e2e8f0',
     borderRadius: 'clamp(8px, 2vw, 10px)',
     fontSize: 'clamp(13px, 3vw, 14px)',
     transition: 'all 0.2s ease',
     background: 'white',
+    color: '#1e293b',
     width: '100%',
     boxSizing: 'border-box',
     minHeight: '44px',
   },
 
   formSubmitBtn: {
-    background: 'linear-gradient(135deg, #059669, #047857)',
+    background: 'linear-gradient(135deg, #6366f1, #5855eb)',
     color: 'white',
     border: 'none',
     padding: '16px 32px',
@@ -840,7 +904,7 @@ const styles = {
     transition: 'all 0.3s ease',
     marginTop: '20px',
     alignSelf: 'center',
-    boxShadow: '0 4px 15px rgba(5, 150, 105, 0.3)',
+    boxShadow: '0 4px 15px rgba(99, 102, 241, 0.3)',
     minHeight: '48px',
     minWidth: '160px',
     maxWidth: '300px',
@@ -872,22 +936,22 @@ const styles = {
   },
 
   statCardTotal: {
-    background: 'linear-gradient(135deg, #667eea, #764ba2)',
+    background: 'linear-gradient(135deg, #6366f1, #5855eb)',
     color: 'white',
   },
 
   statCardParticipants: {
-    background: 'linear-gradient(135deg, #f093fb, #f5576c)',
+    background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
     color: 'white',
   },
 
   statCardActive: {
-    background: 'linear-gradient(135deg, #4facfe, #00f2fe)',
+    background: 'linear-gradient(135deg, #10b981, #059669)',
     color: 'white',
   },
 
   statCardCompleted: {
-    background: 'linear-gradient(135deg, #43e97b, #38f9d7)',
+    background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
     color: 'white',
   },
 
@@ -999,14 +1063,14 @@ const styles = {
     width: '48px',
     height: '48px',
     borderRadius: '50%',
-    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+    background: 'linear-gradient(135deg, #6366f1, #5855eb)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     color: 'white',
     fontWeight: '700',
     fontSize: '1.1rem',
-    boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)',
+    boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
     flexShrink: 0,
   },
 
@@ -1019,7 +1083,7 @@ const styles = {
   trainerName: {
     fontSize: 'clamp(1rem, 3vw, 1.15rem)',
     fontWeight: '700',
-    color: '#1f2937',
+    color: '#1e293b',
     margin: '0 0 4px 0',
     lineHeight: '1.3',
     overflow: 'hidden',
@@ -1029,7 +1093,7 @@ const styles = {
 
   trainerLocation: {
     fontSize: 'clamp(0.8rem, 2.5vw, 0.9rem)',
-    color: '#6b7280',
+    color: '#64748b',
     margin: 0,
     lineHeight: '1.3',
     overflow: 'hidden',
@@ -1106,7 +1170,7 @@ const styles = {
     padding: '10px 12px',
     background: '#f8fafc',
     borderRadius: '8px',
-    borderLeft: '3px solid #4f46e5',
+    borderLeft: '3px solid #6366f1',
     width: '100%',
     boxSizing: 'border-box',
     minHeight: '40px', // Consistent height for all items
@@ -1116,19 +1180,19 @@ const styles = {
     fontSize: '1rem',
     minWidth: '18px',
     flexShrink: 0,
-    color: '#4f46e5',
+    color: '#6366f1',
   },
 
   detailLabel: {
     fontWeight: '600',
-    color: '#374151',
+    color: '#1e293b',
     minWidth: '72px',
     fontSize: 'clamp(11px, 3vw, 13px)',
     flexShrink: 0,
   },
 
   detailValue: {
-    color: '#6b7280',
+    color: '#64748b',
     fontWeight: '500',
     fontSize: 'clamp(11px, 3vw, 13px)',
     flex: 1,
@@ -1180,11 +1244,11 @@ const styles = {
   },
 
   linkStatusAccessible: {
-    color: '#f7f7f7ff',
+    color: '#10b981',
   },
 
   linkStatusExpired: {
-    color: '#ffffffff',
+    color: '#ef4444',
   },
 
   linkIcon: {
@@ -1197,7 +1261,7 @@ const styles = {
 
   linkExpire: {
     fontSize: 'clamp(10px, 3vw, 11px)',
-    color: '#ffffffff',
+    color: '#64748b',
     fontWeight: '500',
   },
 
@@ -1225,7 +1289,7 @@ const styles = {
   },
 
   linkBtnCopy: {
-    background: '#6b7280',
+    background: '#64748b',
     color: 'white',
   },
 
@@ -1235,12 +1299,12 @@ const styles = {
   },
 
   linkBtnOpen: {
-    background: '#059669',
+    background: '#6366f1',
     color: 'white',
   },
 
   linkBtnExpired: {
-    background: '#dc2626',
+    background: '#ef4444',
     color: 'white',
     cursor: 'not-allowed',
   },
@@ -1302,7 +1366,7 @@ const styles = {
 
   pageNumberActive: {
     background: 'white',
-    color: '#4f46e5',
+    color: '#6366f1',
     borderColor: 'white',
   },
 
@@ -1406,7 +1470,7 @@ const styles = {
     width: '60px',
     height: '60px',
     borderRadius: '50%',
-    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+    background: 'linear-gradient(135deg, #6366f1, #5855eb)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1424,7 +1488,7 @@ const styles = {
   modalTitle: {
     fontSize: 'clamp(1.2rem, 4vw, 1.5rem)',
     fontWeight: '700',
-    color: '#1f2937',
+    color: '#1e293b',
     margin: '0 0 10px 0',
     lineHeight: '1.2',
     overflow: 'hidden',
@@ -1462,8 +1526,8 @@ const styles = {
     height: '40px',
     border: 'none',
     borderRadius: '50%',
-    background: '#f3f4f6',
-    color: '#6b7280',
+    background: '#f8fafc',
+    color: '#64748b',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
@@ -1484,10 +1548,10 @@ const styles = {
   sectionTitle: {
     fontSize: 'clamp(1.1rem, 3vw, 1.2rem)',
     fontWeight: '700',
-    color: '#1f2937',
+    color: '#1e293b',
     marginBottom: '20px',
     paddingBottom: '10px',
-    borderBottom: '2px solid #e5e7eb',
+    borderBottom: '2px solid #e2e8f0',
   },
 
   detailGrid: {
@@ -1503,7 +1567,7 @@ const styles = {
     padding: '15px',
     background: '#f8fafc',
     borderRadius: '10px',
-    borderLeft: '4px solid #4f46e5',
+    borderLeft: '4px solid #6366f1',
     gap: '10px',
     flexWrap: 'wrap',
     boxSizing: 'border-box',
@@ -1517,14 +1581,14 @@ const styles = {
 
   detailKey: {
     fontWeight: '600',
-    color: '#374151',
+    color: '#1e293b',
     minWidth: '120px',
     fontSize: 'clamp(12px, 3vw, 14px)',
     flexShrink: 0,
   },
 
   detailVal: {
-    color: '#6b7280',
+    color: '#64748b',
     textAlign: 'right',
     flex: 1,
     fontSize: 'clamp(12px, 3vw, 14px)',
@@ -1540,7 +1604,7 @@ const styles = {
   },
 
   productTag: {
-    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+    background: 'linear-gradient(135deg, #6366f1, #5855eb)',
     color: 'white',
     padding: '4px 12px',
     borderRadius: '20px',
@@ -1564,7 +1628,7 @@ const styles = {
     padding: '15px',
     background: '#f8fafc',
     borderRadius: '12px',
-    border: '1px solid #e5e7eb',
+    border: '1px solid #e2e8f0',
     transition: 'all 0.2s ease',
     width: '100%',
     boxSizing: 'border-box',
@@ -1574,7 +1638,7 @@ const styles = {
     width: '40px',
     height: '40px',
     borderRadius: '50%',
-    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+    background: 'linear-gradient(135deg, #10b981, #059669)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1591,7 +1655,7 @@ const styles = {
 
   participantName: {
     fontWeight: '600',
-    color: '#1f2937',
+    color: '#1e293b',
     marginBottom: '4px',
     fontSize: 'clamp(13px, 3vw, 14px)',
     overflow: 'hidden',
@@ -1601,7 +1665,7 @@ const styles = {
 
   participantContact: {
     fontSize: 'clamp(11px, 3vw, 12px)',
-    color: '#6b7280',
+    color: '#64748b',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -1843,7 +1907,7 @@ const additionalCSS = `
                 >
                   <option value="all">🔄 All Status</option>
                   <option value="active">⚡ Active</option>
-                  <option value="pending">⏳ Pending</option>
+                  {/* <option value="pending">⏳ Pending</option> */}
                   <option value="completed">✅ Completed</option>
                 </select>
               </div>
@@ -2365,16 +2429,28 @@ const additionalCSS = `
                     }}>
                       {isActiveTraining(t) ? "⚡ Active" : `📌 ${t.status || 'Pending'}`}
                     </span>
-                    {isActiveTraining(t) && (
+                    {canEditTraining(t) && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           handleEditTraining(t);
                         }}
-                        style={styles.editBtn}
-                        title="Update Training"
+                        style={{
+                          ...styles.editBtn,
+                          ...(isLinkAccessible(t) 
+                            ? {} 
+                            : { opacity: 0.6, cursor: 'not-allowed' }
+                          )
+                        }}
+                        title={isLinkAccessible(t) 
+                          ? `Edit Training (${getTimeUntilExpiry(t)})` 
+                          : 'Cannot edit - Link expired'
+                        }
+                        disabled={!isLinkAccessible(t)}
                         onMouseOver={(e) => {
-                          e.target.style.transform = 'scale(1.1)';
+                          if (isLinkAccessible(t)) {
+                            e.target.style.transform = 'scale(1.1)';
+                          }
                         }}
                         onMouseOut={(e) => {
                           e.target.style.transform = 'scale(1)';
@@ -2382,6 +2458,19 @@ const additionalCSS = `
                       >
                         ✏️
                       </button>
+                    )}
+                    {!canEditTraining(t) && (
+                      <span 
+                        style={{
+                          ...styles.editBtn,
+                          opacity: 0.3,
+                          cursor: 'not-allowed',
+                          backgroundColor: '#ccc'
+                        }}
+                        title="Edit disabled - Link expired"
+                      >
+                        🔒
+                      </span>
                     )}
                   </div>
                 </div>
@@ -2433,6 +2522,16 @@ const additionalCSS = `
                     </div>
                     <div style={styles.linkExpire}>
                       Expires: {formatDate(t.expireDate)}
+                      {canEditTraining(t) && (
+                        <div style={{
+                          fontSize: '0.75rem',
+                          color: isLinkAccessible(t) ? '#10b981' : '#ef4444',
+                          fontWeight: '500',
+                          marginTop: '2px'
+                        }}>
+                          {getTimeUntilExpiry(t)}
+                        </div>
+                      )}
                     </div>
                   </div>
                   

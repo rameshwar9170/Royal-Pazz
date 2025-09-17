@@ -1,5 +1,6 @@
+
 import React, { useEffect, useState, useMemo } from 'react';
-import { ref, onValue, update } from 'firebase/database';
+import { ref, onValue, update, get } from 'firebase/database'; // Add 'get' import
 import { db } from '../firebase/config';
 import { FiSearch, FiX, FiInfo, FiCalendar, FiDollarSign, FiUser, FiPackage, FiNavigation, FiCreditCard, FiEdit, FiTrash2 } from 'react-icons/fi';
 
@@ -12,19 +13,82 @@ const STATUS_CONFIG = {
 
 const CompanyOrdersTable = () => {
   const [orders, setOrders] = useState([]);
+  const [products, setProducts] = useState({}); // Add products cache
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [activeFilter, setActiveFilter] = useState('all');
   const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
 
+  // Fetch product data by productId
+  const fetchProductData = async (productId) => {
+    if (!productId || products[productId]) return;
+    
+    try {
+      // Try different possible paths where products might be stored
+      const possiblePaths = [
+        `HTAMS/products/${productId}`,
+        `products/${productId}`,
+        `company/products/${productId}`,
+        `HTAMS/company/products/${productId}`
+      ];
+      
+      for (const path of possiblePaths) {
+        const productRef = ref(db, path);
+        const snapshot = await get(productRef);
+        
+        if (snapshot.exists()) {
+          const productData = snapshot.val();
+          setProducts(prev => ({ 
+            ...prev, 
+            [productId]: {
+              name: productData.name || productData.productName || productData.title || 'Unknown Product',
+              ...productData
+            }
+          }));
+          return;
+        }
+      }
+      
+      // If product not found, set a placeholder
+      setProducts(prev => ({ 
+        ...prev, 
+        [productId]: { name: 'Product Not Found' }
+      }));
+      
+    } catch (error) {
+      console.error('Error fetching product:', error);
+      setProducts(prev => ({ 
+        ...prev, 
+        [productId]: { name: 'Error Loading Product' }
+      }));
+    }
+  };
+
+  // Get product name from order
+  const getProductName = (order) => {
+    // If order has direct productName, use it
+    if (order.productName) return order.productName;
+    
+    // If order has productId, try to get from products cache
+    if (order.productId) {
+      const product = products[order.productId];
+      if (product && product.name) {
+        return product.name;
+      }
+      // If not in cache yet, show loading
+      return 'Loading...';
+    }
+    
+    // Fallback
+    return 'N/A';
+  };
+
   // Format address helper function
   const formatAddress = (address) => {
     if (!address) return 'N/A';
     
-    // If it's already a string, return it
     if (typeof address === 'string') return address;
     
-    // If it's an object, format it
     if (typeof address === 'object') {
       const parts = [];
       if (address.street) parts.push(address.street);
@@ -52,7 +116,6 @@ const CompanyOrdersTable = () => {
   };
 
   const handleEditOrder = (order) => {
-    // Add your edit logic here
     console.log('Edit order:', order);
     alert(`Edit order functionality for ${order.id}`);
   };
@@ -62,7 +125,7 @@ const CompanyOrdersTable = () => {
     const currentUid = htamsUser?.uid;
     const ordersRef = ref(db, 'HTAMS/orders');
     
-    const unsubscribe = onValue(ordersRef, (snapshot) => {
+    const unsubscribe = onValue(ordersRef, async (snapshot) => {
       const data = snapshot.val() || {};
       const orderList = Object.entries(data)
         .map(([id, val]) => ({ 
@@ -72,7 +135,20 @@ const CompanyOrdersTable = () => {
           amount: calculateAmount(val)
         }))
         .filter(order => order.placedBy === currentUid);
+      
       setOrders(orderList);
+      
+      // Fetch product data for orders that have productId
+      const productIds = orderList
+        .filter(order => order.productId && !products[order.productId])
+        .map(order => order.productId);
+      
+      const uniqueProductIds = [...new Set(productIds)];
+      
+      // Fetch all product data
+      for (const productId of uniqueProductIds) {
+        await fetchProductData(productId);
+      }
     });
 
     return () => unsubscribe();
@@ -93,7 +169,7 @@ const CompanyOrdersTable = () => {
       const term = searchTerm.toLowerCase();
       result = result.filter(order =>
         order.customerName?.toLowerCase().includes(term) ||
-        order.productName?.toLowerCase().includes(term) ||
+        getProductName(order)?.toLowerCase().includes(term) || // Updated to use getProductName
         order.id?.toLowerCase().includes(term)
       );
     }
@@ -106,8 +182,14 @@ const CompanyOrdersTable = () => {
     
     if (sortConfig.key) {
       result.sort((a, b) => {
-        const aValue = a[sortConfig.key] || '';
-        const bValue = b[sortConfig.key] || '';
+        let aValue = a[sortConfig.key] || '';
+        let bValue = b[sortConfig.key] || '';
+        
+        // Handle product name sorting
+        if (sortConfig.key === 'productName') {
+          aValue = getProductName(a);
+          bValue = getProductName(b);
+        }
         
         if (aValue < bValue) {
           return sortConfig.direction === 'asc' ? -1 : 1;
@@ -120,7 +202,7 @@ const CompanyOrdersTable = () => {
     }
     
     return result;
-  }, [orders, searchTerm, activeFilter, sortConfig]);
+  }, [orders, searchTerm, activeFilter, sortConfig, products]); // Add products to dependencies
 
   const requestSort = (key) => {
     let direction = 'asc';
@@ -263,7 +345,7 @@ const CompanyOrdersTable = () => {
                   <tr key={order.id} className="order-row">
                     <td className="order-id">#{order.id.slice(0, 8)}</td>
                     <td>{order.customerName || 'N/A'}</td>
-                    <td>{order.productName || 'N/A'}</td>
+                    <td>{getProductName(order)}</td> {/* Updated */}
                     <td className="text-right amount-cell">{formatCurrency(order.amount)}</td>
                     <td>{formatDate(order.date)}</td>
                     <td>
@@ -279,31 +361,28 @@ const CompanyOrdersTable = () => {
                     </td>
                     <td className="actions-cell">
                       <div className="action-buttons">
-                     <button
-  onClick={(e) => {
-    e.stopPropagation();
-    setSelectedOrder(order);
-  }}
-  title="View Details"
-  style={{
-    padding: '8px 16px',
-    fontWeight: 'bold',
-    border: 'none',
-    borderRadius: '6px',
-    backgroundColor: '#0ea5e9',
-    color: '#fff',
-    cursor: 'pointer',
-    fontSize: '14px',
-    transition: 'background-color 0.3s ease',
-  }}
-  onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#0284c7')}
-  onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#0ea5e9')}
->
-  View
-</button>
-
-                   
-                     
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedOrder(order);
+                          }}
+                          title="View Details"
+                          style={{
+                            padding: '8px 16px',
+                            fontWeight: 'bold',
+                            border: 'none',
+                            borderRadius: '6px',
+                            backgroundColor: '#0ea5e9',
+                            color: '#fff',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            transition: 'background-color 0.3s ease',
+                          }}
+                          onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#0284c7')}
+                          onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#0ea5e9')}
+                        >
+                          View
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -357,7 +436,7 @@ const CompanyOrdersTable = () => {
                 
                 <div className="product-section">
                   <span className="section-label">Product</span>
-                  <span className="section-value">{order.productName || 'N/A'}</span>
+                  <span className="section-value">{getProductName(order)}</span> {/* Updated */}
                 </div>
                 
                 <div className="amount-section">
@@ -378,8 +457,6 @@ const CompanyOrdersTable = () => {
                     <FiInfo />
                     View
                   </button>
-               
-        
                 </div>
               </div>
             </div>
@@ -431,7 +508,7 @@ const CompanyOrdersTable = () => {
                 </div>
                 <div className="detail-content">
                   <h3>Product</h3>
-                  <p>{selectedOrder.productName || 'N/A'}</p>
+                  <p>{getProductName(selectedOrder)}</p> {/* Updated */}
                 </div>
               </div>
               
@@ -503,6 +580,7 @@ const CompanyOrdersTable = () => {
           </div>
         </div>
       )}
+    
 
       <style jsx>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');

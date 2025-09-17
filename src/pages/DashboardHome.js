@@ -67,6 +67,7 @@ const DashboardHome = () => {
     const [teamCommissionData, setTeamCommissionData] = useState([]);
     const [allUsers, setAllUsers] = useState({});
     const [currentUserId, setCurrentUserId] = useState(null);
+    const [actualTeamCount, setActualTeamCount] = useState(0);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -96,6 +97,28 @@ const DashboardHome = () => {
 
         return () => unsubscribe();
     }, []);
+
+    // Fetch team count when currentUserId is available
+    useEffect(() => {
+        const fetchTeamCount = async () => {
+            if (!currentUserId) return;
+            
+            try {
+                const usersRef = ref(db, 'HTAMS/users');
+                const snapshot = await get(usersRef);
+                if (snapshot.exists()) {
+                    const allUsers = Object.values(snapshot.val());
+                    const teamMembers = allUsers.filter(user => user.referredBy === currentUserId);
+                    setActualTeamCount(teamMembers.length);
+                }
+            } catch (error) {
+                console.error('Error fetching team count:', error);
+                setActualTeamCount(0);
+            }
+        };
+
+        fetchTeamCount();
+    }, [currentUserId]);
 
     // Filter team commission data (exclude current user's own commissions)
     const getTeamCommissionData = () => {
@@ -179,11 +202,22 @@ const DashboardHome = () => {
         MyTeam,
         salesHistory,
         currentLevel,
-        createdAt
+        createdAt,
+        transactions
     } = userData;
 
     // Enhanced data processing
     const commissionData = Object.values(commissionHistory || {});
+
+    // Calculate total withdrawal from approved transactions
+    const calculateTotalWithdrawal = () => {
+        if (!transactions) return 0;
+        return Object.values(transactions)
+            .filter(transaction => transaction.status === 'approved' && transaction.type === 'withdrawal')
+            .reduce((total, transaction) => total + (transaction.amount || 0), 0);
+    };
+
+    const totalWithdrawal = calculateTotalWithdrawal();
 
     // Get team commission stats
     const teamStats = getTeamCommissionStats();
@@ -549,7 +583,7 @@ const DashboardHome = () => {
                         </div>
                     </div>
                     <div className="activity-list-premium">
-                        {commissionData.slice(0, 4).map((commission, index) => (
+                        {commissionData.map((commission, index) => (
                             <div key={index} className="activity-item-premium">
                                 <div className="activity-icon-premium">
                                     <FaDollarSign />
@@ -599,11 +633,11 @@ const DashboardHome = () => {
                     <div className="insights-grid">
                         <div className="insight-item-premium">
                             <div className="insight-icon-premium success">
-                                <FaRocket />
+                                <FaWallet />
                             </div>
                             <div className="insight-content">
-                                <h4>Avg Commission</h4>
-                                <span>₹{avgCommissionPerSale.toFixed(0)}</span>
+                                <h4>Total Withdrawal</h4>
+                                <span>₹{totalWithdrawal.toLocaleString()}</span>
                             </div>
                         </div>
                         <div className="insight-item-premium">
@@ -611,17 +645,17 @@ const DashboardHome = () => {
                                 <FaUsers />
                             </div>
                             <div className="insight-content">
-                                <h4>Team Size</h4>
-                                <span>{MyTeam || 'Building'}</span>
+                                <h4>Team Members</h4>
+                                <span>{actualTeamCount}</span>
                             </div>
                         </div>
                         <div className="insight-item-premium">
                             <div className="insight-icon-premium warning">
-                                <FaHandshake />
+                                <FaCalendarAlt />
                             </div>
                             <div className="insight-content">
-                                <h4>Member Since</h4>
-                                <span>{new Date(createdAt).getFullYear()}</span>
+                                <h4>Joining Date</h4>
+                                <span>{createdAt ? new Date(createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Not Available'}</span>
                             </div>
                         </div>
                         <div className="insight-item-premium">
@@ -630,7 +664,7 @@ const DashboardHome = () => {
                             </div>
                             <div className="insight-content">
                                 <h4>Location</h4>
-                                <span>{city}</span>
+                                <span>{city && state ? `${city}, ${state}` : city || state || 'Not Set'}</span>
                             </div>
                         </div>
                     </div>

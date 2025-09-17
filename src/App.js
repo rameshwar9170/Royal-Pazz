@@ -51,6 +51,8 @@ import DocumentVerification from './pages/DocumentVerification';
 import AdminDocumentVerification from './pages/Company/AdminDocumentVerification';
 import VideoSharingSystem from './pages/Company/VideoSharingSystem ';
 import AdminVideoSharing from './pages/Company/AdminVideoSharing';
+import CALogin from './CAreports/CALogin';
+import CADashboard from './CAreports/CADashboard';
 
   function PrivateRoute({ children, allowedRoles }) {
     const { currentUser, loading } = useContext(AuthContext);
@@ -111,7 +113,8 @@ import AdminVideoSharing from './pages/Company/AdminVideoSharing';
           <Route path="/policies/contact" element={<ContactUs />} />
 
 
-
+          <Route path="/ca-login" element={<CALogin />} />
+          <Route path="/ca-dashboard" element={<CADashboard />} />
           
           
           
@@ -181,7 +184,7 @@ import AdminVideoSharing from './pages/Company/AdminVideoSharing';
             <Route path="web-builder" element={<DemoPage />} />
             <Route path="withdrawal" element={<WithdrawMoney />} />
             <Route path="DocumentVerification" element={<DocumentVerification />} />
-            <Route path="video-sharing" element={<VideoSharingSystem />} />
+            <Route path="video-training" element={<VideoSharingSystem />} />
           </Route>
 
           {/* Company Dashboard */}
@@ -206,7 +209,7 @@ import AdminVideoSharing from './pages/Company/AdminVideoSharing';
             <Route path="total-trainers" element={<FetchTrainers />} />
             <Route path="levels" element={<LevelsManager />} />
             <Route path="withdraw-requests" element={<WithdrawRequests />} />
-            <Route path="video-sharingss" element={<AdminVideoSharing />} />
+            <Route path="video-sharing" element={<AdminVideoSharing />} />
             {/* REMOVED: This was causing the error */}
             {/* <Route path="/user-reports/:userId" element={<UserReports />} /> */}
           </Route>

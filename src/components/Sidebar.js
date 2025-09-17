@@ -91,6 +91,11 @@
         path: isCompanyDashboard ? '/company-dashboard/document-verification' : '/dashboard/document-verification',
         icon: <FaUserShield />,
       },
+      {
+        name :'video-sharing',
+        path: isCompanyDashboard ? '/company-dashboard/video-sharing' : '/dashboard/video-sharing',
+        icon: <FaUserShield />,
+      }
     ];
 
     const handleLogout = async () => {

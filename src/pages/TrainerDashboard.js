@@ -3,6 +3,7 @@ import { ref, onValue, update, set, get } from 'firebase/database';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db } from '../firebase/config';
 import { onAuthStateChanged } from 'firebase/auth';
+import { sendWelcomeMessage, generateUserId, formatDate } from '../services/whatsappService';
 import { 
   FaUserCircle, 
   FaSignOutAlt, 
@@ -29,7 +30,8 @@ import {
   FaChevronUp,
   FaBars,
   FaChevronLeft,
-  FaChevronRight
+  FaChevronRight,
+  FaWhatsapp
 } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
@@ -123,6 +125,8 @@ function TrainerDashboard() {
     expandedTraining: null,
     sidebarOpen: false,
     windowWidth: window.innerWidth,
+    whatsappLoading: false,
+    confirmingParticipantId: null,
   });
 
   const navigate = useNavigate();
@@ -234,9 +238,18 @@ function TrainerDashboard() {
     }
   };
 
-  // FIXED: Handle Confirm Participant - No More Duplicate IDs!
+  // FIXED: Handle Confirm Participant with WhatsApp Integration
   const handleConfirmParticipant = async () => {
     if (!state.selectedParticipant) return;
+
+    // Confirm action with WhatsApp messaging
+    const confirmMessage = `Confirm ${state.selectedParticipant.name} as a participant and send welcome message via WhatsApp?`;
+    if (!window.confirm(confirmMessage)) return;
+
+    updateState({ 
+      whatsappLoading: true, 
+      confirmingParticipantId: state.selectedParticipant.participantId 
+    });
 
     try {
       // Step 1: Check if user already exists to prevent duplicates
@@ -255,16 +268,37 @@ function TrainerDashboard() {
         }
       }
 
-      // Step 2: Create Firebase Auth account
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        state.selectedParticipant.email,
-        state.selectedParticipant.mobile.toString()
-      );
-      
-      const userId = userCredential.user.uid;
+      // Step 2: Generate user ID and prepare WhatsApp data
+      const generatedUserId = generateUserId({
+        name: state.selectedParticipant.name,
+        mobile: state.selectedParticipant.mobile
+      });
 
-      // Step 3: Create proper user data structure
+      const participantData = {
+        userId: generatedUserId,
+        joiningDate: formatDate(state.selectedParticipant.trainingDate || new Date()),
+        name: state.selectedParticipant.name,
+        mobile: state.selectedParticipant.mobile,
+        email: state.selectedParticipant.email || 'N/A',
+        role: 'Sales Team',
+        portalUrl: 'https://royal-pazz.vercel.app/login'
+      };
+
+      // Step 3: Send WhatsApp welcome message
+      const messageSent = await sendWelcomeMessage(participantData);
+      
+      if (!messageSent) {
+        const continueAnyway = window.confirm('❌ Failed to send WhatsApp message. Continue with confirmation anyway?');
+        if (!continueAnyway) {
+          return;
+        }
+      }
+
+      // Step 4: Generate a unique user ID (skip Firebase Auth creation to avoid logout)
+      // We'll create the user account later when they first login
+      const userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      // Step 5: Create proper user data structure
       const userData = {
         // Basic Info
         name: state.selectedParticipant.name || '',
@@ -290,10 +324,15 @@ function TrainerDashboard() {
         lastUpdated: Date.now(),
         isActive: true,
         firstTime: true,
+        accountCreated: false, // Will be true when they first login and create Firebase Auth account
         
         // Training & Referral Info
         referredBy: state.selectedParticipant.referredBy || '',
         joinedViaTraining: state.selectedParticipant.trainingId,
+        
+        // WhatsApp Integration Info
+        generatedUserId: generatedUserId,
+        whatsappWelcomeSent: messageSent,
         
         // Initialize Sales & Analytics
         MySales: "0",
@@ -310,10 +349,10 @@ function TrainerDashboard() {
         salesHistory: {}
       };
 
-      // Step 4: Save user data with Firebase Auth UID as key (NO NESTED IDs!)
+      // Step 6: Save user data with generated ID as key
       await set(ref(db, `HTAMS/users/${userId}`), userData);
 
-      // Step 5: Update participant status in training (NOT in users node)
+      // Step 7: Update participant status in training (NOT in users node)
       const participantRef = ref(
         db,
         `HTAMS/company/trainings/${state.selectedParticipant.trainingId}/participants/${state.selectedParticipant.participantId}`
@@ -324,10 +363,16 @@ function TrainerDashboard() {
         confirmedByTrainer: true,
         confirmedAt: new Date().toISOString(),
         userAccountCreated: true,
-        createdUserId: userId
+        createdUserId: userId,
+        generatedUserId: generatedUserId,
+        whatsappWelcomeSent: messageSent
       });
 
-      alert(`✅ ${state.selectedParticipant.name} has been confirmed and registered as an agency!`);
+      const successMessage = messageSent 
+        ? `✅ ${state.selectedParticipant.name} confirmed successfully!\n📱 Welcome message sent to WhatsApp: +91${state.selectedParticipant.mobile}`
+        : `✅ ${state.selectedParticipant.name} confirmed successfully!\n⚠️ WhatsApp message failed to send.`;
+      
+      alert(successMessage);
 
       // Update local state
       updateState({
@@ -336,7 +381,7 @@ function TrainerDashboard() {
         participants: state.participants.map((part) =>
           part.trainingId === state.selectedParticipant.trainingId &&
           part.participantId === state.selectedParticipant.participantId
-            ? { ...part, status: 'confirmed', confirmedByTrainer: true }
+            ? { ...part, status: 'confirmed', confirmedByTrainer: true, whatsappWelcomeSent: messageSent }
             : part
         )
       });
@@ -353,6 +398,11 @@ function TrainerDashboard() {
       } else {
         alert('❌ Error confirming participant: ' + error.message);
       }
+    } finally {
+      updateState({ 
+        whatsappLoading: false, 
+        confirmingParticipantId: null 
+      });
     }
   };
 

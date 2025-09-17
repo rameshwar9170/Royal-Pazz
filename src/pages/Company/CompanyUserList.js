@@ -7,9 +7,13 @@ import { useNavigate } from 'react-router-dom';
 
 // Add a module-level cache
 let cachedUsers = null;
+let cachedTrainers = null;
+let cachedEmployees = null;
 
 const CompanyUserList = () => {
   const [users, setUsers] = useState([]);
+  const [trainers, setTrainers] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRole, setSelectedRole] = useState('all');
@@ -30,54 +34,130 @@ const CompanyUserList = () => {
   const usersPerPage = 12;
 
   useEffect(() => {
+    let loadedUsers = 0;
+    const totalDataSources = 3; // users, trainers, employees
+
+    const checkAllDataLoaded = () => {
+      loadedUsers++;
+      if (loadedUsers === totalDataSources) {
+        setLoading(false);
+      }
+    };
+
+    // Load regular users from HTAMS/users
     if (cachedUsers) {
       setUsers(cachedUsers);
-      setLoading(false);
-      return;
+      checkAllDataLoaded();
+    } else {
+      const usersRef = ref(db, 'HTAMS/users');
+      const unsubscribeUsers = onValue(usersRef, (snapshot) => {
+        const data = snapshot.val();
+        let userList = [];
+        if (data) {
+          userList = Object.entries(data).map(([uid, user]) => ({
+            uid,
+            ...user,
+            dataSource: 'users'
+          }));
+        }
+        setUsers(userList);
+        cachedUsers = userList;
+        checkAllDataLoaded();
+      });
     }
 
-    const usersRef = ref(db, 'HTAMS/users');
-    const unsubscribe = onValue(usersRef, (snapshot) => {
-      const data = snapshot.val();
-      let userList = [];
-      if (data) {
-        userList = Object.entries(data).map(([uid, user]) => ({
-          uid,
-          ...user,
-        }));
-        setUsers(userList);
-      } else {
-        setUsers([]);
-      }
-      cachedUsers = userList;
-      setLoading(false);
-    });
-    return () => unsubscribe();
+    // Load trainers from HTAMS/company/trainers
+    if (cachedTrainers) {
+      setTrainers(cachedTrainers);
+      checkAllDataLoaded();
+    } else {
+      const trainersRef = ref(db, 'HTAMS/company/trainers');
+      const unsubscribeTrainers = onValue(trainersRef, (snapshot) => {
+        const data = snapshot.val();
+        let trainerList = [];
+        if (data) {
+          trainerList = Object.entries(data).map(([uid, trainer]) => ({
+            uid,
+            ...trainer,
+            role: 'trainer', // Ensure role is set
+            dataSource: 'trainers'
+          }));
+        }
+        setTrainers(trainerList);
+        cachedTrainers = trainerList;
+        checkAllDataLoaded();
+      });
+    }
+
+    // Load employees from HTAMS/company/Employees
+    if (cachedEmployees) {
+      setEmployees(cachedEmployees);
+      checkAllDataLoaded();
+    } else {
+      const employeesRef = ref(db, 'HTAMS/company/Employees');
+      const unsubscribeEmployees = onValue(employeesRef, (snapshot) => {
+        const data = snapshot.val();
+        let employeeList = [];
+        if (data) {
+          employeeList = Object.entries(data).map(([uid, employee]) => ({
+            uid,
+            ...employee,
+            role: 'employee', // Ensure role is set
+            dataSource: 'employees'
+          }));
+        }
+        setEmployees(employeeList);
+        cachedEmployees = employeeList;
+        checkAllDataLoaded();
+      });
+    }
+
+    return () => {
+      // Cleanup listeners if they exist
+    };
   }, []);
 
-  // Define role mapping at the component level with proper exact matches
+  // Combine all users from different sources
+  const allUsers = [
+    ...users,
+    ...trainers,
+    ...employees
+  ];
+
+  // Complete role mapping based on your Firebase levels and administrative roles
   const roleMapping = {
-    'diamond': ['diamond agency', 'diamond distributor', 'diamond wholesaler'],
-    'agency': ['agency'],
-    'mega agency': ['mega agency'],
-    'diamond agency': ['diamond agency'],
-    'dealer': ['dealer'],
-    'mega dealer': ['mega dealer'],
-    'distributor': ['distributor'],
-    'mega distributor': ['mega distributor'],
-    'diamond distributor': ['diamond distributor'],
-    'wholesaler': ['wholesaler'],
-    'mega wholesaler': ['mega wholesaler'],
-    'diamond wholesaler': ['diamond wholesaler'],
-    'trainer': ['trainer'],
-    'subadmin': ['subadmin'],
+    // Administrative roles (fixed)
     'admin': ['admin'],
+    'subadmin': ['subadmin'],
     'manager': ['manager'],
+    'trainer': ['trainer'],
     'employee': ['employee'],
+    'ca': ['ca'],
+    
+    // Business hierarchy levels from Firebase/Levels
+    'agency': ['agency'],
+    'premium agency': ['premium agency'],
+    'agency 24%': ['agency 24%'],
+    'agency 27%': ['agency 27%'],
+    'dealer': ['dealer'],
+    'premium dealer': ['premium dealer'],
+    'distributor': ['distributor'],
+    'premium distributor': ['premium distributor'],
+    'wholesaler': ['wholesaler'],
+    'premium wholesaler': ['premium wholesaler'],
+    
+    // Group filters for easier management
+    'all_administrative': ['admin', 'subadmin', 'manager', 'trainer', 'employee', 'ca'],
+    'all_agency': ['agency', 'premium agency', 'agency 24%', 'agency 27%'],
+    'all_dealer': ['dealer', 'premium dealer'],
+    'all_distributor': ['distributor', 'premium distributor'],
+    'all_wholesaler': ['wholesaler', 'premium wholesaler'],
+    'all_premium': ['premium agency', 'premium dealer', 'premium distributor', 'premium wholesaler'],
+    'all_business': ['agency', 'premium agency', 'agency 24%', 'agency 27%', 'dealer', 'premium dealer', 'distributor', 'premium distributor', 'wholesaler', 'premium wholesaler']
   };
 
   // Filter, sort, and paginate users
-  const processedUsers = users
+  const processedUsers = allUsers
     .filter(user => {
       const matchesSearch =
         user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -88,9 +168,16 @@ const CompanyUserList = () => {
       if (selectedRole === 'all') {
         matchesRole = true;
       } else if (roleMapping[selectedRole.toLowerCase()]) {
-        matchesRole = roleMapping[selectedRole.toLowerCase()].includes(user.role?.toLowerCase());
+        // Handle array of roles for group filters
+        const rolesToMatch = roleMapping[selectedRole.toLowerCase()];
+        matchesRole = rolesToMatch.some(role => 
+          user.role?.toLowerCase() === role.toLowerCase() ||
+          user.currentLevel?.toLowerCase() === role.toLowerCase()
+        );
       } else {
-        matchesRole = user.role?.toLowerCase() === selectedRole.toLowerCase();
+        // Direct role match
+        matchesRole = user.role?.toLowerCase() === selectedRole.toLowerCase() ||
+                     user.currentLevel?.toLowerCase() === selectedRole.toLowerCase();
       }
       
       return matchesSearch && matchesRole;
@@ -137,37 +224,116 @@ const CompanyUserList = () => {
     }
   };
 
-  // Updated getRoleStats function with all role levels
+  // Comprehensive role statistics based on all your Firebase levels
   const getRoleStats = () => {
     const stats = {
-      total: users.length,
-      agency: users.filter(user => user.role?.toLowerCase() === 'agency').length,
-      'mega agency': users.filter(user => user.role?.toLowerCase() === 'mega agency').length,
-      'diamond agency': users.filter(user => user.role?.toLowerCase() === 'diamond agency').length,
-      diamond: users.filter(user => user.role?.toLowerCase().includes('diamond')).length,
-      dealer: users.filter(user => user.role?.toLowerCase() === 'dealer').length,
-      'mega dealer': users.filter(user => user.role?.toLowerCase() === 'mega dealer').length,
-      distributor: users.filter(user => user.role?.toLowerCase() === 'distributor').length,
-      'mega distributor': users.filter(user => user.role?.toLowerCase() === 'mega distributor').length,
-      'diamond distributor': users.filter(user => user.role?.toLowerCase() === 'diamond distributor').length,
-      wholesaler: users.filter(user => user.role?.toLowerCase() === 'wholesaler').length,
-      'mega wholesaler': users.filter(user => user.role?.toLowerCase() === 'mega wholesaler').length,
-      'diamond wholesaler': users.filter(user => user.role?.toLowerCase() === 'diamond wholesaler').length,
-      trainer: users.filter(user => user.role?.toLowerCase() === 'trainer').length,
-      subadmin: users.filter(user => user.role?.toLowerCase() === 'subadmin').length,
-      admin: users.filter(user => user.role?.toLowerCase() === 'admin').length,
-      manager: users.filter(user => user.role?.toLowerCase() === 'manager').length,
-      employee: users.filter(user => user.role?.toLowerCase() === 'employee').length,
+      total: allUsers.length,
+      
+      // Administrative roles
+      admin: allUsers.filter(user => user.role?.toLowerCase() === 'admin').length,
+      subadmin: allUsers.filter(user => user.role?.toLowerCase() === 'subadmin').length,
+      manager: allUsers.filter(user => user.role?.toLowerCase() === 'manager').length,
+      trainer: trainers.length, // Direct count from trainers collection
+      employee: employees.length, // Direct count from employees collection
+      ca: allUsers.filter(user => user.role?.toLowerCase() === 'ca').length,
+      
+      // Agency levels
+      agency: allUsers.filter(user => 
+        user.role?.toLowerCase() === 'agency' || 
+        user.currentLevel?.toLowerCase() === 'agency'
+      ).length,
+      'premium agency': allUsers.filter(user => 
+        user.role?.toLowerCase() === 'premium agency' || 
+        user.currentLevel?.toLowerCase() === 'premium agency'
+      ).length,
+      'agency 24%': allUsers.filter(user => 
+        user.role?.toLowerCase() === 'agency 24%' || 
+        user.currentLevel?.toLowerCase() === 'agency 24%'
+      ).length,
+      'agency 27%': allUsers.filter(user => 
+        user.role?.toLowerCase() === 'agency 27%' || 
+        user.currentLevel?.toLowerCase() === 'agency 27%'
+      ).length,
+      
+      // Dealer levels
+      dealer: allUsers.filter(user => 
+        user.role?.toLowerCase() === 'dealer' || 
+        user.currentLevel?.toLowerCase() === 'dealer'
+      ).length,
+      'premium dealer': allUsers.filter(user => 
+        user.role?.toLowerCase() === 'premium dealer' || 
+        user.currentLevel?.toLowerCase() === 'premium dealer'
+      ).length,
+      
+      // Distributor levels
+      distributor: allUsers.filter(user => 
+        user.role?.toLowerCase() === 'distributor' || 
+        user.currentLevel?.toLowerCase() === 'distributor'
+      ).length,
+      'premium distributor': allUsers.filter(user => 
+        user.role?.toLowerCase() === 'premium distributor' || 
+        user.currentLevel?.toLowerCase() === 'premium distributor'
+      ).length,
+      
+      // Wholesaler levels
+      wholesaler: allUsers.filter(user => 
+        user.role?.toLowerCase() === 'wholesaler' || 
+        user.currentLevel?.toLowerCase() === 'wholesaler'
+      ).length,
+      'premium wholesaler': allUsers.filter(user => 
+        user.role?.toLowerCase() === 'premium wholesaler' || 
+        user.currentLevel?.toLowerCase() === 'premium wholesaler'
+      ).length,
+      
+      // Group statistics
+      all_administrative: allUsers.filter(user => {
+        const role = user.role?.toLowerCase();
+        return ['admin', 'subadmin', 'manager', 'trainer', 'employee', 'ca'].includes(role);
+      }).length,
+      all_agency: allUsers.filter(user => {
+        const role = user.role?.toLowerCase() || user.currentLevel?.toLowerCase();
+        return ['agency', 'premium agency', 'agency 24%', 'agency 27%'].includes(role);
+      }).length,
+      all_dealer: allUsers.filter(user => {
+        const role = user.role?.toLowerCase() || user.currentLevel?.toLowerCase();
+        return ['dealer', 'premium dealer'].includes(role);
+      }).length,
+      all_distributor: allUsers.filter(user => {
+        const role = user.role?.toLowerCase() || user.currentLevel?.toLowerCase();
+        return ['distributor', 'premium distributor'].includes(role);
+      }).length,
+      all_wholesaler: allUsers.filter(user => {
+        const role = user.role?.toLowerCase() || user.currentLevel?.toLowerCase();
+        return ['wholesaler', 'premium wholesaler'].includes(role);
+      }).length,
+      all_premium: allUsers.filter(user => {
+        const role = user.role?.toLowerCase() || user.currentLevel?.toLowerCase();
+        return role?.includes('premium');
+      }).length,
+      all_business: allUsers.filter(user => {
+        const role = user.role?.toLowerCase() || user.currentLevel?.toLowerCase();
+        return ['agency', 'premium agency', 'agency 24%', 'agency 27%', 'dealer', 'premium dealer', 'distributor', 'premium distributor', 'wholesaler', 'premium wholesaler'].includes(role);
+      }).length,
     };
     return stats;
   };
 
   const roleStats = getRoleStats();
 
-  const fetchUserAdditionalData = async (userId) => {
+  // Rest of your functions remain the same...
+  const fetchUserAdditionalData = async (userId, dataSource) => {
     setFetchingAdditionalData(true);
     try {
-      const userRef = ref(db, `HTAMS/users/${userId}`);
+      let userRef;
+      // Determine the correct path based on data source
+      if (dataSource === 'trainers') {
+        userRef = ref(db, `HTAMS/company/trainers/${userId}`);
+      } else if (dataSource === 'employees') {
+        userRef = ref(db, `HTAMS/company/Employees/${userId}`);
+      } else {
+        userRef = ref(db, `HTAMS/users/${userId}`);
+      }
+      
       const userSnapshot = await get(userRef);
       
       let salesData = {
@@ -217,12 +383,15 @@ const CompanyUserList = () => {
             .reduce((total, commission) => total + (parseFloat(commission.amount) || 0), 0);
         }
 
-        const allUsersSnapshot = await get(ref(db, 'HTAMS/users'));
-        if (allUsersSnapshot.exists()) {
-          const allUsers = allUsersSnapshot.val();
-          salesData.teamMembers = Object.values(allUsers).filter(user => 
-            user.referredBy === userId
-          ).length;
+        // For trainers and employees, we might not have the same data structure
+        if (dataSource === 'users') {
+          const allUsersSnapshot = await get(ref(db, 'HTAMS/users'));
+          if (allUsersSnapshot.exists()) {
+            const allUsers = allUsersSnapshot.val();
+            salesData.teamMembers = Object.values(allUsers).filter(user => 
+              user.referredBy === userId
+            ).length;
+          }
         }
 
         const trainingsRef = ref(db, 'HTAMS/company/trainings');
@@ -276,7 +445,7 @@ const CompanyUserList = () => {
               totalCompletedTrainees += completedReferrals.length;
             }
             
-            if (userData.role?.toLowerCase() === 'trainer' && 
+            if ((userData.role?.toLowerCase() === 'trainer' || dataSource === 'trainers') && 
                 (training.trainerId === userId || training.trainerName === userData.name)) {
               totalTrainingSessions++;
             }
@@ -314,7 +483,7 @@ const CompanyUserList = () => {
     setShowModal(true);
     setUserSalesData(null);
     setUserTrainingData(null);
-    await fetchUserAdditionalData(user.uid);
+    await fetchUserAdditionalData(user.uid, user.dataSource);
   };
 
   const closeModal = () => {
@@ -331,12 +500,34 @@ const CompanyUserList = () => {
 
   const handleToggleActivation = async (user) => {
     try {
-      const userRef = ref(db, `HTAMS/users/${user.uid}`);
+      let userRef;
+      // Update in the correct path based on data source
+      if (user.dataSource === 'trainers') {
+        userRef = ref(db, `HTAMS/company/trainers/${user.uid}`);
+      } else if (user.dataSource === 'employees') {
+        userRef = ref(db, `HTAMS/company/Employees/${user.uid}`);
+      } else {
+        userRef = ref(db, `HTAMS/users/${user.uid}`);
+      }
+      
       const newStatus = user.isActive !== false ? false : true;
       await update(userRef, { isActive: newStatus });
-      setUsers(users.map(u =>
-        u.uid === user.uid ? { ...u, isActive: newStatus } : u
-      ));
+      
+      // Update the local state based on data source
+      if (user.dataSource === 'trainers') {
+        setTrainers(trainers.map(u =>
+          u.uid === user.uid ? { ...u, isActive: newStatus } : u
+        ));
+      } else if (user.dataSource === 'employees') {
+        setEmployees(employees.map(u =>
+          u.uid === user.uid ? { ...u, isActive: newStatus } : u
+        ));
+      } else {
+        setUsers(users.map(u =>
+          u.uid === user.uid ? { ...u, isActive: newStatus } : u
+        ));
+      }
+      
       setSelectedUser({ ...user, isActive: newStatus });
     } catch (error) {
       console.error('Error toggling user activation:', error);
@@ -365,6 +556,7 @@ const CompanyUserList = () => {
     }
   };
 
+  // Rest of your render functions remain the same but I'll include them for completeness
   const renderUserModal = () => {
     if (!selectedUser || !showModal) return null;
 
@@ -387,7 +579,13 @@ const CompanyUserList = () => {
                   <span className={`status-indicator ${selectedUser.isActive !== false ? 'active' : 'inactive'}`}></span>
                   {selectedUser.isActive !== false ? 'Active' : 'Inactive'}
                 </div>
-                <span className="modal-user-role">{selectedUser.role || 'User'}</span>
+                <span className="modal-user-role">
+                  {selectedUser.role || selectedUser.currentLevel || 'User'}
+                  {selectedUser.role && selectedUser.currentLevel && selectedUser.role !== selectedUser.currentLevel && 
+                    ` (Level: ${selectedUser.currentLevel})`
+                  }
+                </span>
+                <span className="modal-data-source">Source: {selectedUser.dataSource}</span>
               </div>
             </div>
           </div>
@@ -436,18 +634,26 @@ const CompanyUserList = () => {
                     <span className="detail-label">User ID</span>
                     <span className="detail-value">{selectedUser.uid}</span>
                   </div>
+                  {/* <div className="detail-item">
+                    <span className="detail-label">Data Source</span>
+                    <span className="detail-value">{selectedUser.dataSource}</span>
+                  </div> */}
                   <div className="detail-item">
-                    <span className="detail-label">Level</span>
-                    <span className="detail-value">Level {selectedUser.currentLevel || 'N/A'}</span>
+                    <span className="detail-label">Role</span>
+                    <span className="detail-value">{selectedUser.role || 'Not assigned'}</span>
+                  </div>
+                  <div className="detail-item">
+                    <span className="detail-label">Current Level</span>
+                    <span className="detail-value">{selectedUser.currentLevel || 'Not assigned'}</span>
                   </div>
                   <div className="detail-item">
                     <span className="detail-label">Join Date</span>
                     <span className="detail-value">{formatDate(selectedUser.createdAt)}</span>
                   </div>
-                  <div className="detail-item">
+                  {/* <div className="detail-item">
                     <span className="detail-label">Last Login</span>
                     <span className="detail-value">{formatDate(selectedUser.lastLogin) || 'Never'}</span>
-                  </div>
+                  </div> */}
                 </div>
               </div>
 
@@ -529,7 +735,7 @@ const CompanyUserList = () => {
                 <span className="button-icon">💬</span>
                 Message
               </button>
-              {selectedUser.role?.toLowerCase() === 'trainer' && (
+              {(selectedUser.role?.toLowerCase() === 'trainer' || selectedUser.dataSource === 'trainers') && (
                 <button className="action-button secondary">
                   <span className="button-icon">📅</span>
                   Schedule
@@ -559,14 +765,19 @@ const CompanyUserList = () => {
   const renderCards = () => (
     <div className="cards-grid">
       {displayedUsers.map((user) => (
-        <div key={user.uid} className="user-card" onClick={() => handleUserClick(user)}>
+        <div key={`${user.dataSource}-${user.uid}`} className="user-card" onClick={() => handleUserClick(user)}>
           <div className="card-header">
             <div className="user-avatar">
               {user.name?.charAt(0)?.toUpperCase() || '?'}
             </div>
             <div className="user-info">
               <h3 className="user-name">{user.name || 'No Name'}</h3>
-              <p className="user-role">{user.role || 'User'}</p>
+              <p className="user-role">{user.role || user.currentLevel || 'User'}
+              {user.currentLevel && user.role !== user.currentLevel && (
+                <p className="user-level">Level: {user.currentLevel}</p>
+              )}
+              </p>
+              {/* <p className="user-source">Source: {user.dataSource}</p> */}
               <div className="user-status">
                 <span className={`status-dot ${user.isActive !== false ? 'active' : 'inactive'}`}></span>
                 {user.isActive !== false ? 'Active' : 'Inactive'}
@@ -584,8 +795,8 @@ const CompanyUserList = () => {
                 <span className="info-value">{user.phone || 'Not provided'}</span>
               </div>
               <div className="info-item">
-                <span className="info-label">🎯 Level</span>
-                <span className="info-value">Level {user.currentLevel || 'N/A'}</span>
+                <span className="info-label">🎯 Current Level</span>
+                <span className="info-value">{user.currentLevel || 'N/A'}</span>
               </div>
               <div className="info-item">
                 <span className="info-label">📅 Joined</span>
@@ -616,8 +827,12 @@ const CompanyUserList = () => {
                 Role 
                 {sortBy === 'role' && <span className="sort-indicator">{sortOrder === 'asc' ? '↑' : '↓'}</span>}
               </th>
+              <th className="th" onClick={() => handleSort('dataSource')}>
+                Source 
+                {sortBy === 'dataSource' && <span className="sort-indicator">{sortOrder === 'asc' ? '↑' : '↓'}</span>}
+              </th>
               <th className="th" onClick={() => handleSort('currentLevel')}>
-                Level 
+                Current Level 
                 {sortBy === 'currentLevel' && <span className="sort-indicator">{sortOrder === 'asc' ? '↑' : '↓'}</span>}
               </th>
               <th className="th" onClick={() => handleSort('createdAt')}>
@@ -629,7 +844,7 @@ const CompanyUserList = () => {
           </thead>
           <tbody>
             {displayedUsers.map((user) => (
-              <tr key={user.uid} className="tr" onClick={() => handleUserClick(user)}>
+              <tr key={`${user.dataSource}-${user.uid}`} className="tr" onClick={() => handleUserClick(user)}>
                 <td className="td">
                   <div className="table-user">
                     <div className="table-avatar">
@@ -640,9 +855,12 @@ const CompanyUserList = () => {
                 </td>
                 <td className="td">{user.email || '-'}</td>
                 <td className="td">
-                  <span className="role-badge">{user.role || 'User'}</span>
+                  <span className="role-badge">{user.role || user.currentLevel || 'User'}</span>
                 </td>
-                <td className="td">Level {user.currentLevel || 'N/A'}</td>
+                <td className="td">
+                  <span className="source-badge">{user.dataSource}</span>
+                </td>
+                <td className="td">{user.currentLevel || 'N/A'}</td>
                 <td className="td">{formatDate(user.createdAt)}</td>
                 <td className="td">
                   <div className="status-cell">
@@ -663,7 +881,7 @@ const CompanyUserList = () => {
       <div className="container">
         <div className="loading-container">
           <div className="loading-spinner large"></div>
-          <p>Loading user directory...</p>
+          <p>Loading comprehensive user directory...</p>
         </div>
       </div>
     );
@@ -671,1052 +889,10 @@ const CompanyUserList = () => {
 
   return (
     <div className="user-list-wrapper">
-      <style>
-        {`
-          /* Modern User Directory Styles with Enhanced Mobile Support */
-          
-          .user-list-wrapper {
-            min-height: 100vh;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 8px;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif;
-          }
-
-          .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            background: #ffffff;
-            border-radius: 20px;
-            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.1);
-            overflow: hidden;
-            min-height: calc(100vh - 16px);
-          }
-
-          /* Header Styles */
-          .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 32px 24px;
-            text-align: center;
-            color: white;
-            position: relative;
-          }
-
-          .title {
-            font-size: clamp(1.8rem, 4vw, 2.5rem);
-            font-weight: 800;
-            margin: 0 0 8px 0;
-            letter-spacing: -0.025em;
-          }
-
-          .subtitle {
-            font-size: clamp(0.9rem, 2.5vw, 1.1rem);
-            opacity: 0.9;
-            margin: 0;
-            font-weight: 400;
-          }
-
-          /* Control Panel - REDESIGNED */
-          .control-panel {
-            padding: 24px;
-            background: #f8fafc;
-            border-bottom: 1px solid #e2e8f0;
-          }
-
-          .control-row {
-            display: flex;
-            flex-direction: row;
-            gap: 16px;
-            align-items: center;
-            flex-wrap: wrap;
-            margin-bottom: 24px;
-          }
-
-          /* Search Container */
-          .search-container {
-            flex: 3;
-            min-width: 240px;
-            position: relative;
-          }
-
-          .search-input {
-            width: 100%;
-            padding: 14px 50px 14px 20px;
-            border: 2px solid #e2e8f0;
-            border-radius: 14px;
-            font-size: 16px;
-            background: white;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-            box-sizing: border-box;
-          }
-
-          .search-input:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-          }
-
-          .search-icon {
-            position: absolute;
-            right: 16px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #94a3b8;
-            font-size: 18px;
-          }
-
-          /* Select Dropdown */
-          .select {
-            flex: 1;
-            min-width: 140px;
-            padding: 14px 40px 14px 16px;
-            border: 2px solid #e2e8f0;
-            border-radius: 14px;
-            background: white;
-            font-size: 15px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            appearance: none;
-            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
-            background-position: right 12px center;
-            background-repeat: no-repeat;
-            background-size: 16px;
-            box-sizing: border-box;
-          }
-
-          .select:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-          }
-
-          /* View Toggle */
-          .view-toggle {
-            display: flex;
-            background: #e5e7eb;
-            border-radius: 14px;
-            padding: 4px;
-            gap: 4px;
-            flex: 0 0 200px;
-            min-width: 200px;
-          }
-
-          .toggle-button {
-            flex: 1;
-            padding: 12px 16px;
-            border: none;
-            background: transparent;
-            border-radius: 10px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-            transition: all 0.3s ease;
-            color: #6b7280;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-          }
-
-          .toggle-button.active {
-            background: white;
-            color: #667eea;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-          }
-
-          /* Stats Row */
-          .stats-row {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 12px;
-            margin-top: 20px;
-          }
-
-          .stat-card {
-            background: white;
-            padding: 16px 12px;
-            border-radius: 16px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            border: 2px solid transparent;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-          }
-
-          .stat-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
-            border-color: #667eea;
-          }
-
-          .stat-card.active {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
-          }
-
-          .stat-icon {
-            font-size: 1.5rem;
-            margin-bottom: 6px;
-            display: block;
-          }
-
-          .stat-number {
-            font-size: clamp(1.2rem, 3vw, 1.8rem);
-            font-weight: 800;
-            margin-bottom: 4px;
-            display: block;
-          }
-
-          .stat-label {
-            font-size: 0.75rem;
-            opacity: 0.8;
-            color: black;
-            font-weight: 600;
-            line-height: 1.2;
-          }
-
-          .stat-card.active .stat-label {
-            color: white;
-          }
-
-          /* Cards Grid */
-          .cards-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 20px;
-            padding: 24px;
-          }
-
-          .user-card {
-            background: white;
-            border-radius: 20px;
-            padding: 0;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            border: 1px solid #e5e7eb;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-            overflow: hidden;
-          }
-
-          .user-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12);
-            border-color: #667eea;
-          }
-
-          .card-header {
-            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-            padding: 20px;
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            border-bottom: 1px solid #e5e7eb;
-          }
-
-          .user-avatar {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.2rem;
-            font-weight: 700;
-            color: white;
-            flex-shrink: 0;
-          }
-
-          .user-info {
-            flex: 1;
-            min-width: 0;
-          }
-
-          .user-name {
-            font-size: 1.1rem;
-            font-weight: 700;
-            margin: 0 0 4px 0;
-            color: #1f2937;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-          }
-
-          .user-role {
-            color: #6b7280;
-            margin: 0 0 8px 0;
-            font-size: 0.85rem;
-            font-weight: 500;
-          }
-
-          .user-status {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 0.8rem;
-            font-weight: 600;
-          }
-
-          .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            display: inline-block;
-          }
-
-          .status-dot.active {
-            background: #10b981;
-            animation: pulse 2s infinite;
-          }
-
-          .status-dot.inactive {
-            background: #ef4444;
-          }
-
-          @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-          }
-
-          .card-body {
-            padding: 20px;
-          }
-
-          .info-grid {
-            display: grid;
-            gap: 12px;
-          }
-
-          .info-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            padding: 8px 0;
-            border-bottom: 1px solid #f3f4f6;
-          }
-
-          .info-item:last-child {
-            border-bottom: none;
-          }
-
-          .info-label {
-            font-size: 0.8rem;
-            font-weight: 600;
-            color: #6b7280;
-            flex-shrink: 0;
-          }
-
-          .info-value {
-            font-size: 0.8rem;
-            color: #1f2937;
-            text-align: right;
-            font-weight: 500;
-            word-break: break-all;
-            margin-left: 8px;
-          }
-
-          /* Table Styles */
-          .table-container {
-            padding: 24px;
-          }
-
-          .table-wrapper {
-            overflow-x: auto;
-            border-radius: 16px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-          }
-
-          .table {
-            width: 100%;
-            border-collapse: collapse;
-            background: white;
-            min-width: 700px;
-          }
-
-          .table-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          }
-
-          .th {
-            padding: 20px 16px;
-            text-align: left;
-            color: white;
-            font-weight: 700;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
-            font-size: 0.9rem;
-            position: relative;
-            user-select: none;
-          }
-
-          .th:hover {
-            background-color: rgba(255, 255, 255, 0.1);
-          }
-
-          .sort-indicator {
-            margin-left: 4px;
-            font-size: 0.8rem;
-          }
-
-          .tr {
-            cursor: pointer;
-            transition: background-color 0.3s ease;
-            border-bottom: 1px solid #f3f4f6;
-          }
-
-          .tr:hover {
-            background-color: #f8fafc;
-          }
-
-          .td {
-            padding: 16px;
-            color: #374151;
-            font-size: 0.85rem;
-            vertical-align: middle;
-          }
-
-          .table-user {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-          }
-
-          .table-avatar {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.8rem;
-            font-weight: 700;
-            color: white;
-            flex-shrink: 0;
-          }
-
-          .role-badge {
-            background: #e5e7eb;
-            color: #374151;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 0.75rem;
-            font-weight: 600;
-          }
-
-          .status-cell {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 0.8rem;
-            font-weight: 600;
-          }
-
-          /* Pagination */
-          .pagination {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 16px;
-            padding: 24px;
-            background: #f8fafc;
-            flex-wrap: wrap;
-          }
-
-          .pagination-button {
-            padding: 12px 20px;
-            border: 2px solid #e5e7eb;
-            background: white;
-            color: #374151;
-            border-radius: 12px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: all 0.3s ease;
-            font-size: 0.9rem;
-          }
-
-          .pagination-button:hover:not(:disabled) {
-            border-color: #667eea;
-            color: #667eea;
-            transform: translateY(-1px);
-          }
-
-          .pagination-button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-          }
-
-          .pagination-info {
-            font-weight: 700;
-            color: #374151;
-            padding: 0 16px;
-            font-size: 0.9rem;
-          }
-
-          /* Modal Styles */
-          .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.7);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            padding: 16px;
-            backdrop-filter: blur(8px);
-          }
-
-          .modal-content {
-            background: white;
-            border-radius: 24px;
-            max-width: 900px;
-            width: 100%;
-            max-height: 90vh;
-            overflow-y: auto;
-            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.3);
-            animation: modalSlideIn 0.4s ease-out;
-          }
-
-          @keyframes modalSlideIn {
-            from {
-              opacity: 0;
-              transform: translateY(40px) scale(0.95);
-            }
-            to {
-              opacity: 1;
-              transform: translateY(0) scale(1);
-            }
-          }
-
-          .modal-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 24px;
-            color: white;
-            position: relative;
-          }
-
-          .close-button {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: rgba(255, 255, 255, 0.2);
-            border: none;
-            color: white;
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }
-
-          .close-button:hover {
-            background: rgba(255, 255, 255, 0.3);
-            transform: rotate(90deg);
-          }
-
-          .modal-header-content {
-            display: flex;
-            align-items: center;
-            gap: 20px;
-          }
-
-          .modal-avatar {
-            width: 80px;
-            height: 80px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.2);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 2rem;
-            font-weight: 800;
-            color: white;
-            flex-shrink: 0;
-          }
-
-          .modal-user-info {
-            flex: 1;
-            min-width: 0;
-          }
-
-          .modal-user-name {
-            font-size: 1.8rem;
-            font-weight: 800;
-            margin: 0 0 8px 0;
-            word-break: break-word;
-          }
-
-          .modal-user-status {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 0.9rem;
-            margin-bottom: 4px;
-            font-weight: 600;
-          }
-
-          .status-indicator {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-          }
-
-          .status-indicator.active {
-            background: #10b981;
-          }
-
-          .status-indicator.inactive {
-            background: #ef4444;
-          }
-
-          .modal-user-role {
-            font-size: 0.85rem;
-            opacity: 0.9;
-            background: rgba(255, 255, 255, 0.2);
-            padding: 4px 12px;
-            border-radius: 12px;
-            display: inline-block;
-            font-weight: 600;
-          }
-
-          .modal-body {
-            padding: 24px;
-          }
-
-          .loading-section {
-            text-align: center;
-            padding: 40px;
-            color: #6b7280;
-          }
-
-          .loading-spinner {
-            width: 32px;
-            height: 32px;
-            border: 3px solid #e5e7eb;
-            border-top: 3px solid #667eea;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 16px;
-          }
-
-          .loading-spinner.large {
-            width: 48px;
-            height: 48px;
-            border-width: 4px;
-          }
-
-          .mini-spinner {
-            width: 16px;
-            height: 16px;
-            border: 2px solid #e5e7eb;
-            border-top: 2px solid #667eea;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-          }
-
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-
-          .details-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 20px;
-            margin-bottom: 24px;
-          }
-
-          .detail-section {
-            background: #f8fafc;
-            padding: 20px;
-            border-radius: 16px;
-            border: 1px solid #e5e7eb;
-          }
-
-          .section-title {
-            font-size: 1.1rem;
-            font-weight: 700;
-            color: #1f2937;
-            margin: 0 0 16px 0;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-          }
-
-          .section-icon {
-            font-size: 1.2rem;
-          }
-
-          .detail-items {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-          }
-
-          .detail-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px 0;
-            border-bottom: 1px solid #e5e7eb;
-          }
-
-          .detail-item:last-child {
-            border-bottom: none;
-          }
-
-          .detail-item.loading {
-            justify-content: flex-start;
-            gap: 12px;
-          }
-
-          .detail-label {
-            font-weight: 600;
-            color: #6b7280;
-            font-size: 0.85rem;
-          }
-
-          .detail-value {
-            font-weight: 700;
-            color: #1f2937;
-            text-align: right;
-            font-size: 0.85rem;
-            word-break: break-word;
-            margin-left: 8px;
-          }
-
-          .action-buttons {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-            gap: 12px;
-            margin-top: 24px;
-            padding-top: 20px;
-            border-top: 1px solid #e5e7eb;
-          }
-
-          .action-button {
-            padding: 12px 16px;
-            border: none;
-            border-radius: 12px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            font-size: 0.85rem;
-          }
-
-          .button-icon {
-            font-size: 1rem;
-          }
-
-          .action-button.primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-          }
-
-          .action-button.primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
-          }
-
-          .action-button.secondary {
-            background: #f3f4f6;
-            color: #374151;
-            border: 1px solid #e5e7eb;
-          }
-
-          .action-button.secondary:hover {
-            background: #e5e7eb;
-            transform: translateY(-1px);
-          }
-
-          .action-button.danger {
-            background: #fee2e2;
-            color: #dc2626;
-            border: 1px solid #fecaca;
-          }
-
-          .action-button.danger:hover {
-            background: #fecaca;
-            transform: translateY(-1px);
-          }
-
-          .action-button.success {
-            background: #d1fae5;
-            color: #065f46;
-            border: 1px solid #a7f3d0;
-          }
-
-          .action-button.success:hover {
-            background: #a7f3d0;
-            transform: translateY(-1px);
-          }
-
-          /* Loading Container */
-          .loading-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 80px 24px;
-            color: #6b7280;
-            font-size: 1.1rem;
-            font-weight: 600;
-          }
-
-          /* Mobile Responsive Adjustments */
-          @media (max-width: 968px) {
-            .control-row {
-              flex-direction: column;
-              gap: 12px;
-            }
-
-            .search-container,
-            .select,
-            .view-toggle {
-              flex: none;
-              max-width: 100%;
-              width: 100%;
-            }
-
-            .view-toggle {
-              max-width: none;
-              min-width: auto;
-            }
-          }
-
-          @media (max-width: 768px) {
-            .user-list-wrapper {
-              padding: 4px;
-            }
-
-            .container {
-              border-radius: 12px;
-              min-height: calc(100vh - 8px);
-            }
-
-            .header {
-              padding: 24px 16px;
-            }
-
-            .control-panel {
-              padding: 16px;
-            }
-
-            .stats-row {
-              grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-              gap: 8px;
-            }
-
-            .stat-card {
-              padding: 12px 8px;
-            }
-
-            .stat-number {
-              font-size: 1.2rem;
-            }
-
-            .stat-label {
-              font-size: 0.7rem;
-            }
-
-            .cards-grid {
-              grid-template-columns: 1fr;
-              padding: 16px;
-              gap: 16px;
-            }
-
-            .table-container {
-              padding: 16px;
-            }
-
-            .details-grid {
-              grid-template-columns: 1fr;
-              gap: 16px;
-            }
-
-            .action-buttons {
-              grid-template-columns: 1fr;
-            }
-
-            .modal-content {
-              margin: 8px;
-              max-height: 95vh;
-              border-radius: 16px;
-            }
-
-            .modal-header {
-              padding: 16px;
-            }
-
-            .modal-header-content {
-              gap: 12px;
-            }
-
-            .modal-avatar {
-              width: 60px;
-              height: 60px;
-              font-size: 1.5rem;
-            }
-
-            .modal-user-name {
-              font-size: 1.4rem;
-            }
-
-            .modal-body {
-              padding: 16px;
-            }
-
-            .pagination {
-              flex-direction: column;
-              gap: 12px;
-            }
-
-            .pagination-info {
-              order: -1;
-            }
-          }
-
-          @media (max-width: 480px) {
-            .search-input {
-              font-size: 16px;
-              padding: 12px 40px 12px 16px;
-            }
-
-            .select {
-              padding: 12px 36px 12px 14px;
-              font-size: 14px;
-            }
-
-            .user-card {
-              margin: 0 -4px;
-            }
-
-            .card-header {
-              padding: 16px;
-            }
-
-            .user-avatar {
-              width: 40px;
-              height: 40px;
-              font-size: 1rem;
-            }
-
-            .card-body {
-              padding: 16px;
-            }
-
-            .modal-header-content {
-              flex-direction: column;
-              text-align: center;
-            }
-
-            .close-button {
-              top: 12px;
-              right: 12px;
-              width: 32px;
-              height: 32px;
-            }
-          }
-
-          /* Custom scrollbar for webkit browsers */
-          .modal-content::-webkit-scrollbar {
-            width: 6px;
-          }
-
-          .modal-content::-webkit-scrollbar-track {
-            background: #f1f5f9;
-          }
-
-          .modal-content::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 3px;
-          }
-
-          .modal-content::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8;
-          }
-
-          .table-wrapper::-webkit-scrollbar {
-            height: 6px;
-          }
-
-          .table-wrapper::-webkit-scrollbar-track {
-            background: #f1f5f9;
-          }
-
-          .table-wrapper::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 3px;
-          }
-
-          /* Focus states for accessibility */
-          .user-card:focus,
-          .stat-card:focus,
-          .pagination-button:focus,
-          .action-button:focus,
-          .search-input:focus,
-          .select:focus {
-            outline: 2px solid #667eea;
-            outline-offset: 2px;
-          }
-
-          /* Print styles */
-          @media print {
-            .modal-overlay,
-            .action-buttons,
-            .pagination,
-            .control-panel {
-              display: none !important;
-            }
-
-            .container {
-              box-shadow: none;
-              border-radius: 0;
-            }
-          }
-
-          /* Reduced motion preferences */
-          @media (prefers-reduced-motion: reduce) {
-            *,
-            *::before,
-            *::after {
-              animation-duration: 0.01ms !important;
-              animation-iteration-count: 1 !important;
-              transition-duration: 0.01ms !important;
-            }
-          }
-
-          /* High contrast mode support */
-          @media (prefers-contrast: high) {
-            .container {
-              border: 2px solid;
-            }
-
-            .user-card,
-            .stat-card,
-            .detail-section {
-              border: 1px solid;
-            }
-          }
-        `}
-      </style>
-      
       <div className="container">
         <div className="header">
-          <h1 className="title" style={{ color: 'white' }}>User Directory</h1>
-          <p className="subtitle">Manage and explore your team members</p>
+          <h1 className="title" style={{ color: 'white' }}>Complete User Directory</h1>
+          <p className="subtitle">Comprehensive view of all users across all system levels</p>
         </div>
 
         <div className="control-panel">
@@ -1733,29 +909,41 @@ const CompanyUserList = () => {
             </div>
             
             <select
-              value={selectedRole}
-              onChange={(e) => setSelectedRole(e.target.value)}
-              className="select"
-            >
-              <option value="all">All Roles</option>
-              <option value="agency">Agency</option>
-              <option value="mega agency">Mega Agency</option>
-              <option value="diamond agency">Diamond Agency</option>
-              <option value="dealer">Dealer</option>
-              <option value="mega dealer">Mega Dealer</option>
-              <option value="distributor">Distributor</option>
-              <option value="mega distributor">Mega Distributor</option>
-              <option value="diamond distributor">Diamond Distributor</option>
-              <option value="wholesaler">Wholesaler</option>
-              <option value="mega wholesaler">Mega Wholesaler</option>
-              <option value="diamond wholesaler">Diamond Wholesaler</option>
-              <option value="diamond">All Diamond Roles</option>
-              <option value="trainer">Trainer</option>
-              <option value="subadmin">Sub Admin</option>
-              <option value="admin">Admin</option>
-              <option value="manager">Manager</option>
-              <option value="employee">Employee</option>
-            </select>
+  value={selectedRole}
+  onChange={(e) => setSelectedRole(e.target.value)}
+  className="select"
+>
+  <option value="all">All Roles ({roleStats.total})</option>
+  
+  <optgroup label="🏢 Administrative Roles">
+    <option value="admin">Admin ({roleStats.admin})</option>
+    <option value="subadmin">Sub Admin ({roleStats.subadmin})</option>
+    <option value="manager">Manager ({roleStats.manager})</option>
+    <option value="trainer">Trainer ({roleStats.trainer})</option>
+    <option value="employee">Employee ({roleStats.employee})</option>
+    <option value="ca">CA ({roleStats.ca})</option>
+  </optgroup>
+  
+  <optgroup label="💼 Business Levels">
+    <option value="agency">Agency ({roleStats.agency})</option>
+    <option value="premium agency">Premium Agency ({roleStats['premium agency']})</option>
+    <option value="agency 24%">Agency 24% ({roleStats['agency 24%']})</option>
+    <option value="agency 27%">Agency 27% ({roleStats['agency 27%']})</option>
+    <option value="dealer">Dealer ({roleStats.dealer})</option>
+    <option value="premium dealer">Premium Dealer ({roleStats['premium dealer']})</option>
+    <option value="distributor">Distributor ({roleStats.distributor})</option>
+    <option value="premium distributor">Premium Distributor ({roleStats['premium distributor']})</option>
+    <option value="wholesaler">Wholesaler ({roleStats.wholesaler})</option>
+    <option value="premium wholesaler">Premium Wholesaler ({roleStats['premium wholesaler']})</option>
+  </optgroup>
+  
+  <optgroup label="📊 Group Filters">
+    <option value="all_administrative">All Administrative ({roleStats.all_administrative})</option>
+    <option value="all_business">All Business Levels ({roleStats.all_business})</option>
+    <option value="all_premium">All Premium Levels ({roleStats.all_premium})</option>
+  </optgroup>
+</select>
+
 
             <select
               value={sortBy}
@@ -1765,6 +953,8 @@ const CompanyUserList = () => {
               <option value="name">Sort by Name</option>
               <option value="email">Sort by Email</option>
               <option value="role">Sort by Role</option>
+              <option value="dataSource">Sort by Source</option>
+              <option value="currentLevel">Sort by Level</option>
               <option value="createdAt">Sort by Date</option>
             </select>
 
@@ -1784,98 +974,140 @@ const CompanyUserList = () => {
             </div>
           </div>
 
-          {/* Stats Row */}
-          <div className="stats-row">
-            <div className={`stat-card ${selectedRole === 'all' ? 'active' : ''}`} onClick={() => handleRoleFilter('all')}>
-              <div className="stat-number">{roleStats.total}</div>
-              <div className="stat-label">Total Users</div>
-            </div>
+          {/* Comprehensive Stats Display */}
+       {/* Updated Stats Display with Proper Grouping */}
+{/* Simplified Stats Display - Business Levels Only */}
+<div className="stats-container">
+  {/* Overview Row */}
+  <div className="stats-overview-row">
+    <div className={`stat-card ${selectedRole === 'all' ? 'active' : ''}`} onClick={() => handleRoleFilter('all')}>
+      <div className="stat-number">{roleStats.total}</div>
+      <div className="stat-label">Total Users</div>
+    </div>
+    
+    <div className={`stat-card ${selectedRole === 'all_administrative' ? 'active' : ''}`} onClick={() => handleRoleFilter('all_administrative')}>
+      <div className="stat-number">{roleStats.all_administrative}</div>
+      <div className="stat-label">Administrative</div>
+    </div>
+    
+    <div className={`stat-card ${selectedRole === 'all_business' ? 'active' : ''}`} onClick={() => handleRoleFilter('all_business')}>
+      <div className="stat-number">{roleStats.all_business}</div>
+      <div className="stat-label">Business Levels</div>
+    </div>
+    
+    <div className={`stat-card ${selectedRole === 'all_premium' ? 'active' : ''}`} onClick={() => handleRoleFilter('all_premium')}>
+      <div className="stat-number">{roleStats.all_premium}</div>
+      <div className="stat-label">Premium Levels</div>
+    </div>
+  </div>
 
-            <div className={`stat-card ${selectedRole === 'agency' ? 'active' : ''}`} onClick={() => handleRoleFilter('agency')}>
-              <div className="stat-number">{roleStats.agency}</div>
-              <div className="stat-label">Agency</div>
-            </div>
+  {/* Category Groups */}
+  <div className="stats-category-groups">
+    {/* Administrative Roles */}
+    <div className="stats-category-group administrative">
+      <div className="category-header">
+        <span className="category-icon">🏢</span>
+        <span className="category-title">Administrative Roles</span>
+      </div>
+      <div className="category-stats-grid">
+        <div className={`stat-card ${selectedRole === 'admin' ? 'active' : ''}`} onClick={() => handleRoleFilter('admin')}>
+          <div className="stat-number">{roleStats.admin}</div>
+          <div className="stat-label">Admin</div>
+        </div>
+        
+        <div className={`stat-card ${selectedRole === 'subadmin' ? 'active' : ''}`} onClick={() => handleRoleFilter('subadmin')}>
+          <div className="stat-number">{roleStats.subadmin}</div>
+          <div className="stat-label">Sub Admin</div>
+        </div>
+        
+        <div className={`stat-card ${selectedRole === 'manager' ? 'active' : ''}`} onClick={() => handleRoleFilter('manager')}>
+          <div className="stat-number">{roleStats.manager}</div>
+          <div className="stat-label">Manager</div>
+        </div>
+        
+        <div className={`stat-card ${selectedRole === 'trainer' ? 'active' : ''}`} onClick={() => handleRoleFilter('trainer')}>
+          <div className="stat-number">{roleStats.trainer}</div>
+          <div className="stat-label">Trainer</div>
+        </div>
+        
+        <div className={`stat-card ${selectedRole === 'employee' ? 'active' : ''}`} onClick={() => handleRoleFilter('employee')}>
+          <div className="stat-number">{roleStats.employee}</div>
+          <div className="stat-label">Employee</div>
+        </div>
+        
+        <div className={`stat-card ${selectedRole === 'ca' ? 'active' : ''}`} onClick={() => handleRoleFilter('ca')}>
+          <div className="stat-number">{roleStats.ca}</div>
+          <div className="stat-label">CA</div>
+        </div>
+      </div>
+    </div>
 
-            <div className={`stat-card ${selectedRole === 'mega agency' ? 'active' : ''}`} onClick={() => handleRoleFilter('mega agency')}>
-              <div className="stat-number">{roleStats['mega agency']}</div>
-              <div className="stat-label">Mega Agency</div>
-            </div>
+    {/* Business Levels - Combined Agency and Business */}
+    <div className="stats-category-group business">
+      <div className="category-header">
+        <span className="category-icon">💼</span>
+        <span className="category-title">Business Levels</span>
+      </div>
+      <div className="category-stats-grid">
+        {/* Agency Levels */}
+        <div className={`stat-card ${selectedRole === 'agency' ? 'active' : ''}`} onClick={() => handleRoleFilter('agency')}>
+          <div className="stat-number">{roleStats.agency}</div>
+          <div className="stat-label">Agency</div>
+        </div>
+        
+        <div className={`stat-card ${selectedRole === 'premium agency' ? 'active' : ''}`} onClick={() => handleRoleFilter('premium agency')}>
+          <div className="stat-number">{roleStats['premium agency']}</div>
+          <div className="stat-label">Premium Agency</div>
+        </div>
+        
+        <div className={`stat-card ${selectedRole === 'agency 24%' ? 'active' : ''}`} onClick={() => handleRoleFilter('agency 24%')}>
+          <div className="stat-number">{roleStats['agency 24%']}</div>
+          <div className="stat-label">Agency 24%</div>
+        </div>
+        
+        <div className={`stat-card ${selectedRole === 'agency 27%' ? 'active' : ''}`} onClick={() => handleRoleFilter('agency 27%')}>
+          <div className="stat-number">{roleStats['agency 27%']}</div>
+          <div className="stat-label">Agency 27%</div>
+        </div>
+        
+        {/* Dealer Levels */}
+        <div className={`stat-card ${selectedRole === 'dealer' ? 'active' : ''}`} onClick={() => handleRoleFilter('dealer')}>
+          <div className="stat-number">{roleStats.dealer}</div>
+          <div className="stat-label">Dealer</div>
+        </div>
+        
+        <div className={`stat-card ${selectedRole === 'premium dealer' ? 'active' : ''}`} onClick={() => handleRoleFilter('premium dealer')}>
+          <div className="stat-number">{roleStats['premium dealer']}</div>
+          <div className="stat-label">Premium Dealer</div>
+        </div>
+        
+        {/* Distributor Levels */}
+        <div className={`stat-card ${selectedRole === 'distributor' ? 'active' : ''}`} onClick={() => handleRoleFilter('distributor')}>
+          <div className="stat-number">{roleStats.distributor}</div>
+          <div className="stat-label">Distributor</div>
+        </div>
+        
+        <div className={`stat-card ${selectedRole === 'premium distributor' ? 'active' : ''}`} onClick={() => handleRoleFilter('premium distributor')}>
+          <div className="stat-number">{roleStats['premium distributor']}</div>
+          <div className="stat-label">Premium Distributor</div>
+        </div>
+        
+        {/* Wholesaler Levels */}
+        <div className={`stat-card ${selectedRole === 'wholesaler' ? 'active' : ''}`} onClick={() => handleRoleFilter('wholesaler')}>
+          <div className="stat-number">{roleStats.wholesaler}</div>
+          <div className="stat-label">Wholesaler</div>
+        </div>
+        
+        <div className={`stat-card ${selectedRole === 'premium wholesaler' ? 'active' : ''}`} onClick={() => handleRoleFilter('premium wholesaler')}>
+          <div className="stat-number">{roleStats['premium wholesaler']}</div>
+          <div className="stat-label">Premium Wholesaler</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
-            <div className={`stat-card ${selectedRole === 'diamond agency' ? 'active' : ''}`} onClick={() => handleRoleFilter('diamond agency')}>
-              <div className="stat-number">{roleStats['diamond agency']}</div>
-              <div className="stat-label">Diamond Agency</div>
-            </div>
 
-            <div className={`stat-card ${selectedRole === 'diamond' ? 'active' : ''}`} onClick={() => handleRoleFilter('diamond')}>
-              <div className="stat-number">{roleStats.diamond}</div>
-              <div className="stat-label">Diamond</div>
-            </div>
-
-            <div className={`stat-card ${selectedRole === 'dealer' ? 'active' : ''}`} onClick={() => handleRoleFilter('dealer')}>
-              <div className="stat-number">{roleStats.dealer}</div>
-              <div className="stat-label">Dealer</div>
-            </div>
-
-            <div className={`stat-card ${selectedRole === 'mega dealer' ? 'active' : ''}`} onClick={() => handleRoleFilter('mega dealer')}>
-              <div className="stat-number">{roleStats['mega dealer']}</div>
-              <div className="stat-label">Mega Dealer</div>
-            </div>
-
-            <div className={`stat-card ${selectedRole === 'distributor' ? 'active' : ''}`} onClick={() => handleRoleFilter('distributor')}>
-              <div className="stat-number">{roleStats.distributor}</div>
-              <div className="stat-label">Distributor</div>
-            </div>
-
-            <div className={`stat-card ${selectedRole === 'mega distributor' ? 'active' : ''}`} onClick={() => handleRoleFilter('mega distributor')}>
-              <div className="stat-number">{roleStats['mega distributor']}</div>
-              <div className="stat-label">Mega Distributor</div>
-            </div>
-
-            <div className={`stat-card ${selectedRole === 'diamond distributor' ? 'active' : ''}`} onClick={() => handleRoleFilter('diamond distributor')}>
-              <div className="stat-number">{roleStats['diamond distributor']}</div>
-              <div className="stat-label">Diamond Distributor</div>
-            </div>
-
-            <div className={`stat-card ${selectedRole === 'wholesaler' ? 'active' : ''}`} onClick={() => handleRoleFilter('wholesaler')}>
-              <div className="stat-number">{roleStats.wholesaler}</div>
-              <div className="stat-label">Wholesaler</div>
-            </div>
-
-            <div className={`stat-card ${selectedRole === 'mega wholesaler' ? 'active' : ''}`} onClick={() => handleRoleFilter('mega wholesaler')}>
-              <div className="stat-number">{roleStats['mega wholesaler']}</div>
-              <div className="stat-label">Mega Wholesaler</div>
-            </div>
-
-            <div className={`stat-card ${selectedRole === 'diamond wholesaler' ? 'active' : ''}`} onClick={() => handleRoleFilter('diamond wholesaler')}>
-              <div className="stat-number">{roleStats['diamond wholesaler']}</div>
-              <div className="stat-label">Diamond Wholesaler</div>
-            </div>
-
-            <div className={`stat-card ${selectedRole === 'trainer' ? 'active' : ''}`} onClick={() => handleRoleFilter('trainer')}>
-              <div className="stat-number">{roleStats.trainer}</div>
-              <div className="stat-label">Trainer</div>
-            </div>
-
-            <div className={`stat-card ${selectedRole === 'subadmin' ? 'active' : ''}`} onClick={() => handleRoleFilter('subadmin')}>
-              <div className="stat-number">{roleStats.subadmin}</div>
-              <div className="stat-label">Sub Admin</div>
-            </div>
-
-            <div className={`stat-card ${selectedRole === 'admin' ? 'active' : ''}`} onClick={() => handleRoleFilter('admin')}>
-              <div className="stat-number">{roleStats.admin}</div>
-              <div className="stat-label">Admin</div>
-            </div>
-
-            <div className={`stat-card ${selectedRole === 'manager' ? 'active' : ''}`} onClick={() => handleRoleFilter('manager')}>
-              <div className="stat-number">{roleStats.manager}</div>
-              <div className="stat-label">Manager</div>
-            </div>
-
-            <div className={`stat-card ${selectedRole === 'employee' ? 'active' : ''}`} onClick={() => handleRoleFilter('employee')}>
-              <div className="stat-number">{roleStats.employee}</div>
-              <div className="stat-label">Employee</div>
-            </div>
-          </div>
         </div>
 
         {viewMode === 'cards' ? renderCards() : renderTable()}
@@ -1890,7 +1122,7 @@ const CompanyUserList = () => {
           </button>
           
           <span className="pagination-info">
-            Page {currentPage} of {totalPages}
+            Page {currentPage} of {totalPages} ({processedUsers.length} users shown from {roleStats.total} total)
           </span>
           
           <button 
@@ -1904,6 +1136,1446 @@ const CompanyUserList = () => {
 
         {renderUserModal()}
       </div>
+  
+
+ 
+      <style>{`<style>
+/* =========================================
+   COMPREHENSIVE USER MANAGEMENT DASHBOARD
+   FULLY RESPONSIVE CSS - ALL DEVICES
+========================================= */
+
+/* Base Reset and Variables */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  /* Primary Color Palette */
+  --primary-500: #3b82f6;
+  --primary-600: #2563eb;
+  --primary-700: #1d4ed8;
+  --primary-800: #1e40af;
+  
+  /* Secondary Colors */
+  --secondary-500: #6366f1;
+  --secondary-600: #4f46e5;
+  
+  /* Neutral Colors */
+  --gray-50: #f9fafb;
+  --gray-100: #f3f4f6;
+  --gray-200: #e5e7eb;
+  --gray-300: #d1d5db;
+  --gray-400: #9ca3af;
+  --gray-500:rgb(52, 105, 210);
+  --gray-600:rgb(41, 97, 175);
+  --gray-700:rgb(41, 115, 234)117, 225);
+  --gray-800:rgb(45, 113, 207);
+  --gray-900:rgb(54, 108, 225);
+  
+  /* Status Colors */
+  --success-500: #10b981;
+  --success-600: #059669;
+  --success-100: #d1fae5;
+  
+  --warning-500: #f59e0b;
+  --warning-600: #d97706;
+  --warning-100: #fef3c7;
+  
+  --danger-500: #ef4444;
+  --danger-600: #dc2626;
+  --danger-100: #fee2e2;
+  
+  --info-500: #06b6d4;
+  --info-600: #0891b2;
+  --info-100: #cffafe;
+  
+  /* Category Colors */
+  --admin-color: #8b5cf6;
+  --agency-color: #10b981;
+  --business-color: #f59e0b;
+  
+  /* Responsive Spacing */
+  --spacing-xs: clamp(0.25rem, 0.5vw, 0.5rem);
+  --spacing-sm: clamp(0.5rem, 1vw, 1rem);
+  --spacing-md: clamp(0.75rem, 1.5vw, 1.5rem);
+  --spacing-lg: clamp(1rem, 2vw, 2rem);
+  --spacing-xl: clamp(1.5rem, 3vw, 3rem);
+  
+  /* Responsive Typography */
+  --font-xs: clamp(0.625rem, 1.2vw, 0.75rem);
+  --font-sm: clamp(0.75rem, 1.4vw, 0.875rem);
+  --font-base: clamp(0.875rem, 1.6vw, 1rem);
+  --font-lg: clamp(1rem, 1.8vw, 1.125rem);
+  --font-xl: clamp(1.125rem, 2vw, 1.25rem);
+  --font-2xl: clamp(1.25rem, 2.5vw, 1.5rem);
+  --font-3xl: clamp(1.5rem, 3vw, 2rem);
+  --font-4xl: clamp(2rem, 4vw, 2.5rem);
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  
+  /* Transitions */
+  --transition-fast: 0.15s ease-in-out;
+  --transition-normal: 0.3s ease-in-out;
+  --transition-slow: 0.5s ease-in-out;
+  
+  /* Border Radius - Responsive */
+  --radius-sm: clamp(0.25rem, 0.5vw, 0.375rem);
+  --radius-md: clamp(0.375rem, 0.75vw, 0.5rem);
+  --radius-lg: clamp(0.5rem, 1vw, 0.75rem);
+  --radius-xl: clamp(0.75rem, 1.5vw, 1rem);
+  
+  /* Container Max Widths */
+  --container-sm: 100%;
+  --container-md: 768px;
+  --container-lg: 1024px;
+  --container-xl: 1280px;
+  --container-2xl: 1400px;
+}
+
+/* Main Wrapper */
+.user-list-wrapper {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--gray-800);
+  line-height: 1.6;
+  padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0) env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0);
+}
+
+.container {
+  width: 100%;
+  max-width: var(--container-2xl);
+  margin: 0 auto;
+  padding: var(--spacing-lg);
+}
+
+/* Header Section */
+.header {
+  text-align: center;
+  margin-bottom: var(--spacing-xl);
+}
+
+.title {
+  font-size: var(--font-4xl);
+  font-weight: 800;
+  background: linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: var(--spacing-sm);
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+}
+
+.subtitle {
+  font-size: var(--font-lg);
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 400;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* Control Panel */
+.control-panel {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.control-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  gap: var(--spacing-md);
+  align-items: center;
+  margin-bottom: var(--spacing-lg);
+}
+
+/* Search Container */
+.search-container {
+  position: relative;
+  width: 100%;
+}
+
+.search-input {
+  width: 100%;
+  padding: var(--spacing-sm) calc(var(--spacing-xl) + var(--spacing-sm)) var(--spacing-sm) var(--spacing-sm);
+  border: 2px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-base);
+  transition: all var(--transition-normal);
+  background: white;
+  min-height: 44px; /* Touch-friendly */
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--primary-500);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.search-icon {
+  position: absolute;
+  right: var(--spacing-sm);
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: var(--font-lg);
+  color: var(--gray-400);
+  pointer-events: none;
+}
+
+/* Select Dropdown */
+.select {
+  padding: var(--spacing-sm);
+  border: 2px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-base);
+  background: white;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  min-width: 200px;
+  min-height: 44px; /* Touch-friendly */
+  width: 100%;
+}
+
+.select:focus {
+  outline: none;
+  border-color: var(--primary-500);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* View Toggle */
+.view-toggle {
+  display: flex;
+  background: var(--gray-100);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-xs);
+  width: 100%;
+}
+
+.toggle-button {
+  flex: 1;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: var(--font-sm);
+  font-weight: 500;
+  transition: all var(--transition-fast);
+  color: var(--gray-600);
+  min-height: 44px; /* Touch-friendly */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.toggle-button.active {
+  background: white;
+  color: var(--primary-600);
+  box-shadow: var(--shadow-sm);
+}
+
+.toggle-button:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* Statistics Container */
+.stats-container {
+  margin-top: var(--spacing-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+/* Main Overview Row */
+.stats-overview-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-sm);
+}
+
+.stats-overview-row .stat-card {
+  background: linear-gradient(135deg, var(--primary-500) 0%, var(--secondary-500) 100%);
+  color: white;
+  border: none;
+  text-align: center;
+  padding: var(--spacing-lg);
+  min-height: 100px;
+}
+
+.stats-overview-row .stat-number {
+  color: white;
+  font-size: var(--font-3xl);
+  font-weight: 800;
+  margin-bottom: var(--spacing-xs);
+}
+
+.stats-overview-row .stat-label {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Category Groups Container */
+.stats-category-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+/* Individual Category Group */
+.stats-category-group {
+  background: white;
+  border-radius: var(--radius-xl);
+  padding: var(--spacing-lg);
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--gray-100);
+}
+
+/* Category Header */
+.category-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 2px solid var(--gray-100);
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.category-icon {
+  font-size: var(--font-2xl);
+}
+
+.category-title {
+  font-size: var(--font-lg);
+  font-weight: 700;
+  color: var(--gray-800);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Administrative Category */
+.stats-category-group.administrative .category-header {
+  border-bottom-color: var(--admin-color);
+}
+
+.stats-category-group.administrative .category-title {
+  color: var(--admin-color);
+}
+
+.stats-category-group.administrative .stat-card {
+  border-left: 4px solid var(--admin-color);
+}
+
+.stats-category-group.administrative .stat-card.active {
+  background: rgba(139, 92, 246, 0.1);
+  border-color: var(--admin-color);
+}
+
+/* Business Category */
+.stats-category-group.business .category-header {
+  border-bottom-color: var(--business-color);
+}
+
+.stats-category-group.business .category-title {
+  color: var(--business-color);
+}
+
+.stats-category-group.business .stat-card {
+  border-left: 4px solid var(--business-color);
+}
+
+.stats-category-group.business .stat-card.active {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: var(--business-color);
+}
+
+/* Category Stats Grid */
+.category-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--spacing-sm);
+}
+
+/* Individual Stat Card */
+.stat-card {
+  background: white;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  border: 2px solid transparent;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.stat-card.active {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.stat-number {
+  font-size: var(--font-2xl);
+  font-weight: 800;
+  margin-bottom: var(--spacing-xs);
+  color: var(--gray-800);
+}
+
+.stat-label {
+  font-size: var(--font-xs);
+  color: var(--gray-600);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1.2;
+  text-align: center;
+}
+
+/* Cards Grid */
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.user-card {
+  background: white;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  border: 1px solid var(--gray-100);
+  display: flex;
+  flex-direction: column;
+  min-height: 200px;
+}
+
+.user-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-xl);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-md);
+  background: linear-gradient(135deg, var(--gray-50) 0%, white 100%);
+  border-bottom: 1px solid var(--gray-100);
+  flex-shrink: 0;
+}
+
+.user-avatar {
+  width: clamp(2.5rem, 6vw, 3.5rem);
+  height: clamp(2.5rem, 6vw, 3.5rem);
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary-500) 0%, var(--secondary-500) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 600;
+  font-size: var(--font-lg);
+  margin-right: var(--spacing-sm);
+  flex-shrink: 0;
+}
+
+.user-info {
+  flex: 1;
+  min-width: 0; /* Prevent text overflow */
+}
+
+.user-name {
+  font-size: var(--font-lg);
+  font-weight: 600;
+  color: var(--gray-900);
+  margin-bottom: var(--spacing-xs);
+  word-break: break-word;
+  line-height: 1.2;
+}
+
+.user-role {
+  font-size: var(--font-sm);
+  color: var(--primary-600);
+  font-weight: 500;
+  margin-bottom: var(--spacing-xs);
+}
+
+.user-level {
+  font-size: var(--font-xs);
+  color: var(--gray-500);
+  margin-bottom: var(--spacing-xs);
+}
+
+.user-source {
+  font-size: var(--font-xs);
+  color: var(--gray-400);
+  margin-bottom: var(--spacing-xs);
+}
+
+.user-status {
+  display: flex;
+  align-items: center;
+  font-size: var(--font-xs);
+  font-weight: 500;
+  gap: var(--spacing-xs);
+}
+
+.status-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot.active {
+  background: var(--success-500);
+}
+
+.status-dot.inactive {
+  background: var(--danger-500);
+}
+
+.card-body {
+  padding: var(--spacing-md);
+  flex: 1;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-sm);
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.info-label {
+  font-size: var(--font-xs);
+  color: var(--gray-500);
+  font-weight: 500;
+  margin-bottom: var(--spacing-xs);
+}
+
+.info-value {
+  font-size: var(--font-sm);
+  color: var(--gray-800);
+  font-weight: 500;
+  word-break: break-word;
+  line-height: 1.2;
+}
+
+/* Table Styles */
+.table-container {
+  background: white;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  margin-bottom: var(--spacing-lg);
+}
+
+.table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 640px; /* Minimum width for horizontal scroll on small screens */
+}
+
+.table-header {
+  background: linear-gradient(135deg, var(--gray-50) 0%, white 100%);
+}
+
+.th {
+  padding: var(--spacing-sm) var(--spacing-md);
+  text-align: left;
+  font-weight: 600;
+  color: var(--gray-700);
+  font-size: var(--font-sm);
+  border-bottom: 1px solid var(--gray-200);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+  white-space: nowrap;
+}
+
+.th:hover {
+  background: var(--gray-100);
+}
+
+.sort-indicator {
+  margin-left: var(--spacing-xs);
+  font-size: var(--font-xs);
+  color: var(--primary-500);
+}
+
+.tr {
+  border-bottom: 1px solid var(--gray-100);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.tr:hover {
+  background: var(--gray-50);
+}
+
+.td {
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-sm);
+  color: var(--gray-800);
+  vertical-align: middle;
+}
+
+.table-user {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.table-avatar {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary-500) 0%, var(--secondary-500) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 600;
+  font-size: var(--font-base);
+  flex-shrink: 0;
+}
+
+.table-user span {
+  word-break: break-word;
+  line-height: 1.2;
+}
+
+.role-badge {
+  background: var(--primary-100);
+  color: var(--primary-700);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-md);
+  font-size: var(--font-xs);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.source-badge {
+  background: var(--gray-100);
+  color: var(--gray-700);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-md);
+  font-size: var(--font-xs);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.status-cell {
+  display: flex;
+  align-items: center;
+  font-size: var(--font-xs);
+  font-weight: 500;
+  gap: var(--spacing-xs);
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: var(--spacing-sm);
+  backdrop-filter: blur(4px);
+}
+
+.modal-content {
+  background: white;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  width: 100%;
+  max-width: 800px;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+}
+
+.modal-header {
+  padding: var(--spacing-lg);
+  background: linear-gradient(135deg, var(--primary-500) 0%, var(--secondary-500) 100%);
+  color: white;
+  position: relative;
+}
+
+.close-button {
+  position: absolute;
+  top: var(--spacing-sm);
+  right: var(--spacing-sm);
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  border-radius: 50%;
+  width: 2.5rem;
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  color: white;
+}
+
+.close-button:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.05);
+}
+
+.modal-header-content {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding-right: 3rem; /* Space for close button */
+}
+
+.modal-avatar {
+  width: 4rem;
+  height: 4rem;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 600;
+  font-size: var(--font-2xl);
+  flex-shrink: 0;
+}
+
+.modal-user-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.modal-user-name {
+  font-size: var(--font-2xl);
+  font-weight: 700;
+  margin-bottom: var(--spacing-xs);
+  word-break: break-word;
+  line-height: 1.2;
+}
+
+.modal-user-status {
+  display: flex;
+  align-items: center;
+  margin-bottom: var(--spacing-xs);
+  font-size: var(--font-sm);
+  font-weight: 500;
+  gap: var(--spacing-xs);
+}
+
+.status-indicator {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-indicator.active {
+  background: var(--success-500);
+}
+
+.status-indicator.inactive {
+  background: var(--danger-500);
+}
+
+.modal-user-role {
+  font-size: var(--font-sm);
+  opacity: 0.9;
+  margin-bottom: var(--spacing-xs);
+}
+
+.modal-data-source {
+  font-size: var(--font-xs);
+  opacity: 0.8;
+}
+
+.modal-body {
+  padding: var(--spacing-lg);
+}
+
+.loading-section {
+  text-align: center;
+  padding: var(--spacing-lg);
+  color: var(--gray-600);
+}
+
+.details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+}
+
+.detail-section {
+  background: var(--gray-50);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-md);
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  font-size: var(--font-base);
+  font-weight: 600;
+  color: var(--gray-800);
+  margin-bottom: var(--spacing-sm);
+  gap: var(--spacing-xs);
+}
+
+.section-icon {
+  font-size: var(--font-lg);
+  flex-shrink: 0;
+}
+
+.detail-items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.detail-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: var(--spacing-sm) 0;
+  border-bottom: 1px solid var(--gray-200);
+  gap: var(--spacing-sm);
+}
+
+.detail-item:last-child {
+  border-bottom: none;
+}
+
+.detail-label {
+  font-size: var(--font-sm);
+  color: var(--gray-600);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.detail-value {
+  font-size: var(--font-sm);
+  color: var(--gray-900);
+  font-weight: 600;
+  text-align: right;
+  word-break: break-word;
+  line-height: 1.2;
+}
+
+.detail-item.loading {
+  justify-content: center;
+  color: var(--gray-500);
+}
+
+/* Action Buttons */
+.action-buttons {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.action-button {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: none;
+  border-radius: var(--radius-lg);
+  font-size: var(--font-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  text-decoration: none;
+  min-height: 44px; /* Touch-friendly */
+  justify-content: center;
+  gap: var(--spacing-xs);
+  flex: 1;
+  min-width: 120px;
+}
+
+.button-icon {
+  font-size: var(--font-base);
+  flex-shrink: 0;
+}
+
+.action-button.primary {
+  background: var(--primary-500);
+  color: white;
+}
+
+.action-button.primary:hover {
+  background: var(--primary-600);
+  transform: translateY(-1px);
+}
+
+.action-button.secondary {
+  background: var(--gray-100);
+  color: var(--gray-700);
+}
+
+.action-button.secondary:hover {
+  background: var(--gray-200);
+  transform: translateY(-1px);
+}
+
+.action-button.success {
+  background: var(--success-500);
+  color: white;
+}
+
+.action-button.success:hover {
+  background: var(--success-600);
+  transform: translateY(-1px);
+}
+
+.action-button.danger {
+  background: var(--danger-500);
+  color: white;
+}
+
+.action-button.danger:hover {
+  background: var(--danger-600);
+  transform: translateY(-1px);
+}
+
+/* Pagination */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-lg);
+  padding: var(--spacing-md);
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(10px);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+  flex-wrap: wrap;
+}
+
+.pagination-button {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--primary-500);
+  color: white;
+  border: none;
+  border-radius: var(--radius-lg);
+  font-size: var(--font-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  min-height: 44px; /* Touch-friendly */
+  min-width: 80px;
+}
+
+.pagination-button:hover:not(:disabled) {
+  background: var(--primary-600);
+  transform: translateY(-1px);
+}
+
+.pagination-button:disabled {
+  background: var(--gray-300);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.pagination-info {
+  font-size: var(--font-sm);
+  color: var(--gray-700);
+  font-weight: 500;
+  text-align: center;
+  padding: 0 var(--spacing-sm);
+}
+
+/* Loading Animations */
+.loading-spinner {
+  width: 2rem;
+  height: 2rem;
+  border: 3px solid var(--gray-200);
+  border-top: 3px solid var(--primary-500);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto;
+}
+
+.loading-spinner.large {
+  width: 3rem;
+  height: 3rem;
+}
+
+.mini-spinner {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--gray-200);
+  border-top: 2px solid var(--primary-500);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-container {
+  text-align: center;
+  padding: var(--spacing-xl) var(--spacing-lg);
+  color: white;
+}
+
+.loading-container p {
+  margin-top: var(--spacing-sm);
+  font-size: var(--font-lg);
+  opacity: 0.8;
+}
+
+/* =========================================
+   RESPONSIVE BREAKPOINTS
+========================================= */
+
+/* Extra Small Mobile Phones (Portrait) */
+@media (max-width: 320px) {
+  :root {
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 0.75rem;
+    --spacing-lg: 1rem;
+    --spacing-xl: 1.25rem;
+  }
+  
+  .container {
+    padding: var(--spacing-sm);
+  }
+  
+  .control-row {
+    grid-template-columns: 1fr;
+    gap: var(--spacing-sm);
+  }
+  
+  .stats-overview-row {
+    grid-template-columns: 1fr;
+  }
+  
+  .category-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-xs);
+  }
+  
+  .stat-card {
+    min-height: 60px;
+    padding: var(--spacing-xs);
+  }
+  
+  .cards-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .action-buttons {
+    flex-direction: column;
+  }
+  
+  .action-button {
+    flex: none;
+    width: 100%;
+  }
+}
+
+/* Small Mobile Phones (Portrait & Landscape) */
+@media (min-width: 321px) and (max-width: 480px) {
+  .container {
+    padding: var(--spacing-md);
+  }
+  
+  .control-row {
+    grid-template-columns: 1fr;
+    gap: var(--spacing-sm);
+  }
+  
+  .stats-overview-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .category-stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  .cards-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .action-buttons {
+    flex-direction: column;
+  }
+  
+  .action-button {
+    width: 100%;
+    flex: none;
+  }
+  
+  .pagination {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+}
+
+/* Large Mobile Phones & Small Tablets */
+@media (min-width: 481px) and (max-width: 600px) {
+  .control-row {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-sm);
+  }
+  
+  .stats-overview-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .category-stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  .cards-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .modal-content {
+    margin: var(--spacing-sm);
+    max-height: calc(100vh - 2rem);
+  }
+  
+  .action-buttons {
+    justify-content: stretch;
+  }
+  
+  .action-button {
+    flex: 1;
+    min-width: 100px;
+  }
+}
+
+/* Small Tablets (Portrait) */
+@media (min-width: 601px) and (max-width: 768px) {
+  .control-row {
+    grid-template-columns: 2fr 1fr;
+    gap: var(--spacing-md);
+  }
+  
+  .stats-overview-row {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  
+  .category-stats-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  
+  .cards-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .details-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Large Tablets (Landscape) & Small Desktops */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .control-row {
+    grid-template-columns: 2fr 1fr 1fr;
+    gap: var(--spacing-md);
+  }
+  
+  .stats-overview-row {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  
+  .category-stats-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+  
+  .cards-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .details-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .modal-content {
+    max-width: 700px;
+  }
+}
+
+/* Medium Desktops & Laptops */
+@media (min-width: 1025px) and (max-width: 1280px) {
+  .control-row {
+    grid-template-columns: 2fr 1fr 1fr auto;
+  }
+  
+  .stats-overview-row {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  
+  .category-stats-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+  
+  .cards-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  .details-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Large Desktops */
+@media (min-width: 1281px) and (max-width: 1440px) {
+  .category-stats-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+  
+  .cards-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  .details-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Extra Large Desktops & Ultra-wide Screens */
+@media (min-width: 1441px) {
+  .container {
+    max-width: 1600px;
+  }
+  
+  .category-stats-grid {
+    grid-template-columns: repeat(8, 1fr);
+  }
+  
+  .cards-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  
+  .details-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Orientation-specific adjustments */
+@media (orientation: landscape) and (max-height: 500px) {
+  .header {
+    margin-bottom: var(--spacing-md);
+  }
+  
+  .title {
+    font-size: var(--font-3xl);
+  }
+  
+  .subtitle {
+    font-size: var(--font-base);
+  }
+  
+  .modal-content {
+    max-height: 85vh;
+  }
+  
+  .stats-overview-row {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* High DPI / Retina Display Adjustments */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .stat-card,
+  .user-card,
+  .modal-content {
+    box-shadow: var(--shadow-lg);
+  }
+}
+
+/* Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  
+  .user-card:hover,
+  .stat-card:hover,
+  .action-button:hover {
+    transform: none;
+  }
+}
+
+/* High Contrast Mode */
+@media (prefers-contrast: high) {
+  :root {
+    --gray-100: #e0e0e0;
+    --gray-200: #c0c0c0;
+    --gray-300: #a0a0a0;
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+  }
+  
+  .stat-card,
+  .user-card {
+    border: 2px solid var(--gray-400);
+  }
+}
+
+/* Dark Mode Support */
+
+
+/* Print Styles */
+@media print {
+  .modal-overlay,
+  .action-buttons,
+  .pagination,
+  .control-panel {
+    display: none !important;
+  }
+  
+  .user-list-wrapper {
+    background: white !important;
+    color: black !important;
+  }
+  
+  .container {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+  
+  .stats-category-group,
+  .user-card,
+  .table-container {
+    background: white !important;
+    box-shadow: none !important;
+    border: 1px solid #ddd !important;
+    break-inside: avoid;
+  }
+  
+  .cards-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+/* Focus Management for Keyboard Navigation */
+.stat-card:focus,
+.user-card:focus,
+.tr:focus,
+.toggle-button:focus,
+.pagination-button:focus,
+.action-button:focus,
+.search-input:focus,
+.select:focus {
+  outline: 2px solid var(--primary-500);
+  outline-offset: 2px;
+}
+
+/* Touch Device Optimizations */
+@media (hover: none) and (pointer: coarse) {
+  .stat-card,
+  .user-card,
+  .toggle-button,
+  .action-button,
+  .pagination-button {
+    min-height: 44px;
+  }
+  
+  .search-input,
+  .select {
+    min-height: 48px;
+  }
+  
+  .th,
+  .td {
+    padding: var(--spacing-md);
+  }
+}
+
+/* Foldable Phone Support */
+@media (min-width: 280px) and (max-width: 653px) and (min-height: 653px) {
+  .cards-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .stats-overview-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .category-stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Large Tablet Landscape Optimization */
+@media (min-width: 1024px) and (max-width: 1366px) and (orientation: landscape) {
+  .cards-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  .category-stats-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+}
+</style>
+`}</style>
+
+      
     </div>
   );
 };

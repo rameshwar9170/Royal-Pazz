@@ -1,0 +1,15 @@
+{
+    "name": "royal-pazz/backend",
+    "description": "Royal Pazz Backend with Razorpay Integration",
+    "type": "project",
+    "require": {
+        "razorpay/razorpay": "^2.8",
+        "tecnickcom/tcpdf": "^6.4"
+    },
+    "autoload": {
+        "psr-4": {
+            "RoyalPazz\\": "src/"
+        }
+    },
+    "minimum-stability": "stable"
+}

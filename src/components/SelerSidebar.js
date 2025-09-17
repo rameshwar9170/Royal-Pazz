@@ -13,6 +13,7 @@ import {
   FaTimes,
   FaLock,
   FaMoneyBillWave,
+  FaVideo,
 } from 'react-icons/fa';
 import { auth, database } from '../firebase/config';
 import { signOut } from 'firebase/auth';
@@ -84,6 +85,7 @@ const SelerSidebar = ({ isOpen, toggleSidebar, activeMenu, setActiveMenu }) => {
     { name: "Web Builder", path: "/dashboard/web-builder", icon: <FaShoppingCart />, requiresVerification: true },
     { name: "Withdraw", path: "/dashboard/withdrawal", icon: <FaMoneyBillWave />, requiresVerification: true },
     { name: "DocumentVerification", path: "/dashboard/DocumentVerification", icon: <FaWrench />, requiresVerification: false },
+    { name: "Video Training", path: "/dashboard/video-training", icon: <FaVideo />, requiresVerification: true },
   ];
 
   // Filter menu items based on verification status

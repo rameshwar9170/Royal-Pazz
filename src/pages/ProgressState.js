@@ -2,15 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { ref, get, update } from 'firebase/database';
 import { db } from '../firebase/config';
 
-// Explicit level order
-const LEVEL_ORDER = [
-  'Agency', 'Mega Agency', 'Diamond Agency', 'Dealer', 'Mega Dealer',
-  'Distributor', 'Mega Distributor', 'Diamond Distributor', 'Wholesaler',
-  'Mega Wholesaler', 'Diamond Wholesaler'
-];
+// Dynamic level order - will be fetched from Firebase HTAMS/Levels
+let LEVEL_ORDER = [];
 
 const ProgressState = () => {
   const [levels, setLevels] = useState([]);
+  const [levelOrder, setLevelOrder] = useState([]); // Dynamic level order from Firebase
   const [currentLevel, setCurrentLevel] = useState('Agency');
   const [totalSales, setTotalSales] = useState(0);
   const [userTeam, setUserTeam] = useState([]);
@@ -22,50 +19,133 @@ const ProgressState = () => {
   const [levelRequirement, setLevelRequirement] = useState(null);
   const [animateProgress, setAnimateProgress] = useState(false);
 
-  // Helper function to count team members by level with detailed breakdown
-  const analyzeTeamStructure = (team) => {
+  // Enhanced function to count team members with cumulative level counting
+  const analyzeTeamStructure = (team, currentLevelOrder) => {
     const breakdown = {};
-    LEVEL_ORDER.forEach(level => {
+    const cumulativeBreakdown = {};
+    
+    // Use dynamic level order or fallback to default
+    const levelsToUse = currentLevelOrder.length > 0 ? currentLevelOrder : ['Agency'];
+    
+    // Initialize counts
+    levelsToUse.forEach(level => {
       breakdown[level] = team.filter(member => 
         member.currentLevel === level && member.isActive === true
       ).length;
     });
     
+    // Calculate cumulative counts (includes higher levels)
+    // For example: Agency count includes Agency + Agency 24% + Agency 27% + Premium Agency + all higher levels
+    levelsToUse.forEach((level, index) => {
+      cumulativeBreakdown[level] = 0;
+      
+      // Count members at this level and all higher levels
+      for (let i = index; i < levelsToUse.length; i++) {
+        cumulativeBreakdown[level] += breakdown[levelsToUse[i]];
+      }
+    });
+    
+    console.log('Team structure analysis:', {
+      exactBreakdown: breakdown,
+      cumulativeBreakdown: cumulativeBreakdown,
+      totalActive: team.filter(member => member.isActive === true).length,
+      levelOrder: levelsToUse
+    });
+    
     return {
-      breakdown,
+      breakdown, // Exact level counts
+      cumulativeBreakdown, // Cumulative counts (includes higher levels)
       totalActive: team.filter(member => member.isActive === true).length,
       totalMembers: team.length
     };
   };
 
-  // Helper function to calculate level based on criteria with detailed checking
-  const calculateLevel = (sales, teamAnalysis, levels) => {
-    let qualifiedLevel = 'Agency';
+  // Enhanced function to calculate level based on comprehensive criteria checking
+  const calculateLevel = (sales, teamAnalysis, levels, joinedTrainees = 0, currentLevelOrder) => {
+    let qualifiedLevel = 'Agency'; // Default starting level
     
-    for (const level of levels) {
+    // Use dynamic level order
+    const levelsToUse = currentLevelOrder.length > 0 ? currentLevelOrder : ['Agency'];
+    
+    // Sort levels by progression order to ensure proper checking
+    const sortedLevels = levels.sort((a, b) => {
+      const aIndex = levelsToUse.indexOf(a.name);
+      const bIndex = levelsToUse.indexOf(b.name);
+      return aIndex - bIndex;
+    });
+    
+    for (const level of sortedLevels) {
       const levelData = level;
       let qualified = false;
       
-      // Check sales criteria first (higher priority)
-      if (levelData.selfSale > 0) {
-        qualified = sales >= levelData.selfSale;
+      console.log(`Checking level: ${levelData.name}`, {
+        selfSale: levelData.selfSale,
+        teamRequirement: levelData.teamRequirement,
+        teamRole: levelData.teamRole,
+        joinedTraineesRequirement: levelData.joinedTraineesRequirement,
+        currentSales: sales,
+        currentJoinedTrainees: joinedTrainees,
+        teamAnalysis: teamAnalysis.breakdown
+      });
+      
+      // Check multiple criteria - ALL must be met for qualification
+      let criteriaChecks = [];
+      
+      // 1. Self Sales Requirement
+      if (levelData.selfSale && levelData.selfSale > 0) {
+        const salesMet = sales >= levelData.selfSale;
+        criteriaChecks.push({
+          type: 'sales',
+          required: levelData.selfSale,
+          current: sales,
+          met: salesMet
+        });
       }
-      // Check team requirements (only if no sales requirement)
-      else if (levelData.teamRequirement > 0 && levelData.teamRole) {
-        const requiredCount = levelData.teamRequirement;
-        const currentCount = teamAnalysis.breakdown[levelData.teamRole] || 0;
-        qualified = currentCount >= requiredCount;
+      
+      // 2. Team Requirement (specific level members) - Use cumulative counting
+      if (levelData.teamRequirement && levelData.teamRequirement > 0 && levelData.teamRole) {
+        // Use cumulative count which includes members at this level AND higher levels
+        const currentCount = teamAnalysis.cumulativeBreakdown[levelData.teamRole] || 0;
+        const teamMet = currentCount >= levelData.teamRequirement;
+        criteriaChecks.push({
+          type: 'team',
+          role: levelData.teamRole,
+          required: levelData.teamRequirement,
+          current: currentCount,
+          met: teamMet
+        });
       }
-      // Default level (Agency)
-      else if (levelData.name === 'Agency') {
+      
+      // 3. Joined Trainees Requirement
+      if (levelData.joinedTraineesRequirement && levelData.joinedTraineesRequirement > 0) {
+        const traineesMet = joinedTrainees >= levelData.joinedTraineesRequirement;
+        criteriaChecks.push({
+          type: 'trainees',
+          required: levelData.joinedTraineesRequirement,
+          current: joinedTrainees,
+          met: traineesMet
+        });
+      }
+      
+      // 4. Default level (Agency) - always qualified
+      if (levelData.name === 'Agency') {
         qualified = true;
+      } else {
+        // All criteria must be met for higher levels
+        qualified = criteriaChecks.length > 0 && criteriaChecks.every(check => check.met);
       }
+      
+      console.log(`Level ${levelData.name} qualification:`, {
+        qualified,
+        criteriaChecks
+      });
       
       if (qualified) {
         qualifiedLevel = levelData.name;
       }
     }
     
+    console.log(`Final qualified level: ${qualifiedLevel}`);
     return qualifiedLevel;
   };
 
@@ -85,7 +165,7 @@ const ProgressState = () => {
         const levelsRef = ref(db, `HTAMS/Levels`);
         const usersRef = ref(db, `HTAMS/users`);
 
-        // Fetch user data
+        // Fetch user data with comprehensive analytics
         const userSnapshot = await get(userRef);
         if (!userSnapshot.exists()) {
           throw new Error('User profile not found');
@@ -94,6 +174,26 @@ const ProgressState = () => {
         const userData = userSnapshot.val();
         const userTotalSales = userData?.analytics?.totalSales || 0;
         const userCurrentLevel = userData?.currentLevel || 'Agency';
+        
+        // Fetch joined trainees count from HTAMS/JoinedTrainees
+        const joinedTraineesRef = ref(db, 'HTAMS/JoinedTrainees');
+        const joinedTraineesSnapshot = await get(joinedTraineesRef);
+        let userJoinedTrainees = 0;
+        
+        if (joinedTraineesSnapshot.exists()) {
+          const allTrainees = joinedTraineesSnapshot.val();
+          // Count trainees referred by current user
+          userJoinedTrainees = Object.values(allTrainees).filter(trainee => 
+            trainee.referredBy === uid || trainee.referrer === uid
+          ).length;
+        }
+        
+        console.log('User data loaded:', {
+          uid,
+          totalSales: userTotalSales,
+          currentLevel: userCurrentLevel,
+          joinedTrainees: userJoinedTrainees
+        });
         
         setTotalSales(parseInt(userTotalSales));
         setCurrentLevel(userCurrentLevel);
@@ -114,20 +214,56 @@ const ProgressState = () => {
             );
         }
         
-        setUserTeam(teamMembers);
-        
-        // Analyze team structure
-        const teamAnalysis = analyzeTeamStructure(teamMembers);
-        setTeamBreakdown(teamAnalysis);
-
-        // Fetch levels configuration
+        // Fetch levels configuration from Firebase first
         const levelsSnapshot = await get(levelsRef);
         if (!levelsSnapshot.exists()) {
           throw new Error('System configuration error');
         }
 
         const levelData = levelsSnapshot.val();
-        const levelsArray = LEVEL_ORDER.map(name => ({
+        
+        // Extract level names dynamically from Firebase and create progression order
+        const availableLevels = Object.keys(levelData);
+        
+        // Define the logical progression order based on your business logic
+        const progressionOrder = [
+          'Agency',
+          'Agency 24%',
+          'Agency 27%', 
+          'Premium Agency',
+          'Dealer',
+          'Premium Dealer',
+          'Distributor',
+          'Premium Distributor',
+          'Wholesaler',
+          'Premium Wholesaler'
+        ];
+        
+        // Filter to only include levels that exist in Firebase
+        const dynamicLevelOrder = progressionOrder.filter(level => availableLevels.includes(level));
+        
+        // Add any Firebase levels not in our predefined order (at the end)
+        const additionalLevels = availableLevels.filter(level => !progressionOrder.includes(level));
+        const finalLevelOrder = [...dynamicLevelOrder, ...additionalLevels];
+
+        setUserTeam(teamMembers);
+        
+        // Analyze team structure with dynamic level order (now finalLevelOrder is available)
+        const teamAnalysis = analyzeTeamStructure(teamMembers, finalLevelOrder);
+        setTeamBreakdown(teamAnalysis);
+        
+        // Update global LEVEL_ORDER and state
+        LEVEL_ORDER = finalLevelOrder;
+        setLevelOrder(finalLevelOrder);
+        
+        console.log('Dynamic level order loaded from Firebase:', {
+          availableLevels,
+          finalLevelOrder,
+          totalLevels: finalLevelOrder.length
+        });
+        
+        // Create levels array with Firebase data
+        const levelsArray = finalLevelOrder.map(name => ({
           name,
           ...levelData[name]
         })).filter(level => level.discount !== undefined);
@@ -138,17 +274,42 @@ const ProgressState = () => {
         
         setLevels(levelsArray);
 
-        // Calculate and update level if needed
-        const calculatedLevel = calculateLevel(userTotalSales, teamAnalysis, levelsArray);
+        // Calculate and update level if needed with comprehensive checking
+        const calculatedLevel = calculateLevel(userTotalSales, teamAnalysis, levelsArray, userJoinedTrainees, finalLevelOrder);
+        
+        console.log('Level calculation result:', {
+          current: userCurrentLevel,
+          calculated: calculatedLevel,
+          shouldUpdate: calculatedLevel !== userCurrentLevel
+        });
         
         if (calculatedLevel !== userCurrentLevel) {
-          // Update level in database
+          console.log(`Updating user level from ${userCurrentLevel} to ${calculatedLevel}`);
+          
+          // Update level in database with detailed tracking
           await update(userRef, { 
             currentLevel: calculatedLevel,
+            previousLevel: userCurrentLevel,
             lastLevelUpdate: Date.now(),
-            levelUpdatedBy: 'system'
+            levelUpdatedBy: 'system-auto',
+            levelUpdateReason: 'criteria-met',
+            levelUpdateData: {
+              sales: userTotalSales,
+              teamSize: teamAnalysis.totalActive,
+              joinedTrainees: userJoinedTrainees,
+              timestamp: new Date().toISOString()
+            }
           });
           setCurrentLevel(calculatedLevel);
+          
+          // Log level change for debugging
+          console.log('✅ Level updated successfully:', {
+            from: userCurrentLevel,
+            to: calculatedLevel,
+            timestamp: new Date().toISOString()
+          });
+        } else {
+          console.log('No level update needed - user already at correct level');
         }
 
       } catch (error) {
@@ -166,12 +327,12 @@ const ProgressState = () => {
 
   // Calculate next level requirements and progress
   useEffect(() => {
-    if (levels.length > 0 && teamBreakdown.breakdown) {
-      const currentIndex = LEVEL_ORDER.indexOf(currentLevel);
+    if (levels.length > 0 && teamBreakdown.breakdown && levelOrder.length > 0) {
+      const currentIndex = levelOrder.indexOf(currentLevel);
       const nextLevelIndex = currentIndex + 1;
       
-      if (nextLevelIndex < LEVEL_ORDER.length) {
-        const nextLevelName = LEVEL_ORDER[nextLevelIndex];
+      if (nextLevelIndex < levelOrder.length) {
+        const nextLevelName = levelOrder[nextLevelIndex];
         const nextLevelData = levels.find(level => level.name === nextLevelName);
         
         setNextLevel(nextLevelName);
@@ -180,26 +341,62 @@ const ProgressState = () => {
           let progress = 0;
           let requirement = null;
           
-          // Calculate progress based on criteria
-          if (nextLevelData.selfSale > 0) {
-            progress = Math.min((totalSales / nextLevelData.selfSale) * 100, 100);
-            requirement = {
+          // Calculate progress based on comprehensive criteria
+          let progressComponents = [];
+          let requirements = [];
+          
+          // Sales requirement
+          if (nextLevelData.selfSale && nextLevelData.selfSale > 0) {
+            const salesProgress = Math.min((totalSales / nextLevelData.selfSale) * 100, 100);
+            progressComponents.push(salesProgress);
+            requirements.push({
               type: 'sales',
               needed: nextLevelData.selfSale,
               current: totalSales,
-              remaining: Math.max(0, nextLevelData.selfSale - totalSales)
-            };
-          } else if (nextLevelData.teamRequirement > 0 && nextLevelData.teamRole) {
-            const currentCount = teamBreakdown.breakdown[nextLevelData.teamRole] || 0;
-            progress = Math.min((currentCount / nextLevelData.teamRequirement) * 100, 100);
-            requirement = {
+              remaining: Math.max(0, nextLevelData.selfSale - totalSales),
+              progress: salesProgress,
+              met: totalSales >= nextLevelData.selfSale
+            });
+          }
+          
+          // Team requirement - Use cumulative counting for progress display too
+          if (nextLevelData.teamRequirement && nextLevelData.teamRequirement > 0 && nextLevelData.teamRole) {
+            const currentCount = teamBreakdown.cumulativeBreakdown[nextLevelData.teamRole] || 0;
+            const teamProgress = Math.min((currentCount / nextLevelData.teamRequirement) * 100, 100);
+            progressComponents.push(teamProgress);
+            requirements.push({
               type: 'team',
               role: nextLevelData.teamRole,
               needed: nextLevelData.teamRequirement,
               current: currentCount,
-              remaining: Math.max(0, nextLevelData.teamRequirement - currentCount)
-            };
+              remaining: Math.max(0, nextLevelData.teamRequirement - currentCount),
+              progress: teamProgress,
+              met: currentCount >= nextLevelData.teamRequirement
+            });
           }
+          
+          // Joined trainees requirement
+          if (nextLevelData.joinedTraineesRequirement && nextLevelData.joinedTraineesRequirement > 0) {
+            // Get joined trainees count from state or fetch it
+            const userJoinedTrainees = 0; // This should be fetched from HTAMS/JoinedTrainees
+            const traineesProgress = Math.min((userJoinedTrainees / nextLevelData.joinedTraineesRequirement) * 100, 100);
+            progressComponents.push(traineesProgress);
+            requirements.push({
+              type: 'trainees',
+              needed: nextLevelData.joinedTraineesRequirement,
+              current: userJoinedTrainees,
+              remaining: Math.max(0, nextLevelData.joinedTraineesRequirement - userJoinedTrainees),
+              progress: traineesProgress,
+              met: userJoinedTrainees >= nextLevelData.joinedTraineesRequirement
+            });
+          }
+          
+          // Calculate overall progress (minimum of all requirements)
+          progress = progressComponents.length > 0 ? Math.min(...progressComponents) : 0;
+          
+          // Set the primary requirement for display (first unmet requirement or first requirement)
+          const unmetRequirement = requirements.find(req => !req.met);
+          requirement = unmetRequirement || requirements[0] || null;
           
           setProgressPercentage(progress);
           setLevelRequirement(requirement);
@@ -210,7 +407,7 @@ const ProgressState = () => {
         setLevelRequirement(null);
       }
     }
-  }, [levels, currentLevel, totalSales, teamBreakdown]);
+  }, [levels, currentLevel, totalSales, teamBreakdown, levelOrder]);
 
   if (loading) {
     return (
@@ -515,34 +712,54 @@ const ProgressState = () => {
             </div>
           </div>
           
-          {/* Enhanced Team Level Breakdown */}
+          {/* Enhanced Team Level Breakdown - Show both exact and cumulative counts */}
           {Object.entries(teamBreakdown.breakdown || {}).some(([_, count]) => count > 0) && (
             <div style={{
               display: 'flex',
-              flexWrap: 'wrap',
+              flexDirection: 'column',
               gap: '6px',
               marginTop: '8px'
             }}>
-              {Object.entries(teamBreakdown.breakdown || {})
-                .filter(([_, count]) => count > 0)
-                .slice(0, 4) // Show top 4 levels
-                .map(([level, count], index) => (
-                  <div key={level} style={{
-                    background: `linear-gradient(45deg, ${
-                      ['rgba(76,175,80,0.8)', 'rgba(33,150,243,0.8)', 'rgba(255,193,7,0.8)', 'rgba(156,39,176,0.8)'][index % 4]
-                    }, rgba(255,255,255,0.2))`,
-                    borderRadius: '12px',
-                    padding: '4px 8px',
-                    fontSize: '10px',
-                    color: '#fff',
-                    fontWeight: '700',
-                    textShadow: '0 1px 2px rgba(0,0,0,0.3)',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-                  }}>
-                    {count} {level.split(' ')[level.split(' ').length - 1]}
-                  </div>
-                ))}
+              {/* Exact level counts */}
+              <div style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '4px'
+              }}>
+                {Object.entries(teamBreakdown.breakdown || {})
+                  .filter(([_, count]) => count > 0)
+                  .slice(0, 4)
+                  .map(([level, count], index) => (
+                    <div key={level} style={{
+                      background: `linear-gradient(45deg, ${
+                        ['rgba(76,175,80,0.8)', 'rgba(33,150,243,0.8)', 'rgba(255,193,7,0.8)', 'rgba(156,39,176,0.8)'][index % 4]
+                      }, rgba(255,255,255,0.2))`,
+                      borderRadius: '10px',
+                      padding: '3px 6px',
+                      fontSize: '9px',
+                      color: '#fff',
+                      fontWeight: '700',
+                      textShadow: '0 1px 2px rgba(0,0,0,0.3)',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                    }}>
+                      {count} {level.split(' ')[0]}
+                    </div>
+                  ))}
+              </div>
+              
+              {/* Show cumulative counts for team requirements */}
+              {teamBreakdown.cumulativeBreakdown && (
+                <div style={{
+                  fontSize: '8px',
+                  color: 'rgba(255,255,255,0.7)',
+                  fontWeight: '500'
+                }}>
+                  Team Power: Agency+ {teamBreakdown.cumulativeBreakdown['Agency'] || 0} | 
+                  Dealer+ {teamBreakdown.cumulativeBreakdown['Dealer'] || 0} | 
+                  Distributor+ {teamBreakdown.cumulativeBreakdown['Distributor'] || 0}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -849,3 +1066,4 @@ const ProgressState = () => {
 };
 
 export default ProgressState;
+  
