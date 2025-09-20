@@ -493,7 +493,7 @@ const TrainerParticipants = () => {
               margin: '0 0 0.25rem 0',
               fontSize: '0.95rem'
             }}>
-              Confirmed users are saved under: <code style={{ background: '#e5e7eb', padding: '0.125rem 0.375rem', borderRadius: '4px', fontFamily: 'monospace' }}>HTAMS/users</code>
+              Confirmed users are saved under: <code style={{ background: '#e5e7eb', padding: '0.125rem 0.375rem', borderRadius: '4px', fontFamily: 'monospace' }}>ONDO/users</code>
             </p>
             <p style={{
               color: '#059669',
@@ -514,7 +514,7 @@ const TrainerParticipants = () => {
             fontWeight: '500',
             color: '#047857'
           }}>
-            💾 Users saved at: <strong>HTAMS/users</strong>
+            💾 Users saved at: <strong>ONDO</strong>
             <br />
             <span style={{ fontSize: '0.75rem', opacity: '0.8' }}>
               🔐 Session Protected Creation
@@ -1104,7 +1104,7 @@ const TrainerParticipants = () => {
                                 padding: '0.125rem 0.375rem',
                                 borderRadius: '4px'
                               }}>
-                                💾 Saved: HTAMS/users
+                                💾 Saved: ONDO
                               </div>
                               <div style={{ fontSize: '0.7rem', color: '#dc2626', marginTop: '0.25rem' }}>
                                 ⚠️ Must change on first login

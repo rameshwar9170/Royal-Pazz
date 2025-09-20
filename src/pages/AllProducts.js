@@ -66,7 +66,7 @@ const AllProducts = () => {
       key: process.env.REACT_APP_RAZORPAY_KEY_ID || 'rzp_test_R8L2IvxoQ9JlMP', // Your public key
       amount: totalAmount * 100, // Amount in paise (e.g., 50000 paise = ₹500)
       currency: 'INR',
-      name: 'HTAMS Platform',
+      name: 'ONDO Platform',
       description: 'Product Purchase',
       image: 'https://example.com/your_logo.png', // Optional: Your company logo URL
 
@@ -603,7 +603,7 @@ const AllProducts = () => {
       setLoading(true);
       const options = {
         key: 'rzp_test_RJjqNpTqeGsCYJ', amount: totalAmount * 100, currency: 'INR',
-        name: 'HTAMS Platform', description: 'Product Purchase',
+        name: 'ONDO Platform', description: 'Product Purchase',
         handler: async (response) => {
           const paymentDetails = {
             razorpay_payment_id: response.razorpay_payment_id || null,

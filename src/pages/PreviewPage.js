@@ -420,11 +420,11 @@ export default function PreviewPage() {
                                                 <FaStar /> Premium Product
                                             </div>
                                             <h3 className="preview-product__title">{product.title}</h3>
-                                            {product.price && (
+                                            {product.mrp && (
                                                 <div className="preview-product__price">
                                                     <span className="preview-product__currency">₹</span>
                                                     <span className="preview-product__amount">
-                                                        {Number(product.price).toLocaleString('en-IN')}
+                                                        {Number(product.mrp).toLocaleString('en-IN')}
                                                     </span>
                                                 </div>
                                             )}
@@ -546,9 +546,9 @@ export default function PreviewPage() {
                                             </div>
                                             <div className="preview-product-card__content">
                                                 <h4>{product.title}</h4>
-                                                {product.price && (
+                                                {product.mrp && (
                                                     <span className="preview-product-card__price">
-                                                        ₹{Number(product.price).toLocaleString('en-IN')}
+                                                        ₹{Number(product.mrp).toLocaleString('en-IN')}
                                                     </span>
                                                 )}
                                                 <p>{product.description}</p>

@@ -26,19 +26,19 @@ app.post('/send-email', async (req, res) => {
 
   const html = `
     <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #f9f9f9;">
-      <h2 style="color: #4CAF50;">🎉 Welcome to HTAMS!</h2>
+      <h2 style="color: #4CAF50;">🎉 Welcome to on!</h2>
       <p>Dear <strong>${name}</strong>,</p>
-      <p>Congratulations! You have been successfully confirmed as an agency in the <strong>HTAMS</strong> system.</p>
+      <p>Congratulations! You have been successfully confirmed as an agency in the <strong>on</strong> system.</p>
       
       <p>Here are your login details:</p>
       <ul style="line-height: 1.6;">
         <li><strong>Email:</stro  ng> ${loginEmail}</li>
-         <img src="./Public/htams-logo.png" alt="ONDOLogo" style="max-width: 150px; margin-bottom: 20px;" />
+         <img src="./Public/on-logo.png" alt="ONDOLogo" style="max-width: 150px; margin-bottom: 20px;" />
         <li><strong>Password:</strong> Your phone number (please change it after first login)</li>
       </ul>
 
       <p>You can log in using the link below:</p>
-      <a href="${loginLink}" style="display: inline-block; padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 4px;">Login to HTAMS</a>
+      <a href="${loginLink}" style="display: inline-block; padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 4px;">Login to ondo</a>
 
       <p>If you have any questions, feel free to contact our support team.</p>
 

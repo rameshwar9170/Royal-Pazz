@@ -520,9 +520,9 @@ const SubAdminLogin = () => {
           </div>
 
           {/* Simple Footer - Only Copyright and Terms */}
-          <div className="simple-footer">
+          {/* <div className="simple-footer">
             <div className="copyright-text">
-              © {new Date().getFullYear()} HTAMS. All rights reserved.
+              © {new Date().getFullYear()} ONDO. All rights reserved.
             </div>
             <span 
               className="terms-link"
@@ -530,7 +530,7 @@ const SubAdminLogin = () => {
             >
               Terms & Conditions
             </span>
-          </div>
+          </div> */}
         </div>
       </div>
     </>

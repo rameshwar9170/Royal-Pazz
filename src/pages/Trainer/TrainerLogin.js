@@ -183,7 +183,7 @@ const TrainerLogin = () => {
       // Execute storage operations and database update in parallel
       await Promise.all([
         // Store trainer data in localStorage (synchronous but wrapped for consistency)
-        Promise.resolve(localStorage.setItem('htamsTrainer', JSON.stringify(userData))),
+        Promise.resolve(localStorage.setItem('ONDOTrainer', JSON.stringify(userData))),
         Promise.resolve(localStorage.removeItem('firstLoginTrainer')),
         // Update last login timestamp
         update(ref(db, `HTAMS/company/trainers/${trainerId}`), {

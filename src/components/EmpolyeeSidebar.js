@@ -42,7 +42,7 @@ const EmployeeSidebar = ({ activeView, setActiveView, isOpen, setIsOpen }) => {
             <nav className={`sidebar-nav ${isOpen ? 'open' : ''}`}>
                 <div>
                     <div className="sidebar-header">
-                        <span className="logo-text">HTAMS</span>
+                        <span className="logo-text">ONDO</span>
                     </div>
                     <ul className="sidebar-menu-list">
                         <li>

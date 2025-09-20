@@ -330,7 +330,7 @@ const PageShell = ({ title, children }) => {
       <div className="page-container">
         <header className="header">
           <div className="header-content">
-            <Link to="/" className="logo"> HTAMS</Link>
+            <Link to="/" className="logo"> ONDO</Link>
             <nav className="header-nav">
               {navItems.map((item) => (
                 <Link
