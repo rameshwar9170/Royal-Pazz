@@ -92,6 +92,11 @@
         icon: <FaUserShield />,
       },
       {
+        name :'dispatch',
+        path: isCompanyDashboard ? '/company-dashboard/dispatch' : '/dashboard/dispatch',
+        icon: <FaUserShield />,
+      },
+      {
         name :'video-sharing',
         path: isCompanyDashboard ? '/company-dashboard/video-sharing' : '/dashboard/video-sharing',
         icon: <FaUserShield />,

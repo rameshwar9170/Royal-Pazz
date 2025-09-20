@@ -14,38 +14,40 @@ const TrainerLogin = () => {
   const navigate = useNavigate();
 
   const isMounted = useRef(true);
-  useEffect(() => () => { isMounted.current = false; }, []);
+  const isProcessingRef = useRef(false);
+  
+  useEffect(() => () => { 
+    isMounted.current = false; 
+  }, []);
 
   const handleEmailChange = (e) => {
-    setEmail(e.target.value);
+    setEmail(e.target.value.trim());
     setError('');
     setMessage('');
   };
 
   const handlePasswordChange = (e) => {
-    setPassword(e.target.value);
+    setPassword(e.target.value.trim());
     setError('');
     setMessage('');
   };
 
   const validateInputs = () => {
-    if (!email || !password) {
+    if (!email.trim() || !password.trim()) {
       setError('Email and password/phone number are required');
       return false;
     }
     return true;
   };
 
-  // Enhanced forgot password handler
   const handleForgotPassword = async () => {
-    if (!email) {
+    if (!email.trim()) {
       setError("Please enter your email first to reset password.");
       return;
     }
     
-    // Email format validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    if (!emailRegex.test(email.trim())) {
       setError("Please enter a valid email address.");
       return;
     }
@@ -55,7 +57,6 @@ const TrainerLogin = () => {
     setMessage("");
 
     try {
-      // Check if trainer exists in database first
       const trainersRef = ref(db, "HTAMS/company/trainers");
       const snapshot = await get(trainersRef);
       
@@ -71,14 +72,12 @@ const TrainerLogin = () => {
 
       if (!trainerExists) {
         setError("No trainer account found with this email address.");
-        setResetLoading(false);
         return;
       }
 
-      await sendPasswordResetEmail(auth, email);
+      await sendPasswordResetEmail(auth, email.trim());
       setMessage("Password reset email sent! Please check your inbox and spam folder.");
     } catch (err) {
-      console.error("Password Reset Error:", err);
       switch (err.code) {
         case 'auth/user-not-found':
           setError("No account found with this email address.");
@@ -96,345 +95,353 @@ const TrainerLogin = () => {
           setError("Failed to send reset email. Please try again.");
       }
     } finally {
-      setResetLoading(false);
+      if (isMounted.current) {
+        setResetLoading(false);
+      }
     }
   };
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    setError("");
-    setMessage("");
-    setLoading(true);
-
-    if (!validateInputs()) {
-      setLoading(false);
+    
+    if (loading || isProcessingRef.current) {
       return;
     }
 
-    try {
-      const trainersRef = ref(db, "HTAMS/company/trainers");
-      const snapshot = await get(trainersRef);
+    if (!validateInputs()) {
+      return;
+    }
 
-      if (!snapshot.exists()) {
-        setError("No trainers found.");
-        setLoading(false);
-        return;
+    isProcessingRef.current = true;
+    setLoading(true);
+    setError("");
+    setMessage("");
+
+    try {
+      // Batch operations to reduce database calls
+      const [trainersSnapshot] = await Promise.all([
+        get(ref(db, "HTAMS/company/trainers"))
+      ]);
+
+      if (!trainersSnapshot.exists()) {
+        throw new Error("No trainers found in database.");
       }
 
       let trainerId = null;
       let trainerData = null;
 
-      snapshot.forEach((child) => {
+      // More efficient lookup
+      trainersSnapshot.forEach((child) => {
         const data = child.val();
-        if (data.email?.toLowerCase() === email.toLowerCase()) {
+        if (data.email?.toLowerCase() === email.trim().toLowerCase()) {
           trainerId = child.key;
           trainerData = data;
+          return true; // Exit early when found
         }
       });
 
       if (!trainerId) {
-        setError("Trainer email not registered.");
-        setLoading(false);
-        return;
+        throw new Error("Trainer email not registered.");
       }
 
       // First-time login logic
       if (trainerData.firstTime === undefined || trainerData.firstTime === true) {
-        if (trainerData.phone !== password) {
-          setError("Invalid phone number for first-time login. Please use your registered phone number.");
-          setLoading(false);
-          return;
+        if (trainerData.phone !== password.trim()) {
+          throw new Error("Invalid phone number for first-time login. Please use your registered phone number.");
         }
 
         localStorage.setItem('firstLoginTrainer', JSON.stringify({ 
           trainerId: trainerId, 
-          email: email,
+          email: email.trim(),
           trainerData: trainerData
         }));
         
-        setPassword('');
-        setLoading(false);
         navigate('/trainer-set-password');
         return;
       }
 
-      // Regular login with Firebase Auth
-      try {
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        const user = userCredential.user;
+      // Parallel execution for Firebase auth and data preparation
+      const [userCredential] = await Promise.all([
+        signInWithEmailAndPassword(auth, email.trim(), password.trim())
+      ]);
+      
+      const user = userCredential.user;
 
-        if (trainerData.active === false) {
-          await auth.signOut();
-          setError('Your account is deactivated. Please contact the administrator.');
-          setLoading(false);
-          return;
-        }
-
-        // Update last login timestamp
-        await update(ref(db, `HTAMS/company/trainers/${trainerId}`), {
-          lastLoginAt: new Date().toISOString(),
-        });
-
-        // Store trainer data in localStorage
-        localStorage.setItem('htamsTrainer', JSON.stringify({ 
-          uid: user.uid, 
-          trainerId: trainerId,
-          ...trainerData,
-          role: 'trainer'
-        }));
-
-        localStorage.removeItem('firstLoginTrainer');
-
-        setPassword('');
-        setLoading(false);
-        navigate("/trainer-dashboard");
-
-      } catch (authError) {
-        let msg = '';
-        switch (authError.code) {
-          case 'auth/user-not-found':
-          case 'auth/wrong-password':
-            msg = 'Invalid email or password.';
-            break;
-          case 'auth/too-many-requests':
-            msg = 'Too many login attempts. Please try again later.';
-            break;
-          case 'auth/network-request-failed':
-            msg = 'Network error. Please check your connection.';
-            break;
-          case 'auth/user-disabled':
-            msg = 'This account has been disabled.';
-            break;
-          default:
-            msg = `Login failed: ${authError.message}`;
-        }
-        setError(msg);
-        setLoading(false);
+      if (trainerData.active === false) {
+        await auth.signOut();
+        throw new Error('Your account is deactivated. Please contact the administrator.');
       }
 
+      // Prepare user data and update login timestamp in parallel
+      const userData = { 
+        uid: user.uid, 
+        trainerId: trainerId,
+        ...trainerData,
+        role: 'trainer'
+      };
+      
+      // Execute storage operations and database update in parallel
+      await Promise.all([
+        // Store trainer data in localStorage (synchronous but wrapped for consistency)
+        Promise.resolve(localStorage.setItem('htamsTrainer', JSON.stringify(userData))),
+        Promise.resolve(localStorage.removeItem('firstLoginTrainer')),
+        // Update last login timestamp
+        update(ref(db, `HTAMS/company/trainers/${trainerId}`), {
+          lastLoginAt: new Date().toISOString(),
+        })
+      ]);
+
+      // Immediate navigation without timeout
+      navigate("/trainer-dashboard", { replace: true });
+
     } catch (err) {
-      setError("An error occurred. Please try again.");
-      console.error("Login Error:", err);
-      setLoading(false);
+      let errorMessage = '';
+      if (err.code) {
+        switch (err.code) {
+          case 'auth/user-not-found':
+          case 'auth/wrong-password':
+            errorMessage = 'Invalid email or password.';
+            break;
+          case 'auth/too-many-requests':
+            errorMessage = 'Too many login attempts. Please try again later.';
+            break;
+          case 'auth/network-request-failed':
+            errorMessage = 'Network error. Please check your connection.';
+            break;
+          case 'auth/user-disabled':
+            errorMessage = 'This account has been disabled.';
+            break;
+          case 'auth/invalid-email':
+            errorMessage = 'Invalid email format.';
+            break;
+          case 'auth/missing-password':
+            errorMessage = 'Password is required.';
+            break;
+          default:
+            errorMessage = `Authentication failed: ${err.message}`;
+        }
+      } else {
+        errorMessage = err.message || "An error occurred. Please try again.";
+      }
+      
+      setError(errorMessage);
+    } finally {
+      if (isMounted.current) {
+        setLoading(false);
+        isProcessingRef.current = false;
+      }
     }
   };
 
-  // Navigate to terms page
-  const handleTermsNavigation = () => {
-    navigate('/policies/terms');
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !loading) {
+      handleLogin(e);
+    }
   };
 
   return (
     <>
-      <style>{`
-        .trainer-login-wrapper {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          min-height: 100vh;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-          padding: 20px;
-          flex-direction: column;
-          gap: 20px;
-        }
-
-        .trainer-login-container {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          width: 100%;
-          max-width: 420px;
-          gap: 20px;
-        }
-
-        .trainer-login-form {
-          background-color: #ffffff;
-          padding: 40px;
-          border-radius: 16px;
-          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
-          width: 100%;
-          box-sizing: border-box;
-        }
-
-        .trainer-login-title {
-          font-size: 2rem;
-          font-weight: 700;
-          margin-bottom: 30px;
-          text-align: center;
-          color: #1f2937;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-        }
-
-        .form-group {
-          margin-bottom: 20px;
-        }
-
-        .form-label {
-          display: block;
-          margin-bottom: 8px;
-          font-size: 0.9rem;
-          font-weight: 600;
-          color: #374151;
-        }
-
-        .trainer-login-error {
-          color: #ef4444;
-          margin-bottom: 20px;
-          text-align: center;
-          font-size: 0.875rem;
-          background-color: #fef2f2;
-          padding: 12px;
-          border-radius: 8px;
-          border: 1px solid #fecaca;
-          line-height: 1.4;
-        }
-
-        .trainer-login-success {
-          color: #10b981;
-          margin-bottom: 20px;
-          text-align: center;
-          font-size: 0.875rem;
-          background-color: #ecfdf5;
-          padding: 12px;
-          border-radius: 8px;
-          border: 1px solid #a7f3d0;
-          line-height: 1.4;
-        }
-
-        .trainer-login-input {
-          box-sizing: border-box;
-          width: 100%;
-          padding: 14px 16px;
-          border: 2px solid #e5e7eb;
-          border-radius: 10px;
-          font-size: 1rem;
-          transition: border-color 0.2s, box-shadow 0.2s;
-          background-color: #f9fafb;
-        }
-
-        .trainer-login-input:focus {
-          outline: none;
-          border-color: #667eea;
-          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-          background-color: #ffffff;
-        }
-
-        .trainer-login-input:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-
-        .forgot-password-link:hover:not([style*="not-allowed"]) {
-          color: #4f46e5 !important;
-          text-decoration: underline;
-        }
-
-        .trainer-login-button {
-          width: 100%;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: white;
-          padding: 14px;
-          border-radius: 10px;
-          border: none;
-          font-size: 1.1rem;
-          font-weight: 600;
-          cursor: pointer;
-          transition: transform 0.2s, box-shadow 0.2s;
-          margin-bottom: 20px;
-        }
-
-        .trainer-login-button:hover:not(:disabled) {
-          transform: translateY(-2px);
-          box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
-        }
-
-        .trainer-login-button:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-          transform: none;
-        }
-
-        .help-text {
-          font-size: 0.85rem;
-          color: #6b7280;
-          text-align: center;
-          line-height: 1.5;
-          background-color: #f3f4f6;
-          padding: 15px;
-          border-radius: 8px;
-          margin: 0 0 20px 0;
-        }
-
-        .switch-login {
-          font-size: 0.9rem;
-          text-align: center;
-          color: #374151;
-          margin: 0;
-        }
-
-        /* Simple Footer Styles */
-        .simple-footer {
-          width: 100%;
-          background-color: rgba(255, 255, 255, 0.95);
-          backdrop-filter: blur(10px);
-          border-radius: 12px;
-          padding: 12px 16px;
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          text-align: center;
-        }
-
-        .copyright-text {
-          font-size: clamp(0.75rem, 2.5vw, 0.8rem);
-          color: #6b7280;
-          margin-bottom: 4px;
-        }
-
-        .terms-link {
-          font-size: clamp(0.75rem, 2.5vw, 0.8rem);
-          color: #667eea;
-          text-decoration: underline;
-          cursor: pointer;
-          font-weight: 500;
-          transition: color 0.2s ease;
-        }
-
-        .terms-link:hover {
-          color: #5a67d8;
-        }
-
-        @media (max-width: 480px) {
+      <style>
+        {`
           .trainer-login-wrapper {
-            padding: 10px;
-          }
-          
-          .trainer-login-form {
-            padding: 30px 20px;
-            width: 100%;
-          }
-          
-          .trainer-login-title {
-            font-size: 1.7rem;
-          }
-          
-          .help-text {
-            font-size: 0.8rem;
-            padding: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            padding: 20px;
+            flex-direction: column;
+            gap: 20px;
           }
 
-          .simple-footer {
-            padding: 10px 12px;
+          .trainer-login-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 420px;
+            gap: 20px;
           }
-        }
-      `}</style>
+
+          .trainer-login-form {
+            background-color: #ffffff;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+            width: 100%;
+            box-sizing: border-box;
+            position: relative;
+          }
+
+          .trainer-login-title {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 30px;
+            text-align: center;
+            color: #1f2937;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+          }
+
+          .form-group {
+            margin-bottom: 20px;
+          }
+
+          .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #374151;
+          }
+
+          .trainer-login-error {
+            color: #ef4444;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 0.875rem;
+            background-color: #fef2f2;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #fecaca;
+            line-height: 1.4;
+          }
+
+          .trainer-login-success {
+            color: #10b981;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 0.875rem;
+            background-color: #ecfdf5;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #a7f3d0;
+            line-height: 1.4;
+          }
+
+          .trainer-login-input {
+            box-sizing: border-box;
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            background-color: #f9fafb;
+          }
+
+          .trainer-login-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            background-color: #ffffff;
+          }
+
+          .trainer-login-input:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+          }
+
+          .forgot-password-link {
+            color: #667eea;
+            cursor: pointer;
+            font-size: 0.9rem;
+            margin-top: 8px;
+            text-decoration: none;
+            transition: color 0.2s ease;
+            user-select: none;
+            display: block;
+          }
+
+          .forgot-password-link:hover:not(.disabled) {
+            color: #4f46e5;
+            text-decoration: underline;
+          }
+
+          .forgot-password-link.disabled {
+            color: #9ca3af;
+            cursor: not-allowed;
+          }
+
+          .trainer-login-button {
+            width: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 14px;
+            border-radius: 10px;
+            border: none;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-bottom: 20px;
+            position: relative;
+          }
+
+          .trainer-login-button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+          }
+
+          .trainer-login-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+          }
+
+          .switch-login {
+            font-size: 0.9rem;
+            text-align: center;
+            color: #374151;
+            margin: 0;
+          }
+
+          .switch-login-link {
+            color: #667eea;
+            cursor: pointer;
+            font-weight: 600;
+            transition: color 0.2s ease;
+            user-select: none;
+          }
+
+          .switch-login-link:hover:not(.disabled) {
+            color: #4f46e5;
+            text-decoration: underline;
+          }
+
+          .switch-login-link.disabled {
+            color: #9ca3af;
+            cursor: not-allowed;
+          }
+
+          @media (max-width: 480px) {
+            .trainer-login-wrapper {
+              padding: 10px;
+            }
+            
+            .trainer-login-form {
+              padding: 30px 20px;
+              width: 100%;
+            }
+            
+            .trainer-login-title {
+              font-size: 1.7rem;
+            }
+          }
+
+          .trainer-login-button:focus,
+          .trainer-login-input:focus {
+            outline: 2px solid #3b82f6;
+            outline-offset: 2px;
+          }
+        `}
+      </style>
 
       <div className="trainer-login-wrapper">
         <div className="trainer-login-container">
-          {/* Main Login Form */}
           <form onSubmit={handleLogin} className="trainer-login-form">
             <h2 className="trainer-login-title">Trainer Login</h2>
             
@@ -450,8 +457,10 @@ const TrainerLogin = () => {
                 className="trainer-login-input"
                 value={email}
                 onChange={handleEmailChange}
+                onKeyDown={handleKeyDown}
                 disabled={loading || resetLoading}
                 required
+                autoComplete="email"
               />
             </div>
 
@@ -466,22 +475,15 @@ const TrainerLogin = () => {
                 className="trainer-login-input"
                 value={password}
                 onChange={handlePasswordChange}
+                onKeyDown={handleKeyDown}
                 disabled={loading || resetLoading}
                 required
+                autoComplete="current-password"
               />
               
-              {/* Enhanced Forgot Password link */}
               <p 
-                onClick={resetLoading || loading ? undefined : handleForgotPassword} 
-                className="forgot-password-link"
-                style={{ 
-                  color: (resetLoading || loading) ? "#9ca3af" : "#667eea", 
-                  cursor: (resetLoading || loading) ? "not-allowed" : "pointer", 
-                  fontSize: "0.9rem", 
-                  marginTop: "8px",
-                  textDecoration: "none",
-                  transition: "color 0.2s ease"
-                }}
+                onClick={(resetLoading || loading) ? undefined : handleForgotPassword} 
+                className={`forgot-password-link ${(resetLoading || loading) ? 'disabled' : ''}`}
               >
                 {resetLoading ? "Sending reset email..." : "Forgot Password?"}
               </p>
@@ -498,26 +500,13 @@ const TrainerLogin = () => {
             <p className="switch-login">
               Want to login as another user?{" "}
               <span
-                onClick={() => navigate("/login")}
-                style={{ color: "#667eea", cursor: "pointer", fontWeight: "600" }}
+                onClick={() => !loading && navigate("/login")}
+                className={`switch-login-link ${loading ? 'disabled' : ''}`}
               >
                 Go to Login
               </span>
             </p>
           </form>
-
-          {/* Simple Footer - Only Copyright and Terms */}
-          {/* <div className="simple-footer">
-            <div className="copyright-text">
-              © {new Date().getFullYear()}ONDO. All rights reserved.
-            </div>
-            <span 
-              className="terms-link"
-              onClick={handleTermsNavigation}
-            >
-              Terms & Conditions
-            </span>
-          </div> */}
         </div>
       </div>
     </>

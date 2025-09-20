@@ -22,18 +22,18 @@ const transporter = nodemailer.createTransport({
 app.post('/send-email', async (req, res) => {
   const { to, name, loginEmail, loginLink } = req.body;
 
-  const subject = "🎉 Welcome to Panchagiri - Your Agency Account is Ready!";
+  const subject = "🎉 Welcome to ONDO- Your Agency Account is Ready!";
 
   const html = `
     <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #f9f9f9;">
-      <h2 style="color: #4CAF50;">🎉 Welcome to Panchagiri!</h2>
+      <h2 style="color: #4CAF50;">🎉 Welcome to HTAMS!</h2>
       <p>Dear <strong>${name}</strong>,</p>
-      <p>Congratulations! You have been successfully confirmed as an agency in the <strong>Panchagiri</strong> system.</p>
+      <p>Congratulations! You have been successfully confirmed as an agency in the <strong>HTAMS</strong> system.</p>
       
       <p>Here are your login details:</p>
       <ul style="line-height: 1.6;">
         <li><strong>Email:</stro  ng> ${loginEmail}</li>
-         <img src="./Public/htams-logo.png" alt="Panchagiri Logo" style="max-width: 150px; margin-bottom: 20px;" />
+         <img src="./Public/htams-logo.png" alt="ONDOLogo" style="max-width: 150px; margin-bottom: 20px;" />
         <li><strong>Password:</strong> Your phone number (please change it after first login)</li>
       </ul>
 

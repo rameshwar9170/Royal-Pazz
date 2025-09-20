@@ -494,7 +494,7 @@
   }
   
   .dashboard-header {
-    background: rgba(26, 32, 44, 0.95);
+    /* background: rgba(26, 32, 44, 0.95); */
     border-bottom-color: rgba(255, 255, 255, 0.1);
   }
   

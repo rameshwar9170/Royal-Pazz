@@ -5,7 +5,17 @@ import 'jspdf-autotable';
 import { db } from '../firebase/config';
 import { FaBars, FaSearch, FaTimes, FaShoppingCart, FaPlus, FaMinus, FaTrash, FaCreditCard } from 'react-icons/fa';
 import SelerSidebar from '../components/SelerSidebar';
-import RazorpayPayment from '../components/RazorpayPayment';
+
+
+const loadRazorpayScript = () => {
+  return new Promise((resolve) => {
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+};
 
 const AllProducts = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -28,13 +38,131 @@ const AllProducts = () => {
     state: '',
     postalCode: '',
     birthDate: '',
-    paymentMethod: 'Razorpay',
+    paymentMethod: 'Commission',
   };
   const [formData, setFormData] = useState(initialFormData);
 
   const user = JSON.parse(localStorage.getItem('htamsUser'));
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
+
+    useEffect(() => {
+    loadRazorpayScript();
+  }, []);
+
+   useEffect(() => {
+    const total = getCartTotal();
+    if (commissionBalance >= total && total > 0) {
+      setFormData(prev => ({ ...prev, paymentMethod: 'Commission' })); // Default to Wallet
+    } else {
+      setFormData(prev => ({ ...prev, paymentMethod: 'Razorpay' })); // Default to Razorpay
+    }
+  }, [cart, commissionBalance]);
+
+  const handleRazorpayPayment = () => {
+    const totalAmount = getCartTotal();
+
+    const options = {
+      key: process.env.REACT_APP_RAZORPAY_KEY_ID || 'rzp_test_R8L2IvxoQ9JlMP', // Your public key
+      amount: totalAmount * 100, // Amount in paise (e.g., 50000 paise = ₹500)
+      currency: 'INR',
+      name: 'HTAMS Platform',
+      description: 'Product Purchase',
+      image: 'https://example.com/your_logo.png', // Optional: Your company logo URL
+
+      // This function is called after a successful payment
+      handler: function (response) {
+        console.log('Razorpay Success Response:', response);
+        const paymentDetails = {
+          razorpay_payment_id: response.razorpay_payment_id,
+          razorpay_order_id: response.razorpay_order_id,
+          razorpay_signature: response.razorpay_signature,
+        };
+        // After payment is successful, finalize the order in your database
+        finalizeOrder('Razorpay', paymentDetails);
+      },
+      prefill: {
+        name: formData.name,
+        email: formData.email,
+        contact: formData.phone,
+      },
+      notes: {
+        address: `${formData.address}, ${formData.city}`,
+      },
+      theme: {
+        color: '#3399cc', // A custom color for the payment modal
+      },
+    };
+
+    // Create and open the Razorpay payment modal
+    const rzp = new window.Razorpay(options);
+    rzp.on('payment.failed', function(response) {
+      console.error('Razorpay Payment Failed:', response);
+      alert(`Payment failed: ${response.error.description}`);
+      setLoading(false); // Stop the loading indicator on failure
+    });
+
+    rzp.open();
+  };
+
+  const finalizeOrder = async (paymentMethod, paymentDetails = {}) => {
+    console.log(`Finalizing order via: ${paymentMethod}`);
+    // The loading state is already true, so we proceed directly
+    
+    try {
+      const totalAmount = getCartTotal();
+      
+      // Step 1: Validate and update stock for every item in the cart
+      for (const item of cart) {
+        const productStockRef = ref(db, `HTAMS/company/products/${item.id}/stock`);
+        await runTransaction(productStockRef, (currentStock) => {
+          const stock = Number(currentStock) || 0;
+          if (stock < item.quantity) {
+            throw new Error(`Insufficient stock for ${item.name}.`);
+          }
+          return stock - item.quantity;
+        });
+      }
+
+      // Step 2: If paid via Wallet, deduct the amount from the user's balance
+      if (paymentMethod === 'Wallet') {
+        const userRef = ref(db, `HTAMS/users/${user.uid}`);
+        await runTransaction(userRef, (currentUserData) => {
+          if (currentUserData) {
+            const currentBalance = Number(currentUserData.MySales) || 0;
+            currentUserData.MySales = (currentBalance - totalAmount).toString();
+          }
+          return currentUserData;
+        });
+      }
+
+      // Step 3: Create and save the final order object to the database
+      const orderData = {
+        items: cart,
+        totalAmount: totalAmount,
+        orderDate: new Date().toISOString(),
+        placedBy: user?.uid,
+        customerInfo: formData,
+        paymentMethod: paymentMethod,
+        paymentDetails: paymentDetails, // Will be empty for Wallet, populated for Razorpay
+        status: 'Pending',
+      };
+
+      await push(ref(db, 'HTAMS/orders'), orderData);
+      
+      // Step 4: Finalize the process
+      alert('Order placed successfully!');
+      // Your functions for generating PDF, processing commission, etc., would go here.
+      resetForm();
+
+    } catch (error) {
+      console.error('Failed to finalize order:', error);
+      alert(`An error occurred while finalizing your order: ${error.message}`);
+      // IMPORTANT: Add logic here to refund the payment if this part fails.
+    } finally {
+      setLoading(false); // Stop the loading indicator
+    }
+  };
 
   // Validation functions (same as original)
   const validateEmail = (email) => {
@@ -166,43 +294,35 @@ const AllProducts = () => {
   // Fetch products and user commission balance
   useEffect(() => {
     const productsRef = ref(db, 'HTAMS/company/products');
-    const unsubscribeProducts = onValue(productsRef, (snapshot) => {
+       const unsubscribeProducts = onValue(productsRef, (snapshot) => {
       const data = snapshot.val();
-      const productsArray = data ? Object.entries(data).map(([id, val], index) => ({
-        id,
-        serialNo: index + 1,
-        ...val,
-        stock: Number(val.stock) || 0,
-        price: Number(val.price) || 0,
-        imageUrl: val.imageUrls && val.imageUrls.length > 0 ? val.imageUrls[0] : 'https://via.placeholder.com/300'
-      })) : [];
+      const productsArray = data 
+        ? Object.entries(data).map(([id, val], index) => ({
+            id,
+            serialNo: index + 1,
+            ...val,
+            stock: Number(val.stock) || 0,
+            // THE FIX: Create two separate and clear price fields
+            displayPrice: Number(val.mrp) || 0,        // For customer UI and payment
+            commissionPrice: Number(val.price) || 0,   // For commission calculation
+            imageUrl: val.imageUrls && val.imageUrls.length > 0 
+              ? val.imageUrls[0] 
+              : 'https://via.placeholder.com/300'
+          })) 
+        : [];
       setProducts(productsArray);
     });
 
-    // Fetch user's MySales commission balance
+    // Fetch user's MySales commission balance (your existing code is correct)
     let unsubscribeCommission = null;
     if (user?.uid) {
       const userRef = ref(db, `HTAMS/users/${user.uid}`);
       unsubscribeCommission = onValue(userRef, (snapshot) => {
         const userData = snapshot.val();
-        console.log('Full User Data:', userData);
-        
         if (userData) {
-          // Try different possible field names for balance
-          const balance = userData.MySales || userData.mySales || userData.commissionBalance || userData.balance || 0;
-          const numericBalance = typeof balance === 'string' ? parseFloat(balance) : Number(balance) || 0;
-          
-          console.log('Balance Debug:', { 
-            MySales: userData.MySales,
-            mySales: userData.mySales, 
-            commissionBalance: userData.commissionBalance,
-            balance: userData.balance,
-            finalBalance: numericBalance 
-          });
-          
-          setCommissionBalance(numericBalance);
+          const balance = userData.MySales || 0;
+          setCommissionBalance(Number(balance));
         } else {
-          console.log('No user data found');
           setCommissionBalance(0);
         }
       });
@@ -216,19 +336,31 @@ const AllProducts = () => {
     };
   }, [user?.uid]);
 
+
   // Filter products based on search AND hide out-of-stock products (same as original)
   useEffect(() => {
     const lowercasedQuery = searchQuery.toLowerCase();
     const filtered = products.filter(prod => {
+      // Condition 1: Product must have available stock
       const hasStock = prod.stock > 0;
-      const nameMatch = prod.name.toLowerCase().includes(lowercasedQuery);
-      const priceMatch = prod.price.toString().includes(lowercasedQuery);
-      const serialNoMatch = prod.serialNo.toString().includes(lowercasedQuery);
+      
+      // Condition 2: Search query must match name, display price, or serial number
+      // Safely check for name, ensuring it's not undefined
+      const nameMatch = prod.name ? prod.name.toLowerCase().includes(lowercasedQuery) : false;
+
+      // THE FIX: Add a check to ensure displayPrice is not undefined before calling .toString()
+      const priceMatch = prod.displayPrice ? prod.displayPrice.toString().includes(lowercasedQuery) : false;
+      
+      // Also add a check for serialNo just in case
+      const serialNoMatch = prod.serialNo ? prod.serialNo.toString().includes(lowercasedQuery) : false;
+      
       const searchMatch = nameMatch || priceMatch || serialNoMatch;
+      
       return hasStock && searchMatch;
     });
     setFilteredProducts(filtered);
   }, [searchQuery, products]);
+
 
   // New cart functions
   const addToCart = (product) => {
@@ -277,8 +409,10 @@ const AllProducts = () => {
   };
 
   const getCartTotal = () => {
-    return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
+    // THE FIX: Use displayPrice for the customer's total
+    return cart.reduce((total, item) => total + (item.displayPrice * item.quantity), 0);
   };
+
 
   const getCartItemCount = () => {
     return cart.reduce((count, item) => count + item.quantity, 0);
@@ -334,272 +468,57 @@ const AllProducts = () => {
     }));
   };
 
-  // Razorpay payment handlers
-  const handlePaymentSuccess = (paymentData) => {
-    console.log('Payment successful:', paymentData);
-    alert(`Payment successful! Payment ID: ${paymentData.payment_id}`);
-    
-    // Process the order after successful payment
-    processOrderAfterPayment(paymentData);
-  };
-
-  const handlePaymentFailure = (error) => {
-    console.error('Payment failed:', error);
-    alert(`Payment failed: ${error}`);
-    setLoading(false);
-  };
-
-  const handlePaymentClose = () => {
-    console.log('Payment modal closed');
-    setLoading(false);
-  };
-
-  const processOrderAfterPayment = async (paymentData) => {
-    console.log('=== PROCESSING ORDER AFTER SUCCESSFUL PAYMENT ===');
-    
-    try {
-      const totalAmount = getCartTotal();
-      
-      // Check stock availability for all items
-      for (const item of cart) {
-        const productStockRef = ref(db, `HTAMS/company/products/${item.id}/stock`);
-        const stockSnapshot = await get(productStockRef);
-        const currentStock = Number(stockSnapshot.val()) || 0;
-        
-        if (currentStock < item.quantity) {
-          alert(`Insufficient stock for ${item.name}. Available: ${currentStock}, Required: ${item.quantity}`);
-          setLoading(false);
-          return;
-        }
-      }
-
-      // Update stock for all items
-      console.log('=== UPDATING STOCK FOR ALL PRODUCTS ===');
-      for (const item of cart) {
-        const productStockRef = ref(db, `HTAMS/company/products/${item.id}/stock`);
-        await runTransaction(productStockRef, (currentStock) => {
-          const stockNum = Number(currentStock) || 0;
-          return stockNum - item.quantity;
-        });
-      }
-
-      const orderData = {
-        items: cart.map(item => ({
-          productId: item.id,
-          productName: item.name,
-          quantity: item.quantity,
-          unitPrice: item.price,
-          totalPrice: item.price * item.quantity
-        })),
-        totalAmount: totalAmount,
-        totalItems: getCartItemCount(),
-        orderDate: new Date().toISOString(),
-        placedBy: user?.uid || 'unknown',
-        customerName: formData.name,
-        customerEmail: formData.email,
-        customerPhone: formData.phone,
-        customerAddress: {
-          street: formData.address,
-          landmark: formData.landmark,
-          city: formData.city,
-          state: formData.state,
-          postalCode: formData.postalCode,
-        },
-        birthDate: formData.birthDate,
-        paymentMethod: 'Online',
-        paymentId: paymentData.payment_id,
-        razorpayOrderId: paymentData.order_id,
-        status: 'Paid',
-      };
-
-      console.log('=== CREATING ORDER WITH PAYMENT DATA ===');
-      const newOrderRef = await push(ref(db, 'HTAMS/orders'), orderData);
-      const orderId = newOrderRef.key;
-
-      // Handle customer data
-      const customerRef = ref(db, `HTAMS/customers/${formData.phone}`);
-      const customerSnap = await get(customerRef);
-
-      const customerData = {
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        address: orderData.customerAddress,
-        birthDate: formData.birthDate,
-      };
-
-      if (customerSnap.exists()) {
-        const existingOrders = customerSnap.val().myOrders || {};
-        await update(customerRef, {
-          ...customerData,
-          myOrders: { ...existingOrders, [orderId]: true }
-        });
-      } else {
-        const counterRef = ref(db, 'HTAMS/meta/customerIdCounter');
-        const counterResult = await runTransaction(counterRef, (current) => (current || 1000) + 1);
-        if (counterResult.committed) {
-          const prefix = formData.email.slice(0, 3).toLowerCase();
-          const customerId = `cus_${prefix}_${counterResult.snapshot.val()}`;
-          await set(customerRef, {
-            ...customerData,
-            customerId: customerId,
-            createdAt: Date.now(),
-            myOrders: { [orderId]: true },
-          });
-        }
-      }
-
-      // Process commission for multiple products
-      let commissionResults = [];
-      for (const item of cart) {
-        try {
-          const itemOrderData = {
-            totalAmount: item.price * item.quantity,
-            productId: item.id,
-            productName: item.name,
-            quantity: item.quantity,
-            customerName: formData.name,
-            customerPhone: formData.phone,
-            customerEmail: formData.email,
-          };
-          
-          const commissionResult = await processCommission(itemOrderData, `${orderId}_${item.id}`);
-          commissionResults.push({ productId: item.id, result: commissionResult });
-          
-          await saveSaleDetails(itemOrderData, `${orderId}_${item.id}`, commissionResult);
-        } catch (error) {
-          console.error(`Commission processing failed for ${item.name}:`, error);
-          commissionResults.push({ productId: item.id, result: { ok: false, error: error.message } });
-        }
-      }
-
-      console.log('=== GENERATING MULTI-PRODUCT PDF ===');
-      generateMultiProductPdfBill({
-        ...orderData,
-        items: cart,
-        saleDate: new Date().toLocaleString()
-      });
-
-      const successfulCommissions = commissionResults.filter(r => r.result.ok).length;
-      alert(`Order placed successfully with Razorpay payment! Commission distributed for ${successfulCommissions} out of ${cart.length} products. Invoice is downloading.`);
-
-      console.log('=== RAZORPAY ORDER PROCESS COMPLETED ===');
-      resetForm();
-
-    } catch (err) {
-      console.error('=== ORDER PROCESSING ERROR AFTER PAYMENT ===', err);
-      alert('Payment successful but order processing failed. Please contact support.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Modified submit order function for multiple products
   const submitOrder = async () => {
+    // --- 1. Initial Validations ---
     if (cart.length === 0) {
-      alert('Please add items to cart before placing order');
+      alert('Please add items to cart before placing an order.');
       return;
     }
-
     if (!validateAllFields()) {
       alert('Please fix all validation errors before submitting');
       return;
     }
 
-    const totalAmount = getCartTotal();
+    const totalAmount = getCartTotal(); // This will now use displayPrice (MRP)
 
-    // Check if using wallet payment and validate balance
-    if (formData.paymentMethod === 'Commission') {
-      if (commissionBalance < totalAmount) {
-        alert(`Insufficient wallet balance! Available: ₹${commissionBalance.toLocaleString()}, Required: ₹${totalAmount.toLocaleString()}`);
-        return;
-      }
-    }
-
-    // Handle Razorpay payment
-    if (formData.paymentMethod === 'Razorpay') {
-      setLoading(true);
-      return; // Let Razorpay component handle the payment
-    }
-
-    setLoading(true);
-    console.log('=== STARTING MULTI-PRODUCT ORDER SUBMISSION ===');
-
-    if (!user?.uid) {
-      console.error('=== USER VALIDATION ERROR ===');
-      alert('User not logged in properly. Please refresh and try again.');
-      setLoading(false);
-      return;
-    }
-
+    // --- 2. Centralized Data Saving Logic ---
+  const finalizeAndSaveOrder = async (paymentMethod, paymentDetails = null) => {
     try {
-      // Check stock availability for all items
+      // This will correctly calculate the total based on the displayPrice (MRP)
+      const totalAmount = getCartTotal(); 
+
+      // --- Stock validation and update logic (as per your existing code) ---
       for (const item of cart) {
         const productStockRef = ref(db, `HTAMS/company/products/${item.id}/stock`);
         const stockSnapshot = await get(productStockRef);
-        const currentStock = Number(stockSnapshot.val()) || 0;
-        
-        if (currentStock < item.quantity) {
-          alert(`Insufficient stock for ${item.name}. Available: ${currentStock}, Required: ${item.quantity}`);
-          setLoading(false);
-          return;
+        if ((Number(stockSnapshot.val()) || 0) < item.quantity) {
+          throw new Error(`Insufficient stock for ${item.name}.`);
         }
       }
-
-      // Update stock for all items
-      console.log('=== UPDATING STOCK FOR ALL PRODUCTS ===');
       for (const item of cart) {
         const productStockRef = ref(db, `HTAMS/company/products/${item.id}/stock`);
-        await runTransaction(productStockRef, (currentStock) => {
-          const stockNum = Number(currentStock) || 0;
-          return stockNum - item.quantity;
-        });
+        await runTransaction(productStockRef, (stock) => (stock || 0) - item.quantity);
       }
-
-      // Deduct from wallet if using wallet payment
-      if (formData.paymentMethod === 'Commission') {
-        console.log('=== DEDUCTING FROM WALLET ===');
+      
+      // --- Wallet deduction logic (as per your existing code) ---
+      if (paymentMethod === 'Wallet') {
         const userRef = ref(db, `HTAMS/users/${user.uid}`);
-        await runTransaction(userRef, (currentUserData) => {
-          if (!currentUserData) return currentUserData;
-          
-          const currentBalance = Number(currentUserData.MySales) || 0;
-          const newBalance = currentBalance - totalAmount;
-          
-          return {
-            ...currentUserData,
-            MySales: newBalance.toString()
-          };
+        await runTransaction(userRef, (data) => {
+          if (data) { data.MySales = (Number(data.MySales) || 0) - totalAmount; }
+          return data;
         });
-
-        // Save wallet purchase history
-        console.log('=== SAVING WALLET PURCHASE HISTORY ===');
-        const walletHistoryRef = ref(db, `HTAMS/users/${user.uid}/walletHistory`);
-        const purchaseHistory = {
-          products: cart.map(item => ({
-            productName: item.name,
-            price: item.price,
-            quantity: item.quantity,
-            totalPrice: item.price * item.quantity
-          })),
-          totalAmount: totalAmount,
-          date: new Date().toISOString(),
-          timestamp: Date.now(),
-          orderId: 'pending' // Will be updated after order creation
-        };
-        
-        await push(walletHistoryRef, purchaseHistory);
-        console.log('=== WALLET HISTORY SAVED ===');
-        console.log('=== WALLET DEDUCTION COMPLETED ===');
       }
-
+      
+      // --- Create the main order object for Firebase ---
       const orderData = {
         items: cart.map(item => ({
           productId: item.id,
           productName: item.name,
           quantity: item.quantity,
-          unitPrice: item.price,
-          totalPrice: item.price * item.quantity
+          unitPrice: item.displayPrice, // Use displayPrice (MRP) for the order record
+          totalPrice: item.displayPrice * item.quantity,
         })),
         totalAmount: totalAmount,
         totalItems: getCartItemCount(),
@@ -608,102 +527,111 @@ const AllProducts = () => {
         customerName: formData.name,
         customerEmail: formData.email,
         customerPhone: formData.phone,
-        customerAddress: {
-          street: formData.address,
-          landmark: formData.landmark,
-          city: formData.city,
-          state: formData.state,
-          postalCode: formData.postalCode,
-        },
+        customerAddress: { street: formData.address, landmark: formData.landmark, city: formData.city, state: formData.state, postalCode: formData.postalCode },
         birthDate: formData.birthDate,
-        paymentMethod: formData.paymentMethod === 'Commission' ? 'Wallet' : formData.paymentMethod,
+        paymentMethod: paymentMethod,
         status: 'Pending',
+        ...(paymentDetails && { paymentDetails: paymentDetails })
       };
-
-      console.log('=== MULTI-PRODUCT ORDER DATA CREATED ===');
       const newOrderRef = await push(ref(db, 'HTAMS/orders'), orderData);
       const orderId = newOrderRef.key;
-
-      // Handle customer data
+      
+      // --- Customer data handling logic (as per your existing code) ---
       const customerRef = ref(db, `HTAMS/customers/${formData.phone}`);
       const customerSnap = await get(customerRef);
-
-      const customerData = {
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        address: orderData.customerAddress,
-        birthDate: formData.birthDate,
-      };
-
+      const customerData = { name: formData.name, email: formData.email, phone: formData.phone, address: orderData.customerAddress, birthDate: formData.birthDate };
       if (customerSnap.exists()) {
-        const existingOrders = customerSnap.val().myOrders || {};
-        await update(customerRef, {
-          ...customerData,
-          myOrders: { ...existingOrders, [orderId]: true }
-        });
-        console.log('=== EXISTING CUSTOMER UPDATED ===');
+        await update(customerRef, { ...customerData, myOrders: { ...(customerSnap.val().myOrders || {}), [orderId]: true } });
       } else {
-        const counterRef = ref(db, 'HTAMS/meta/customerIdCounter');
-        const counterResult = await runTransaction(counterRef, (current) => (current || 1000) + 1);
-        if (counterResult.committed) {
-          const prefix = formData.email.slice(0, 3).toLowerCase();
-          const customerId = `cus_${prefix}_${counterResult.snapshot.val()}`;
-          await set(customerRef, {
-            ...customerData,
-            customerId: customerId,
-            createdAt: Date.now(),
-            myOrders: { [orderId]: true },
-          });
-          console.log('=== NEW CUSTOMER CREATED ===');
-        }
+         const counterRef = ref(db, 'HTAMS/meta/customerIdCounter');
+         const counterResult = await runTransaction(counterRef, (current) => (current || 1000) + 1);
+         if (counterResult.committed) {
+           const prefix = formData.email.slice(0, 3).toLowerCase();
+           const customerId = `cus_${prefix}_${counterResult.snapshot.val()}`;
+           await set(customerRef, { ...customerData, customerId: customerId, createdAt: Date.now(), myOrders: { [orderId]: true } });
+         }
       }
-
-      // Process commission for multiple products
+      
+      // --- Commission processing logic ---
       let commissionResults = [];
       for (const item of cart) {
-        try {
-          const itemOrderData = {
-            totalAmount: item.price * item.quantity,
-            productId: item.id,
-            productName: item.name,
-            quantity: item.quantity,
-            customerName: formData.name,
-            customerPhone: formData.phone,
-            customerEmail: formData.email,
-          };
-          
-          const commissionResult = await processCommission(itemOrderData, `${orderId}_${item.id}`);
-          commissionResults.push({ productId: item.id, result: commissionResult });
-          
-          // Save individual sale details for each product
-          await saveSaleDetails(itemOrderData, `${orderId}_${item.id}`, commissionResult);
-        } catch (error) {
-          console.error(`Commission processing failed for ${item.name}:`, error);
-          commissionResults.push({ productId: item.id, result: { ok: false, error: error.message } });
-        }
+        // THE FIX: The commission payload now uses the 'commissionPrice' (distribution price)
+        const itemOrderData = {
+          totalAmount: item.commissionPrice * item.quantity, 
+          productId: item.id,
+          productName: item.name,
+          quantity: item.quantity,
+          customerName: formData.name,
+          customerPhone: formData.phone,
+          customerEmail: formData.email,
+          paymentMethod: paymentMethod,
+        };
+        const commissionResult = await processCommission(itemOrderData, `${orderId}_${item.id}`);
+        await saveSaleDetails(itemOrderData, `${orderId}_${item.id}`, commissionResult);
+        commissionResults.push({ productId: item.id, result: commissionResult });
       }
-
-      console.log('=== GENERATING MULTI-PRODUCT PDF ===');
-      generateMultiProductPdfBill({
-        ...orderData,
-        items: cart,
-        saleDate: new Date().toLocaleString()
-      });
-
+      
+      // --- PDF generation and final alert (as per your existing code) ---
+      generateMultiProductPdfBill({ ...orderData, items: cart, saleDate: new Date().toLocaleString() });
       const successfulCommissions = commissionResults.filter(r => r.result.ok).length;
-      alert(`Order placed successfully! Commission distributed for ${successfulCommissions} out of ${cart.length} products. Invoice is downloading.`);
-
-      console.log('=== MULTI-PRODUCT ORDER PROCESS COMPLETED ===');
+      alert(`Order placed successfully! Commission distributed for ${successfulCommissions} out of ${cart.length} products.`);
       resetForm();
 
     } catch (err) {
-      console.error('=== MULTI-PRODUCT ORDER PROCESSING ERROR ===', err);
-      alert('Failed to place order. An error occurred. Check console for details.');
+      console.error(`=== ${paymentMethod.toUpperCase()} ORDER PROCESSING ERROR ===`, err);
+      if (paymentMethod === 'Razorpay' && paymentDetails) {
+        alert(`Payment successful, but saving your order failed. Please contact support with Payment ID: ${paymentDetails.razorpay_payment_id}`);
+      } else {
+        alert(`Failed to place order: ${err.message}`);
+      }
     } finally {
       setLoading(false);
     }
   };
+
+
+    // --- 3. Payment Logic Dispatcher ---
+    if (formData.paymentMethod === 'Commission') {
+      if (commissionBalance < totalAmount) {
+        alert(`Insufficient wallet balance!`);
+        return;
+      }
+      setLoading(true);
+      await finalizeAndSaveOrder('Wallet');
+    } 
+    else if (formData.paymentMethod === 'Razorpay') {
+      setLoading(true);
+      const options = {
+        key: 'rzp_test_RJjqNpTqeGsCYJ', amount: totalAmount * 100, currency: 'INR',
+        name: 'HTAMS Platform', description: 'Product Purchase',
+        handler: async (response) => {
+          const paymentDetails = {
+            razorpay_payment_id: response.razorpay_payment_id || null,
+            razorpay_order_id: response.razorpay_order_id || null,
+            razorpay_signature: response.razorpay_signature || null,
+          };
+          await finalizeAndSaveOrder('Razorpay', paymentDetails);
+        },
+        prefill: { name: formData.name, email: formData.email, contact: formData.phone },
+        theme: { color: '#3399cc' },
+      };
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', (response) => {
+        console.error('Razorpay Payment Failed:', response.error);
+        alert(`Payment failed: ${response.error.description}`);
+        setLoading(false);
+      });
+      rzp.open();
+    } else {
+      alert('Please select a valid payment method.');
+    }
+  };
+
+
+
+
+
+
 
   const resetForm = () => {
     setShowCartModal(false);
@@ -1170,12 +1098,14 @@ const AllProducts = () => {
                 <h3 className="product-name">{prod.name}</h3>
                 <p className="product-category">{prod.category}</p>
                 <p className="product-description">{prod.sr}</p>
-                <div className="product-pricing">
-                  <span className="product-price">₹{prod.price?.toLocaleString()}</span>
-                  <span className="stock-info">
-                    Stock: {prod.stock}
-                  </span>
-                </div>
+           <div className="product-pricing">
+  {/* THE FIX: Use displayPrice to show the MRP */}
+  <span className="product-price">₹{prod.displayPrice?.toLocaleString()}</span>
+  <span className="stock-info">
+    Stock: {prod.stock}
+  </span>
+</div>
+
               </div>
 
               <div className="product-actions">
@@ -1232,10 +1162,12 @@ const AllProducts = () => {
                           <div className="cart-item-image">
                             <img src={item.imageUrl} alt={item.name} />
                           </div>
-                          <div className="cart-item-details">
-                            <h4>{item.name}</h4>
-                            <p className="cart-item-price">₹{item.price.toLocaleString()} each</p>
-                          </div>
+                        <div className="cart-item-details">
+  <h4>{item.name}</h4>
+  {/* THE FIX: Use displayPrice to show the MRP */}
+  <p className="cart-item-price">₹{item.displayPrice.toLocaleString()} each</p>
+</div>
+
                           <div className="cart-item-controls">
                             <div className="quantity-controls">
                               <button
@@ -1254,9 +1186,11 @@ const AllProducts = () => {
                                 <FaPlus />
                               </button>
                             </div>
-                            <div className="cart-item-total">
-                              ₹{(item.price * item.quantity).toLocaleString()}
-                            </div>
+                         <div className="cart-item-total">
+  {/* THE FIX: Use displayPrice to calculate the line item total */}
+  ₹{(item.displayPrice * item.quantity).toLocaleString()}
+</div>
+
                             <button
                               onClick={() => removeFromCart(item.id)}
                               disabled={loading}
@@ -1438,20 +1372,25 @@ const AllProducts = () => {
                         )}
                       </div>
 
-                      <div className="form-group full-width">
-                        <label>Payment Method</label>
-                        <select
-                          name="paymentMethod"
-                          value={formData.paymentMethod}
-                          onChange={handleFormChange}
-                          disabled={loading}
-                        >
-                          <option value="Razorpay">Online</option>
-                          {commissionBalance >= getCartTotal() && (
-                            <option value="Commission">Wallet (₹{commissionBalance.toLocaleString()})</option>
-                          )}
-                        </select>
-                      </div>
+                   <div className="form-group full-width">
+  <label>Payment Method</label>
+  <select
+    name="paymentMethod"
+    value={formData.paymentMethod}
+    onChange={handleFormChange}
+    disabled={loading}
+  >
+    {/* Only show Wallet option if balance is sufficient */}
+    {commissionBalance >= getCartTotal() && getCartTotal() > 0 && (
+      <option value="Commission">
+        Wallet (Balance: ₹{commissionBalance.toLocaleString()})
+      </option>
+    )}
+    {/* Always show Razorpay as an option */}
+    <option value="Razorpay">Pay with Card/UPI (Razorpay)</option>
+  </select>
+</div>
+
 
                       {/* Show wallet balance info when wallet payment is selected */}
                       {formData.paymentMethod === 'Commission' && (
@@ -1471,28 +1410,9 @@ const AllProducts = () => {
                       <button type="button" className="cancel-button" onClick={() => setShowCartModal(false)} disabled={loading}>
                         Continue Shopping
                       </button>
-                      
-                      {formData.paymentMethod === 'Razorpay' ? (
-                        <RazorpayPayment
-                          amount={getCartTotal()}
-                          items={cart.map(item => ({
-                            id: item.id,
-                            name: item.name,
-                            price: item.price,
-                            quantity: item.quantity
-                          }))}
-                          userId={user?.uid}
-                          onSuccess={handlePaymentSuccess}
-                          onFailure={handlePaymentFailure}
-                          onClose={handlePaymentClose}
-                          buttonText={`Pay ₹${getCartTotal().toLocaleString()}`}
-                          disabled={loading || cart.length === 0}
-                        />
-                      ) : (
-                        <button type="submit" className="submit-button" disabled={loading || cart.length === 0}>
-                          Place Order & Generate Invoice
-                        </button>
-                      )}
+                      <button type="submit" className="submit-button" disabled={loading || cart.length === 0}>
+                        Place Order & Generate Invoice
+                      </button>
                     </div>
                   </form>
                 </>
@@ -2602,6 +2522,7 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
 }
 
       `}</style>
+
     </div>
   );
 };

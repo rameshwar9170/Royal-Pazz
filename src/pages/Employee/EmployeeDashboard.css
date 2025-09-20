@@ -1,0 +1,185 @@
+/* General styling for the employee dashboard container */
+.employee-dashboard-container {
+    padding: 25px;
+    font-family: 'Poppins', sans-serif;
+    background-color: #f4f7f9;
+    min-height: 100vh;
+}
+
+.employee-dashboard-header {
+    color: #0d2c4d; /* Navy Blue */
+    font-size: 28px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #0d2c4d;
+    padding-bottom: 10px;
+}
+
+.employee-loading-container,
+.employee-no-orders-message {
+    text-align: center;
+    font-size: 18px;
+    color: #555;
+    margin-top: 50px;
+}
+
+/* Styling for the orders table */
+.employee-orders-table {
+    width: 100%;
+    border-collapse: collapse;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+    background-color: #ffffff;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.employee-table-head {
+    background-color: #0d2c4d; /* Navy Blue */
+    color: #ffffff;
+}
+
+.employee-table-th,
+.employee-table-td {
+    padding: 15px 20px;
+    text-align: left;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.employee-table-th {
+    font-weight: 600;
+    font-size: 14px;
+    text-transform: uppercase;
+}
+
+.employee-table-row:hover {
+    background-color: #f9f9f9;
+}
+
+/* Status badge styling */
+.employee-status-badge {
+    padding: 5px 12px;
+    border-radius: 15px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #fff;
+    text-transform: capitalize;
+}
+
+.employee-status-confirmed {
+    background-color: #ff9800; /* Orange for 'confirmed' */
+}
+
+.employee-status-accepted {
+    background-color: #4CAF50; /* Green for 'accepted' */
+}
+
+/* Action button styling */
+.employee-action-button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.employee-accept-btn {
+    background-color: #007bff; /* Blue for accept button */
+    color: white;
+}
+
+.employee-accept-btn:hover {
+    background-color: #0056b3;
+    transform: translateY(-2px);
+}
+
+.employee-accepted-btn {
+    background-color: #6c757d; /* Gray for disabled button */
+    color: white;
+    cursor: not-allowed;
+}
+
+/* Responsive design for smaller screens */
+@media (max-width: 768px) {
+    .employee-orders-table, .employee-table-head, .employee-table-body, .employee-table-th, .employee-table-td, .employee-table-row {
+        display: block;
+    }
+
+    .employee-table-head {
+        display: none;
+    }
+
+    .employee-table-row {
+        margin-bottom: 15px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+    }
+
+    .employee-table-td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px dotted #ccc;
+    }
+
+    .employee-table-td::before {
+        content: attr(data-label);
+        font-weight: bold;
+        color: #0d2c4d;
+    }
+}
+/* Add these new styles to your existing EmployeeDashboard.css file */
+
+/* Styling for the Verify button */
+.employee-verify-btn {
+    background-color: #28a745; /* Green for verify */
+    color: white;
+}
+
+.employee-verify-btn:hover {
+    background-color: #218838;
+    transform: translateY(-2px);
+}
+
+.employee-verify-btn:disabled {
+    background-color: #6c757d;
+    cursor: wait;
+}
+
+/* Styling for the already verified button */
+.employee-verified-btn {
+    background-color: #17a2b8; /* Teal for verified */
+    color: white;
+    cursor: not-allowed;
+}
+
+/* Status badge for 'verified' */
+.employee-status-verified {
+    background-color: #17a2b8; /* Teal */
+}
+
+/* Wrapper for table to allow horizontal scrolling on small screens */
+.employee-orders-table-wrapper {
+    overflow-x: auto;
+}
+
+/* Responsive adjustments for the table data cells */
+@media (max-width: 768px) {
+    .employee-table-td {
+        padding-left: 50%; /* Make space for the data-label */
+        position: relative;
+    }
+
+    .employee-table-td::before {
+        content: attr(data-label);
+        position: absolute;
+        left: 10px;
+        width: 45%;
+        padding-right: 10px;
+        white-space: nowrap;
+        text-align: left;
+        font-weight: bold;
+        color: #0d2c4d;
+    }
+}

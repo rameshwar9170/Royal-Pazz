@@ -171,7 +171,7 @@ export const testCustomMessage = async (confirmSend = false) => {
 This is a test message to verify WhatsApp API integration.
   
 Time: ${new Date().toLocaleString()}
-System: HTAMS WhatsApp Integration
+System: ONDO WhatsApp Integration
   
 If you received this, the integration is working! ✅`;
   

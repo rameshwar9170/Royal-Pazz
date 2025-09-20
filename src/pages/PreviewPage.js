@@ -55,8 +55,8 @@ export default function PreviewPage() {
             }
 
             try {
-                // Updated path: HTAMS/WebBuilder/uid/
-                const userRef = ref(db, `HTAMS/WebBuilder/${uid}`);
+                // Updated path: HTAMS/users/uid/webBuilder
+                const userRef = ref(db, `HTAMS/users/${uid}/webBuilder`);
                 const snapshot = await get(userRef);
 
                 if (snapshot.exists()) {
@@ -73,6 +73,25 @@ export default function PreviewPage() {
                         data.products = [];
                     }
 
+                    // Debug: Log the loaded user data
+                    console.log('Loaded user data from Firebase:', data);
+                    if (data.products) {
+                        console.log('Products in user data:', data.products);
+                        data.products.forEach((product, index) => {
+                            console.log(`Preview Product ${index + 1}:`, {
+                                title: product.title,
+                                imageUrl: product.imageUrl,
+                                imageUrls: product.imageUrls,
+                                image: product.image,
+                                productImage: product.productImage,
+                                img: product.img,
+                                selectedCompanyProduct: product.selectedCompanyProduct,
+                                companyProductData: product.companyProductData,
+                                allFields: Object.keys(product)
+                            });
+                        });
+                    }
+                    
                     setUserData(data);
                 } else {
                     setError('No profile data found for this user');
@@ -146,7 +165,7 @@ export default function PreviewPage() {
 
         setIsSending(true);
         try {
-            const inquiriesRef = ref(db, `${uid}/inquiries`);
+            const inquiriesRef = ref(db, `HTAMS/users/${uid}/inquiries`);
             const newInquiryRef = push(inquiriesRef);
             await set(newInquiryRef, {
                 ...inquiryData,
@@ -448,14 +467,43 @@ export default function PreviewPage() {
                                             </div>
                                         </div>
 
-                                        {product.imageUrl && (
-                                            <div className="preview-product__image">
-                                                <img src={product.imageUrl} alt={product.title} loading="lazy" />
-                                                <div className="preview-product__image-overlay">
-                                                    <button className="preview-product__zoom">🔍</button>
+                                        {/* Debug: Always show image section for debugging */}
+                                        <div className="preview-product__image">
+                                            {product.imageUrl ? (
+                                                <img 
+                                                    src={product.imageUrl} 
+                                                    alt={product.title} 
+                                                    loading="lazy"
+                                                    onError={(e) => {
+                                                        console.error('Failed to load product image:', product.imageUrl);
+                                                        console.error('Product data:', product);
+                                                        e.target.style.display = 'none';
+                                                        e.target.parentElement.innerHTML = '<div class="preview-product__image-placeholder"><span>📷</span><p>Image failed to load</p><small>' + product.imageUrl + '</small></div>';
+                                                    }}
+                                                    onLoad={() => {
+                                                        console.log('Product image loaded successfully:', product.imageUrl);
+                                                    }}
+                                                />
+                                            ) : (
+                                                <div className="preview-product__image-placeholder">
+                                                    <span>📷</span>
+                                                    <p>No image URL found</p>
+                                                    <small>Debug: {JSON.stringify({
+                                                        imageUrl: product.imageUrl,
+                                                        imageUrls: product.imageUrls,
+                                                        image: product.image,
+                                                        productImage: product.productImage,
+                                                        img: product.img,
+                                                        selectedProduct: product.selectedCompanyProduct,
+                                                        companyData: product.companyProductData ? 'exists' : 'missing',
+                                                        extractedUrl: product.imageUrls && product.imageUrls.length > 0 ? product.imageUrls[0] : 'none'
+                                                    })}</small>
                                                 </div>
+                                            )}
+                                            <div className="preview-product__image-overlay">
+                                                <button className="preview-product__zoom">🔍</button>
                                             </div>
-                                        )}
+                                        </div>
                                     </div>
 
                                     {product.about && (
@@ -477,11 +525,25 @@ export default function PreviewPage() {
                                 <div className="preview-products-overview">
                                     {products.map((product, index) => (
                                         <div key={index} className="preview-product-card">
-                                            {product.imageUrl && (
-                                                <div className="preview-product-card__image">
-                                                    <img src={product.imageUrl} alt={product.title} loading="lazy" />
-                                                </div>
-                                            )}
+                                            <div className="preview-product-card__image">
+                                                {product.imageUrl ? (
+                                                    <img 
+                                                        src={product.imageUrl} 
+                                                        alt={product.title} 
+                                                        loading="lazy"
+                                                        onError={(e) => {
+                                                            console.error('Failed to load product card image:', product.imageUrl);
+                                                            e.target.style.display = 'none';
+                                                            e.target.parentElement.innerHTML = '<div class="preview-image-placeholder"><span>📷</span><p>Failed</p></div>';
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <div className="preview-image-placeholder">
+                                                        <span>📷</span>
+                                                        <p>No Image</p>
+                                                    </div>
+                                                )}
+                                            </div>
                                             <div className="preview-product-card__content">
                                                 <h4>{product.title}</h4>
                                                 {product.price && (
@@ -727,7 +789,7 @@ export default function PreviewPage() {
 
                         <div className="preview-footer__bottom">
                             <p>&copy; 2025 {owner.name || 'Professional Profile'}. All rights reserved.</p>
-                            <p>Powered by <strong>ONDO</strong> - Professional Site Creator</p>
+                            <p>Powered by <strong>HTAMS</strong> - Professional Site Creator</p>
                         </div>
                     </div>
                 </div>

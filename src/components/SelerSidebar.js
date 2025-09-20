@@ -76,6 +76,7 @@ const SelerSidebar = ({ isOpen, toggleSidebar, activeMenu, setActiveMenu }) => {
   // Define all menu items
   const allMenuItems = [
     { name: "Dashboard", path: "/dashboard", icon: <FaTachometerAlt />, requiresVerification: true },
+    { name: "Quotation", path: "/dashboard/Quotation", icon: <FaTachometerAlt />, requiresVerification: true },
     { name: "Customers", path: "/dashboard/customers", icon: <FaUsers />, requiresVerification: true },
     { name: "Team", path: "/dashboard/team", icon: <FaUserShield />, requiresVerification: true },
     { name: "Products Buy", path: "/dashboard/Allproducts", icon: <FaBoxOpen />, requiresVerification: true },

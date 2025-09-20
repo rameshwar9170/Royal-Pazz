@@ -9,6 +9,7 @@ import {
   FaWindowMinimize, FaWindowMaximize, FaArrowsAlt, FaExpand
 } from 'react-icons/fa';
 
+
 // ✅ Create a placeholder image generator
 const createPlaceholderImage = (width = 300, height = 200, text = 'No Image') => {
   return `data:image/svg+xml;base64,${btoa(`
@@ -18,6 +19,7 @@ const createPlaceholderImage = (width = 300, height = 200, text = 'No Image') =>
     </svg>
   `)}`;
 };
+
 
 // Utility function to extract storage path from URL
 const getStoragePathFromUrl = (url) => {
@@ -30,6 +32,7 @@ const getStoragePathFromUrl = (url) => {
     return null;
   }
 };
+
 
 // ProductCard Component
 const ProductCard = ({ product, onEdit, onDelete, onToggleStatus }) => {
@@ -82,12 +85,23 @@ const ProductCard = ({ product, onEdit, onDelete, onToggleStatus }) => {
       <div className="product-content">
         <h3 className="product-name">{product.name}</h3>
         
-        <div className="product-price">
-          <FaRupeeSign />
-          {parseFloat(product.price || 0).toLocaleString('en-IN', { 
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2 
-          })}
+        <div className="product-price-container">
+            <div className="product-price">
+                <span className="price-label">Dist. Price:</span>
+                <FaRupeeSign />
+                {parseFloat(product.price || 0).toLocaleString('en-IN', { 
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2 
+                })}
+            </div>
+            <div className="product-price mrp">
+                <span className="price-label">MRP:</span>
+                <FaRupeeSign />
+                {parseFloat(product.mrp || 0).toLocaleString('en-IN', { 
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2 
+                })}
+            </div>
         </div>
 
         <div className="product-details">
@@ -129,14 +143,19 @@ const ProductCard = ({ product, onEdit, onDelete, onToggleStatus }) => {
   );
 };
 
+
 function Product() {
   const initialFormState = {
     name: '',
     category: '',
-    price: '',
+    price: '', // This is now Distribution Price
     stock: '',
     serialNumber: '',
     status: 'active',
+    basePrice: '',
+    tax: '',
+    invoicePrice: '',
+    mrp: '',
     imageUrls: [],
     imagePaths: [],
   };
@@ -309,6 +328,14 @@ function Product() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, [formVisible]);
+
+  // ✅ Automatically calculate Invoice Price
+  useEffect(() => {
+    const base = parseFloat(form.basePrice) || 0;
+    const tax = parseFloat(form.tax) || 0;
+    const invoice = base + tax;
+    setForm(prev => ({ ...prev, invoicePrice: invoice > 0 ? invoice.toFixed(2) : '' }));
+  }, [form.basePrice, form.tax]);
 
   // ✅ Utility functions
   const resetFormState = () => {
@@ -487,7 +514,7 @@ function Product() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!form.name.trim() || !form.category.trim() || !form.serialNumber.trim() || !form.price || !form.stock) {
+    if (!form.name.trim() || !form.category.trim() || !form.serialNumber.trim() || !form.price || !form.stock || !form.basePrice || !form.mrp) {
       alert('❌ Please fill all required fields');
       return;
     }
@@ -515,9 +542,13 @@ function Product() {
         name: form.name.trim(),
         category: form.category.trim(),
         serialNumber: form.serialNumber.trim(),
-        price: parseFloat(form.price),
+        price: parseFloat(form.price), // Distribution Price
         stock: parseInt(form.stock),
         status: form.status || 'active',
+        basePrice: parseFloat(form.basePrice),
+        tax: parseFloat(form.tax || 0),
+        invoicePrice: parseFloat(form.invoicePrice),
+        mrp: parseFloat(form.mrp),
         imageUrls: finalImageUrls,
         imagePaths: finalImagePaths,
         timestamp: Date.now(),
@@ -548,9 +579,13 @@ function Product() {
       name: product.name || '',
       category: product.category || '',
       serialNumber: product.serialNumber || '',
-      price: product.price || '',
+      price: product.price || '', // Distribution Price
       stock: product.stock || '',
       status: product.status || 'active',
+      basePrice: product.basePrice || '',
+      tax: product.tax || '',
+      invoicePrice: product.invoicePrice || '',
+      mrp: product.mrp || '',
       imageUrls: product.imageUrls || [],
       imagePaths: product.imagePaths || []
     });
@@ -780,22 +815,7 @@ function Product() {
                       placeholder="Enter serial number"
                     />
                   </div>
-
-                  <div className="form-group">
-                    <label>Price (₹) *</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      name="price"
-                      value={form.price}
-                      onChange={handleChange}
-                      required
-                      placeholder="0.00"
-                      disabled={isLoading}
-                    />
-                  </div>
-
+                  
                   <div className="form-group">
                     <label>Stock Quantity *</label>
                     <input
@@ -807,6 +827,52 @@ function Product() {
                       required
                       placeholder="0"
                       disabled={isLoading}
+                    />
+                  </div>
+                  
+                  <div className="form-group">
+                    <label>Base Price (₹) *</label>
+                    <input
+                      type="number" step="0.01" min="0" name="basePrice"
+                      value={form.basePrice} onChange={handleChange} required
+                      placeholder="0.00" disabled={isLoading}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Tax (₹)</label>
+                    <input
+                      type="number" step="0.01" min="0" name="tax"
+                      value={form.tax} onChange={handleChange}
+                      placeholder="0.00" disabled={isLoading}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Invoice Price (₹)</label>
+                    <input
+                      type="number" name="invoicePrice"
+                      value={form.invoicePrice} readOnly
+                      placeholder="Calculated..." disabled
+                      className="calculated-field"
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Distribution Price (₹) *</label>
+                    <input
+                      type="number" step="0.01" min="0" name="price"
+                      value={form.price} onChange={handleChange} required
+                      placeholder="0.00" disabled={isLoading}
+                    />
+                  </div>
+                  
+                  <div className="form-group">
+                    <label>MRP (₹) *</label>
+                    <input
+                      type="number" step="0.01" min="0" name="mrp"
+                      value={form.mrp} onChange={handleChange} required
+                      placeholder="0.00" disabled={isLoading}
                     />
                   </div>
 
@@ -960,1124 +1026,407 @@ function Product() {
         )}
       </div>
 
-   
-
-      {/* Complete Perfect CSS Styles with Fixed Minimize Functionality */}
+      {/* Recommended CSS Styles */}
       <style jsx>{`
+        /* Add your existing CSS here */
         .products-dashboard {
-          min-height: 100vh;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          padding: 20px;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-          position: relative;
+            padding: 2rem;
+            background-color: #f4f7f9;
         }
-
-        /* Header Styles */
         .dashboard-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          background: rgba(255, 255, 255, 0.95);
-          padding: 24px;
-          border-radius: 16px;
-          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-          backdrop-filter: blur(20px);
-          margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
         }
-
-        .header-left h1 {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          margin: 0 0 4px 0;
-          font-size: 28px;
-          font-weight: 800;
-          color: #1a202c;
+        .page-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 2rem;
+            color: #2c3e50;
         }
-
-        .count {
-          color: #718096;
-          font-size: 20px;
-          font-weight: 600;
+        .page-title .count {
+            font-size: 1rem;
+            color: #7f8c8d;
         }
-
         .subtitle {
-          margin: 0;
-          color: #718096;
-          font-size: 16px;
+            color: #7f8c8d;
+            margin-top: 5px;
         }
-
         .add-btn {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: white;
-          border: none;
-          padding: 14px 24px;
-          border-radius: 12px;
-          font-size: 16px;
-          font-weight: 700;
-          cursor: pointer;
-          transition: all 0.3s ease;
-          box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background-color 0.3s;
         }
-
         .add-btn:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 8px 25px rgba(102, 126, 234, 0.5);
+            background-color: #2980b9;
         }
 
-        /* Controls Bar Styles */
         .controls-bar {
-          display: flex;
-          gap: 20px;
-          align-items: center;
-          background: rgba(255, 255, 255, 0.95);
-          padding: 20px;
-          border-radius: 16px;
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-          margin-bottom: 20px;
-          flex-wrap: wrap;
-          backdrop-filter: blur(20px);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            margin-bottom: 2rem;
         }
-
         .search-wrapper {
-          position: relative;
-          flex: 1;
-          min-width: 300px;
+            position: relative;
         }
-
         .search-icon {
-          position: absolute;
-          left: 16px;
-          top: 50%;
-          transform: translateY(-50%);
-          color: #a0aec0;
-          font-size: 16px;
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #95a5a6;
         }
-
         .search-input {
-          width: 100%;
-          padding: 14px 14px 14px 48px;
-          border: 2px solid #e2e8f0;
-          border-radius: 12px;
-          font-size: 16px;
-          background: white;
-          transition: all 0.3s ease;
+            padding: 10px 15px 10px 40px;
+            border: 1px solid #dfe6e9;
+            border-radius: 5px;
+            width: 300px;
+            font-size: 1rem;
+            transition: border-color 0.3s, box-shadow 0.3s;
         }
-
         .search-input:focus {
-          outline: none;
-          border-color: #667eea;
-          box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
         }
-
         .filter-controls {
-          display: flex;
-          gap: 16px;
-          align-items: center;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
         }
-
         .filter-select, .sort-select {
-          padding: 12px 16px;
-          border: 2px solid #e2e8f0;
-          border-radius: 10px;
-          background: white;
-          font-size: 14px;
-          font-weight: 500;
-          cursor: pointer;
-          transition: all 0.3s ease;
-          min-width: 140px;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #dfe6e9;
+            background-color: #fff;
+            font-size: 1rem;
         }
-
-        .filter-select:focus, .sort-select:focus {
-          outline: none;
-          border-color: #667eea;
-          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-
         .view-toggle {
-          display: flex;
-          background: #f7fafc;
-          border-radius: 10px;
-          padding: 4px;
-          gap: 4px;
+            display: flex;
         }
-
-        .toggle-btn {
-          padding: 10px 14px;
-          border: none;
-          background: transparent;
-          border-radius: 8px;
-          cursor: pointer;
-          color: #718096;
-          transition: all 0.2s ease;
-          font-size: 16px;
+        .view-toggle .toggle-btn {
+            padding: 10px;
+            border: 1px solid #dfe6e9;
+            background: #fff;
+            cursor: pointer;
         }
-
-        .toggle-btn.active {
-          background: white;
-          color: #667eea;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        .view-toggle .toggle-btn:first-child {
+            border-top-left-radius: 5px;
+            border-bottom-left-radius: 5px;
         }
-
-        /* Perfect Draggable Modal Styles with Fixed Minimize */
-        .draggable-modal {
-          width: 500px;
-          max-width: calc(100vw - 40px);
-          background: white;
-          border-radius: 16px;
-          box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-          max-height: calc(100vh - 40px);
-          display: flex;
-          flex-direction: column;
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-          user-select: none;
-          overflow: hidden;
-          backdrop-filter: blur(10px);
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          z-index: 10000;
+        .view-toggle .toggle-btn:last-child {
+            border-top-right-radius: 5px;
+            border-bottom-right-radius: 5px;
+            border-left: none;
         }
-
-        .draggable-modal.dragging {
-          box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4);
-          transform: scale(1.02);
-          transition: box-shadow 0.2s ease, transform 0.2s ease;
-        }
-
-        /* FIXED MINIMIZE STYLES - PROPERLY VISIBLE */
-        .draggable-modal.minimized {
-          height: 60px !important;
-          max-height: 60px !important;
-          min-height: 60px !important;
-          overflow: visible !important;
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2) !important;
-          width: 380px !important;
-        }
-
-        .draggable-modal.minimized .draggable-modal-header {
-          min-height: 60px !important;
-          height: 60px !important;
-          padding: 12px 20px !important;
-        }
-
-        .draggable-modal.minimized .draggable-modal-body {
-          display: none !important;
-        }
-
-        .draggable-modal.minimized .modal-title {
-          flex-direction: row !important;
-          align-items: center !important;
-          gap: 10px !important;
-        }
-
-        .draggable-modal.minimized .modal-title h3 {
-          font-size: 16px !important;
-          white-space: nowrap !important;
-          overflow: hidden !important;
-          text-overflow: ellipsis !important;
-          max-width: 200px !important;
-        }
-
-        .draggable-modal.minimized .move-hint {
-          display: none !important;
-        }
-
-        .draggable-modal.minimized .control-btn {
-          min-width: 32px !important;
-          height: 32px !important;
-          padding: 6px 8px !important;
-          font-size: 13px !important;
-        }
-
-        .draggable-modal-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 16px 20px;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: white;
-          border-radius: 16px 16px 0 0;
-          flex-shrink: 0;
-          cursor: grab;
-          position: relative;
-          min-height: 55px;
-        }
-
-        .draggable-modal-header:active,
-        .draggable-modal.dragging .draggable-modal-header {
-          cursor: grabbing;
-        }
-
-        .modal-title {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          flex: 1;
-          pointer-events: none;
-          flex-direction: column;
-          align-items: flex-start;
-        }
-
-        .modal-title h3 {
-          margin: 0;
-          font-size: 18px;
-          font-weight: 700;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-
-        .drag-icon {
-          opacity: 0.8;
-          font-size: 16px;
-          animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-          0%, 100% { 
-            opacity: 0.8; 
-            transform: scale(1);
-          }
-          50% { 
-            opacity: 0.5; 
-            transform: scale(1.1);
-          }
-        }
-
-        .move-hint {
-          font-size: 11px;
-          opacity: 0.8;
-          font-weight: 400;
-          margin-top: 2px;
-          animation: fadeInOut 3s infinite;
-        }
-
-        @keyframes fadeInOut {
-          0%, 100% { opacity: 0.8; }
-          50% { opacity: 0.4; }
-        }
-
-        .modal-controls {
-          display: flex;
-          gap: 8px;
-          pointer-events: auto;
-        }
-
-        .control-btn {
-          background: rgba(255, 255, 255, 0.2);
-          border: none;
-          color: white;
-          padding: 8px 10px;
-          border-radius: 8px;
-          cursor: pointer;
-          font-size: 14px;
-          transition: all 0.2s ease;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          min-width: 34px;
-          height: 34px;
-        }
-
-        .control-btn:hover {
-          background: rgba(255, 255, 255, 0.3);
-          transform: scale(1.1);
-        }
-
-        .control-btn:active {
-          transform: scale(0.95);
-        }
-
-        .minimize-btn:hover {
-          background: rgba(255, 193, 7, 0.4);
-        }
-
-        .center-btn:hover {
-          background: rgba(40, 167, 69, 0.4);
-        }
-
-        .close-btn:hover {
-          background: rgba(220, 53, 69, 0.4);
-        }
-
-        .draggable-modal-body {
-          flex: 1;
-          overflow-y: auto;
-          padding: 24px;
-          max-height: calc(80vh - 100px);
-          scrollbar-width: thin;
-          scrollbar-color: #cbd5e1 #f1f5f9;
-        }
-
-        .draggable-modal-body::-webkit-scrollbar {
-          width: 8px;
-        }
-
-        .draggable-modal-body::-webkit-scrollbar-track {
-          background: #f1f5f9;
-          border-radius: 4px;
-        }
-
-        .draggable-modal-body::-webkit-scrollbar-thumb {
-          background: #cbd5e1;
-          border-radius: 4px;
-        }
-
-        .draggable-modal-body::-webkit-scrollbar-thumb:hover {
-          background: #94a3b8;
-        }
-
-        /* Products Section Styles */
-        .products-section {
-          background: rgba(255, 255, 255, 0.95);
-          padding: 24px;
-          border-radius: 16px;
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-          backdrop-filter: blur(20px);
+        .view-toggle .toggle-btn.active {
+            background-color: #3498db;
+            color: white;
+            border-color: #3498db;
         }
 
         .products-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-          gap: 24px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 2rem;
         }
-
-        .products-grid.list-view {
-          grid-template-columns: 1fr;
-        }
-
-        /* Enhanced Product Card Styles */
+        
         .product-card {
-          background: white;
-          border-radius: 16px;
-          padding: 20px;
-          position: relative;
-          transition: all 0.3s ease;
-          border: 1px solid #f1f5f9;
-          box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            transition: transform 0.3s, box-shadow 0.3s;
         }
-
         .product-card:hover {
-          transform: translateY(-4px);
-          box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
-          border-color: #e2e8f0;
+            transform: translateY(-5px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
         }
-
         .product-card.inactive {
-          opacity: 0.6;
-          filter: grayscale(0.3);
+            opacity: 0.6;
         }
-
         .status-badge {
-          position: absolute;
-          top: 16px;
-          right: 16px;
-          padding: 6px 12px;
-          border-radius: 20px;
-          font-size: 11px;
-          font-weight: 700;
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            z-index: 2;
         }
-
-        .status-badge.active {
-          background: #d4edda;
-          color: #155724;
-          border: 1px solid #c3e6cb;
-        }
-
-        .status-badge.inactive {
-          background: #fff3cd;
-          color: #856404;
-          border: 1px solid #ffeaa7;
-        }
+        .status-badge.active { background-color: #27ae60; }
+        .status-badge.inactive { background-color: #c0392b; }
 
         .product-image {
-          position: relative;
-          width: 100%;
-          height: 220px;
-          border-radius: 12px;
-          overflow: hidden;
-          background: #f8fafc;
-          margin-bottom: 16px;
-          border: 1px solid #f1f5f9;
+            position: relative;
+            width: 100%;
+            height: 200px;
+            background-color: #f8f9fa;
         }
-
         .product-image img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-          transition: transform 0.3s ease;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
-
-        .product-card:hover .product-image img {
-          transform: scale(1.05);
-        }
-
         .image-count {
-          position: absolute;
-          bottom: 8px;
-          right: 8px;
-          background: rgba(0, 0, 0, 0.7);
-          color: white;
-          padding: 4px 8px;
-          border-radius: 12px;
-          font-size: 12px;
-          font-weight: 600;
-          display: flex;
-          align-items: center;
-          gap: 4px;
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.6);
+            color: white;
+            padding: 5px 8px;
+            border-radius: 5px;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 5px;
         }
 
         .product-content {
-          margin-bottom: 20px;
+            padding: 1rem;
+            flex-grow: 1;
         }
-
         .product-name {
-          font-size: 20px;
-          font-weight: 700;
-          color: #1a202c;
-          margin: 0 0 12px 0;
-          line-height: 1.3;
+            font-size: 1.2rem;
+            color: #34495e;
+            margin: 0 0 0.5rem;
         }
-
+        .product-price-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            gap: 1rem;
+        }
         .product-price {
-          font-size: 24px;
-          font-weight: 800;
-          color: #22c55e;
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          margin-bottom: 16px;
+            font-size: 1rem;
+            font-weight: bold;
+            color: #2c3e50;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .product-price .price-label {
+            font-weight: normal;
+            font-size: 0.8rem;
+            color: #7f8c8d;
+        }
+        .product-price.mrp {
+            color: #e74c3c;
         }
 
         .product-details {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-          margin-bottom: 16px;
+            display: flex;
+            gap: 1.5rem;
+            color: #7f8c8d;
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
         }
+        .detail-item { display: flex; align-items: center; gap: 8px; }
+        .detail-icon { color: #95a5a6; }
 
-        .detail-item {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          font-size: 14px;
-          color: #718096;
-          padding: 6px 0;
-          border-bottom: 1px solid #f8fafc;
-        }
-
-        .detail-icon {
-          color: #a0aec0;
-          width: 16px;
-        }
-
-        /* Enhanced Stock Status Styles */
         .stock-status {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 12px 16px;
-          border-radius: 12px;
-          font-size: 14px;
-          font-weight: 600;
-          margin-bottom: 16px;
-          border: 2px solid;
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            border-radius: 5px;
+            margin-bottom: 1rem;
         }
-
-        .stock-icon {
-          font-size: 18px;
-        }
-
-        .stock-info {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-        }
-
-        .stock-count {
-          font-weight: 700;
-          font-size: 15px;
-        }
-
-        .stock-label {
-          font-size: 11px;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          opacity: 0.8;
-        }
-
-        .stock-status.out-of-stock {
-          background: #fef2f2;
-          color: #991b1b;
-          border-color: #fecaca;
-        }
-
-        .stock-status.low-stock {
-          background: #fffbeb;
-          color: #92400e;
-          border-color: #fed7aa;
-        }
-
-        .stock-status.medium-stock {
-          background: #f0f9ff;
-          color: #1e40af;
-          border-color: #bfdbfe;
-        }
-
-        .stock-status.high-stock {
-          background: #f0fdf4;
-          color: #166534;
-          border-color: #bbf7d0;
-        }
+        .stock-status .stock-icon { font-size: 1.5rem; margin-right: 10px; }
+        .stock-info { display: flex; flex-direction: column; }
+        .stock-count { font-weight: bold; font-size: 1rem; }
+        .stock-label { font-size: 0.8rem; }
+        .out-of-stock { background-color: #fde4e1; border-left: 4px solid #e74c3c; }
+        .low-stock { background-color: #fff4e0; border-left: 4px solid #f39c12; }
+        .medium-stock { background-color: #eaf5ff; border-left: 4px solid #3498db; }
+        .high-stock { background-color: #e4f8f0; border-left: 4px solid #2ecc71; }
 
         .product-actions {
-          display: flex;
-          gap: 10px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            border-top: 1px solid #ecf0f1;
+        }
+        .product-actions .btn {
+            background: none;
+            border: none;
+            border-right: 1px solid #ecf0f1;
+            padding: 12px;
+            cursor: pointer;
+            transition: background-color 0.2s, color 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .product-actions .btn:last-child { border-right: none; }
+        .product-actions .btn-edit:hover { background-color: #eaf5ff; color: #3498db; }
+        .product-actions .btn-disable:hover { background-color: #fde4e1; color: #c0392b; }
+        .product-actions .btn-enable:hover { background-color: #e4f8f0; color: #27ae60; }
+        .product-actions .btn-delete:hover { background-color: #fde4e1; color: #c0392b; }
+
+
+        .draggable-modal {
+            width: 800px;
+            max-width: 95vw;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            transition: opacity 0.3s, transform 0.3s, height 0.3s;
+            overflow: hidden;
+        }
+        .draggable-modal.dragging {
+            cursor: grabbing;
+            user-select: none;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+        }
+        .draggable-modal.minimized {
+            height: 50px;
+            width: 300px;
         }
 
-        .btn {
-          flex: 1;
-          padding: 10px 14px;
-          border: none;
-          border-radius: 8px;
-          font-size: 13px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.3s ease;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 6px;
+        .draggable-modal-header {
+            padding: 1rem;
+            background: #2c3e50;
+            color: white;
+            cursor: grab;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-title { display: flex; align-items: center; gap: 10px; }
+        .drag-icon { color: #95a5a6; }
+        .move-hint { font-size: 0.8rem; color: #bdc3c7; }
+        
+        .modal-controls { display: flex; align-items: center; gap: 5px; }
+        .control-btn {
+            background: none;
+            border: none;
+            color: #bdc3c7;
+            font-size: 1rem;
+            padding: 5px;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: background-color 0.2s, color 0.2s;
+        }
+        .control-btn:hover { background-color: rgba(255,255,255,0.1); color: white; }
+        
+        .draggable-modal-body {
+            padding: 1.5rem;
+            max-height: 80vh;
+            overflow-y: auto;
         }
 
-        .btn-edit {
-          background: linear-gradient(135deg, #667eea, #764ba2);
-          color: white;
-          box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        .product-form .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
         }
-
-        .btn-edit:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-        }
-
-        .btn-enable {
-          background: linear-gradient(135deg, #22c55e, #16a34a);
-          color: white;
-          box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
-        }
-
-        .btn-enable:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);
-        }
-
-        .btn-disable {
-          background: linear-gradient(135deg, #f59e0b, #d97706);
-          color: white;
-          box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
-        }
-
-        .btn-disable:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
-        }
-
-        .btn-delete {
-          background: linear-gradient(135deg, #ef4444, #dc2626);
-          color: white;
-          box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
-          flex: 0 0 auto;
-          padding: 10px;
-        }
-
-        .btn-delete:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
-        }
-
-        /* Form Styles */
-        .product-form {
-          display: flex;
-          flex-direction: column;
-          gap: 20px;
-        }
-
-        .form-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-          gap: 16px;
-        }
-
-        .form-group {
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
-        }
-
         .form-group label {
-          font-weight: 600;
-          color: #374151;
-          font-size: 14px;
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #555;
         }
-
-        .form-group input {
-          padding: 12px;
-          border: 2px solid #e2e8f0;
-          border-radius: 8px;
-          font-size: 14px;
-          transition: all 0.3s ease;
-          background: white;
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
         }
-
-        .form-group input:focus {
-          outline: none;
-          border-color: #667eea;
-          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        .form-group input:disabled, .form-group select:disabled {
+            background-color: #f2f2f2;
+            cursor: not-allowed;
         }
-
-        .form-group input:disabled {
-          background: #f8fafc;
-          color: #a0aec0;
-          cursor: not-allowed;
+        .calculated-field {
+            font-style: italic;
+            color: #555;
         }
-
-        /* Image Upload Styles */
-        .image-section {
-          margin-top: 8px;
-        }
-
-        .image-section label {
-          display: block;
-          font-weight: 600;
-          color: #374151;
-          margin-bottom: 12px;
-          font-size: 14px;
-        }
-
+        .image-section { margin-top: 1.5rem; }
         .upload-btn {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          padding: 12px 20px;
-          background: #f8fafc;
-          border: 2px solid #e2e8f0;
-          border-radius: 8px;
-          cursor: pointer;
-          font-size: 14px;
-          font-weight: 600;
-          color: #4a5568;
-          transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 15px;
+            background-color: #3498db;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
         }
-
-        .upload-btn:hover {
-          background: #f1f5f9;
-          border-color: #667eea;
-          color: #667eea;
-          transform: translateY(-1px);
-        }
+        .upload-hint { display: block; font-size: 0.8rem; color: #777; margin-top: 5px; }
 
         .image-previews {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-          gap: 12px;
-          margin-top: 16px;
-        }
-
-        .preview-item {
-          position: relative;
-          aspect-ratio: 1;
-          border-radius: 8px;
-          overflow: hidden;
-          border: 2px solid #e2e8f0;
-          transition: all 0.2s ease;
-        }
-
-        .preview-item:hover {
-          border-color: #667eea;
-          transform: scale(1.02);
-        }
-
-        .preview-item img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-        }
-
-        .remove-btn {
-          position: absolute;
-          top: 6px;
-          right: 6px;
-          background: rgba(239, 68, 68, 0.9);
-          color: white;
-          border: none;
-          border-radius: 50%;
-          width: 24px;
-          height: 24px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          font-size: 12px;
-          transition: all 0.2s ease;
-        }
-
-        .remove-btn:hover {
-          background: #dc2626;
-          transform: scale(1.1);
-        }
-
-        /* Progress Bar Styles */
-        .progress-section {
-          margin: 20px 0;
-          padding: 16px;
-          background: #f8fafc;
-          border-radius: 12px;
-          border: 1px solid #e2e8f0;
-        }
-
-        .progress-bar {
-          width: 100%;
-          height: 8px;
-          background: #e2e8f0;
-          border-radius: 4px;
-          overflow: hidden;
-          margin-bottom: 12px;
-        }
-
-        .progress-fill {
-          height: 100%;
-          background: linear-gradient(90deg, #667eea, #764ba2);
-          transition: width 0.3s ease;
-          border-radius: 4px;
-        }
-
-        .progress-section p {
-          margin: 0;
-          font-size: 14px;
-          color: #718096;
-          text-align: center;
-          font-weight: 600;
-        }
-
-        /* Form Actions */
-        .form-actions {
-          display: flex;
-          gap: 16px;
-          justify-content: flex-end;
-          padding-top: 20px;
-          border-top: 1px solid #f1f5f9;
-        }
-
-        .cancel-btn, .submit-btn {
-          padding: 12px 24px;
-          border-radius: 8px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.3s ease;
-          font-size: 14px;
-        }
-
-        .cancel-btn {
-          background: #f8fafc;
-          color: #718096;
-          border: 2px solid #e2e8f0;
-        }
-
-        .cancel-btn:hover {
-          background: #f1f5f9;
-          color: #4a5568;
-          border-color: #d1d5db;
-        }
-
-        .submit-btn {
-          background: linear-gradient(135deg, #667eea, #764ba2);
-          color: white;
-          border: none;
-          box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
-          min-width: 120px;
-        }
-
-        .submit-btn:hover:not(:disabled) {
-          transform: translateY(-2px);
-          box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
-        }
-
-        .submit-btn:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-          transform: none;
-        }
-
-        /* Empty State */
-        .empty-state {
-          text-align: center;
-          padding: 60px 40px;
-          color: #718096;
-        }
-
-        .empty-icon {
-          font-size: 64px;
-          color: #cbd5e0;
-          margin-bottom: 20px;
-        }
-
-        .empty-state h3 {
-          margin: 0 0 12px 0;
-          font-size: 24px;
-          font-weight: 700;
-          color: #4a5568;
-        }
-
-        .empty-state p {
-          margin: 0;
-          font-size: 16px;
-        }
-
-        /* Perfect Responsive Design */
-        @media (max-width: 1200px) {
-          .draggable-modal {
-            width: calc(100vw - 60px);
-            max-width: 600px;
-          }
-          
-          .draggable-modal.minimized {
-            width: calc(100vw - 60px) !important;
-            max-width: 400px !important;
-          }
-        }
-
-        @media (max-width: 768px) {
-          .products-dashboard {
-            padding: 12px;
-          }
-
-          .dashboard-header {
-            flex-direction: column;
-            gap: 16px;
-            align-items: stretch;
-            text-align: center;
-            padding: 20px;
-          }
-
-          .controls-bar {
-            flex-direction: column;
-            align-items: stretch;
-            gap: 16px;
-            padding: 16px;
-          }
-
-          .search-wrapper {
-            min-width: auto;
-          }
-
-          .filter-controls {
-            justify-content: center;
+            display: flex;
             flex-wrap: wrap;
-          }
-
-          .products-grid {
-            grid-template-columns: 1fr;
-            gap: 16px;
-          }
-
-          .draggable-modal {
-            width: calc(100vw - 20px);
-            max-width: none;
-            max-height: calc(100vh - 20px);
-          }
-          
-          .draggable-modal.minimized {
-            width: calc(100vw - 20px) !important;
-            max-width: none !important;
-          }
-
-          .draggable-modal-body {
-            padding: 16px;
-            max-height: calc(100vh - 140px);
-          }
-
-          .form-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .form-actions {
-            flex-direction: column-reverse;
-            gap: 12px;
-          }
-
-          .cancel-btn, .submit-btn {
-            width: 100%;
-          }
-
-          .product-actions {
-            flex-direction: column;
-            gap: 8px;
-          }
-
-          .btn-delete {
-            flex: 1;
-          }
-
-          .image-previews {
-            grid-template-columns: repeat(3, 1fr);
-          }
-
-          .modal-title {
-            align-items: center !important;
-            flex-direction: row !important;
-          }
-
-          .move-hint {
-            display: none;
-          }
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        .preview-item {
+            position: relative;
+            width: 100px;
+            height: 100px;
+        }
+        .preview-item img {
+            width: 100%; height: 100%; object-fit: cover; border-radius: 5px;
+        }
+        .preview-item .remove-btn {
+            position: absolute; top: -5px; right: -5px;
+            background: #e74c3c; color: white; border-radius: 50%;
+            width: 20px; height: 20px; border: none; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .preview-item .image-label {
+            position: absolute; bottom: 5px; left: 5px; background: rgba(0,0,0,0.6);
+            color: white; padding: 2px 5px; border-radius: 3px; font-size: 0.7rem;
         }
 
-        @media (max-width: 480px) {
-          .products-dashboard {
-            padding: 8px;
-          }
+        .progress-section { margin-top: 1.5rem; }
+        .progress-bar { width: 100%; background: #eee; border-radius: 5px; height: 10px; }
+        .progress-fill { height: 100%; background: #2ecc71; border-radius: 5px; transition: width 0.3s; }
+        .progress-text { text-align: center; margin-top: 5px; color: #555; }
 
-          .dashboard-header {
-            padding: 16px;
-          }
-
-          .controls-bar {
-            padding: 12px;
-          }
-
-          .products-section {
-            padding: 16px;
-          }
-
-          .draggable-modal {
-            width: calc(100vw - 16px);
-            border-radius: 12px;
-          }
-          
-          .draggable-modal.minimized {
-            width: calc(100vw - 16px) !important;
-          }
-
-          .draggable-modal-body {
-            padding: 12px;
-          }
-
-          .header-left h1 {
-            font-size: 22px;
-          }
-
-          .count {
-            font-size: 16px;
-          }
-
-          .product-name {
-            font-size: 16px;
-          }
-
-          .product-price {
-            font-size: 18px;
-          }
-
-          .modal-controls {
-            gap: 4px;
-          }
-
-          .control-btn {
-            padding: 6px 8px;
-            min-width: 30px;
-            height: 30px;
-            font-size: 12px;
-          }
-          
-          .draggable-modal.minimized .control-btn {
-            min-width: 28px !important;
-            height: 28px !important;
-            padding: 4px 6px !important;
-          }
-
-          .image-previews {
-            grid-template-columns: repeat(2, 1fr);
-            gap: 8px;
-          }
+        .form-actions {
+            margin-top: 2rem;
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
         }
-
-        @media (max-width: 360px) {
-          .draggable-modal-header {
-            padding: 12px 16px;
-          }
-          
-          .draggable-modal.minimized .draggable-modal-header {
-            padding: 10px 16px !important;
-          }
-
-          .modal-title h3 {
-            font-size: 16px;
-          }
-          
-          .draggable-modal.minimized .modal-title h3 {
-            font-size: 14px !important;
-            max-width: 150px !important;
-          }
-
-          .drag-icon {
-            font-size: 14px;
-          }
-
-          .form-group input {
-            padding: 10px;
-          }
-
-          .upload-btn {
-            padding: 10px 16px;
-          }
+        .cancel-btn, .submit-btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: bold;
         }
+        .cancel-btn { background-color: #ecf0f1; color: #34495e; }
+        .submit-btn { background-color: #27ae60; color: white; }
 
-        /* Accessibility improvements */
-        @media (prefers-reduced-motion: reduce) {
-          *, *::before, *::after {
-            animation-duration: 0.01ms !important;
-            animation-iteration-count: 1 !important;
-            transition-duration: 0.01ms !important;
-          }
-          
-          .drag-icon {
-            animation: none !important;
-          }
-          
-          .move-hint {
-            animation: none !important;
-          }
-        }
-
-        /* High contrast mode support */
-        @media (prefers-contrast: high) {
-          .draggable-modal {
-            border: 3px solid #000;
-          }
-          
-          .control-btn {
-            border: 2px solid rgba(255, 255, 255, 0.5);
-          }
-        }
-
-        /* Focus management for accessibility */
-        .control-btn:focus {
-          outline: 2px solid rgba(255, 255, 255, 0.8);
-          outline-offset: 2px;
-        }
-
-        .draggable-handle:focus {
-          outline: 2px solid rgba(255, 255, 255, 0.8);
-          outline-offset: -2px;
-        }
+        .empty-state { text-align: center; padding: 4rem 2rem; color: #7f8c8d; }
+        .empty-icon { font-size: 4rem; margin-bottom: 1rem; }
       `}</style>
     </div>
   );

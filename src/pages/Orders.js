@@ -65,23 +65,43 @@ const CompanyOrdersTable = () => {
   };
 
   // Get product name from order
+   // Get product name from order
   const getProductName = (order) => {
-    // If order has direct productName, use it
+    // 1. Check for product info in the 'items' array first.
+    if (order.items && order.items.length > 0) {
+      const firstItem = order.items[0];
+      
+      // Use the name from the item if it exists.
+      if (firstItem.productName) {
+        return firstItem.productName;
+      }
+      
+      // If not, use the productId from the item to check your cache.
+      if (firstItem.productId) {
+        const product = products[firstItem.productId];
+        if (product && product.name) {
+          return product.name;
+        }
+        // If the product is being fetched, it will show 'Loading...'
+        return 'Loading...';
+      }
+    }
+    
+    // 2. Fallback for older order structures (your original logic).
     if (order.productName) return order.productName;
     
-    // If order has productId, try to get from products cache
     if (order.productId) {
       const product = products[order.productId];
       if (product && product.name) {
         return product.name;
       }
-      // If not in cache yet, show loading
       return 'Loading...';
     }
     
-    // Fallback
+    // 3. If no product info is found anywhere.
     return 'N/A';
   };
+
 
   // Format address helper function
   const formatAddress = (address) => {

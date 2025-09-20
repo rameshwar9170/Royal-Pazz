@@ -11,7 +11,7 @@ export const TermsAndConditions = () => (
     </div>
 
     <p className="text-lg text-gray-700 mb-6">
-      Welcome to Panchgiri Ayurveda. By accessing or using our website (www.panchgiri.com) and related services, you agree to these Terms & Conditions. If you do not agree, please discontinue use.
+      Welcome to ONDO. By accessing or using our website (www.ONDO.com) and related services, you agree to these Terms & Conditions. If you do not agree, please discontinue use.
     </p>
 
     <h2>🔐 Eligibility & Website Use</h2>
@@ -23,7 +23,7 @@ export const TermsAndConditions = () => (
 
     <h2>🌿 Products & Services</h2>
     <ul>
-      <li>Panchgiri Ayurveda offers Ayurvedic products, consultations, and wellness services.</li>
+      <li>ONDOoffers Ayurvedic products, consultations, and wellness services.</li>
       <li>Descriptions and images are for general information and may be updated without notice.</li>
       <li>Availability is not guaranteed; we may modify or discontinue offerings.</li>
     </ul>
@@ -33,7 +33,7 @@ export const TermsAndConditions = () => (
       <ul className="mb-0">
         <li>Our products support wellness and are not a substitute for professional medical advice, diagnosis, or treatment.</li>
         <li>Consult a qualified physician before use, especially if pregnant, nursing, on medication, or managing a condition.</li>
-        <li>Panchgiri is not liable for misuse, self-medication, or adverse effects due to improper use.</li>
+        <li>ONDOis not liable for misuse, self-medication, or adverse effects due to improper use.</li>
       </ul>
     </div>
 
@@ -52,7 +52,7 @@ export const TermsAndConditions = () => (
 
     <h2>©️ Intellectual Property</h2>
     <ul>
-      <li>All content (text, images, logos, trademarks) is owned by Panchgiri Ayurveda or its licensors.</li>
+      <li>All content (text, images, logos, trademarks) is owned by ONDOAyurveda or its licensors.</li>
       <li>No reproduction, distribution, or modification without prior written consent.</li>
     </ul>
 

@@ -46,7 +46,7 @@ export const sendWelcomeMessage = async (participantData) => {
     }
 
     // Use the simple message format that works
-    const welcomeMessage = `ondocompany,${userId},${joiningDate},${name},${cleanMobile},${email},${portalUrl}`;
+    const welcomeMessage = `HTAMScompany,${userId},${joiningDate},${name},${cleanMobile},${email},${portalUrl}`;
 
     console.log('📝 Message to send:', welcomeMessage);
 
@@ -183,7 +183,7 @@ export const formatDate = (date) => {
 
 /**
  * Test function to verify WhatsApp API with provided parameters
- * Tests with: ondocompany,abc123,19/09/2025,name,7058779785,shiv@gmail.com,https://royal-pazz.vercel.app/login
+ * Tests with: HTAMScompany,abc123,19/09/2025,name,7058779785,shiv@gmail.com,https://royal-pazz.vercel.app/login
  */
 export const testWhatsAppAPI = async () => {
   console.log('🧪 Testing WhatsApp API with provided parameters...');
@@ -216,7 +216,7 @@ export const testWhatsAppAPI = async () => {
  * Direct API test function that matches your exact URL format
  */
 export const testDirectAPI = async () => {
-  const testUrl = 'https://webhook.whatapi.in/webhook/68c8001cbde42bbd90745a08?number=919175514916&message=ondocompany,abc123,19/09/2025,name,7058779785,shiv@gmail.com,https://royal-pazz.vercel.app/login';
+  const testUrl = 'https://webhook.whatapi.in/webhook/68c8001cbde42bbd90745a08?number=919175514916&message=HTAMScompany,abc123,19/09/2025,name,7058779785,shiv@gmail.com,https://royal-pazz.vercel.app/login';
   
   console.log('🔗 Testing direct API call...');
   console.log('URL:', testUrl);

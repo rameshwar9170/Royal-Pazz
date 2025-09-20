@@ -393,7 +393,7 @@ const WithdrawRequest = () => {
           margin-bottom: 30px;
           box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
-
+        
         .withdraw-form-card h2, .history-card h2 {
           margin: 0 0 24px 0;
           font-size: 1.5rem;

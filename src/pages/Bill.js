@@ -33,7 +33,7 @@ const Bill = () => {
 
   return (
     <div className="bill-container" style={{ maxWidth: 600, margin: 'auto', padding: 20, background: '#fff' }}>
-      <h2>HTAMS Product Invoice</h2>
+      <h2>ONDO Product Invoice</h2>
       <p><strong>Bill To:</strong> {agencyData.name}</p>
       <p><strong>Email:</strong> {agencyData.email}</p>
       <p><strong>Phone:</strong> {agencyData.phone}</p>

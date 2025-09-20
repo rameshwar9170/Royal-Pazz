@@ -745,77 +745,78 @@ const Customers = () => {
                 </div>
               </div>
 
-              <div className="detail-section">
-                <h4>📦 Customer Orders</h4>
-                {loadingOrders ? (
-                  <div className="loading-orders">
-                    <div className="spinner"></div>
-                    <p>Loading orders...</p>
-                  </div>
-                ) : customerOrders.length > 0 ? (
-                  <div className="orders-list">
-                    {customerOrders.map((order, index) => (
-                      <div key={order.id} className="order-item">
-                        <div className="order-header">
-                          <span className="order-number">Order #{index + 1}</span>
-                          <span className="order-id">ID: {order.id}</span>
-                        </div>
-                        <div className="order-details">
-                          <div className="order-detail">
-                            <label>Product:</label>
-                            <span>{order.productName || order.product || 'N/A'}</span>
-                          </div>
-                          <div className="order-detail">
-                            <label>Quantity:</label>
-                            <span>{order.quantity || 'N/A'}</span>
-                          </div>
-                          <div className="order-detail">
-                            <label>Amount:</label>
-                            <span>₹{order.totalAmount || order.amount || '0'}</span>
-                          </div>
-                          <div className="order-detail">
-                            <label>Date:</label>
-                            <span>
-                              {order.date 
-                                ? new Date(order.date).toLocaleDateString() 
-                                : order.createdAt 
-                                ? new Date(order.createdAt).toLocaleDateString()
-                                : 'N/A'
-                              }
-                            </span>
-                          </div>
-                          <div className="order-detail">
-                            <label>Status:</label>
-                            <span 
-                              className="order-status"
-                              style={{ backgroundColor: getOrderStatusColor(order.status) }}
-                            >
-                              {order.status || 'N/A'}
-                            </span>
-                          </div>
-                          {order.paymentMethod && (
-                            <div className="order-detail">
-                              <label>Payment:</label>
-                              <span>{order.paymentMethod}</span>
-                            </div>
-                          )}
-                          {order.placedBy && (
-                            <div className="order-detail">
-                              <label>Placed By:</label>
-                              <span>{order.placedBy}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="no-orders">
-                    <span className="no-orders-icon">📦</span>
-                    <p>No orders found for this customer</p>
-                  </div>
-                )}
+            <div className="detail-section">
+  <h4>📦 Customer Orders</h4>
+  {loadingOrders ? (
+    <div className="loading-orders">
+      <div className="spinner"></div>
+      <p>Loading orders...</p>
+    </div>
+  ) : customerOrders.length > 0 ? (
+    <div className="orders-list">
+      {customerOrders.map((order, index) => (
+        <div key={order.id} className="order-item">
+          <div className="order-header">
+            <span className="order-number">Order #{index + 1}</span>
+            <span className="order-id">ID: {order.id}</span>
+          </div>
+
+          {/* This part correctly displays each item in the order */}
+          {order.items && order.items.map((item, itemIndex) => (
+            <div key={itemIndex} className="order-details">
+              <div className="order-detail">
+                <label>Product:</label>
+                {/* FIX: Accessing productName from the item object */}
+                <span>{item.productName || 'N/A'}</span>
               </div>
+              <div className="order-detail">
+                <label>Quantity:</label>
+                {/* FIX: Accessing quantity from the item object */}
+                <span>{item.quantity || 'N/A'}</span>
+              </div>
+              <div className="order-detail">
+                <label>Amount:</label>
+                 {/* FIX: Accessing totalAmount from the main order object */}
+                <span>₹{order.totalAmount?.toLocaleString('en-IN') || '0'}</span>
+              </div>
+              <div className="order-detail">
+                <label>Date:</label>
+                {/* FIX: Using orderDate and formatting it */}
+                <span>
+                  {order.orderDate 
+                    ? new Date(order.orderDate).toLocaleDateString() 
+                    : 'N/A'
+                  }
+                </span>
+              </div>
+              <div className="order-detail">
+                <label>Status:</label>
+                <span 
+                  className="order-status"
+                  style={{ backgroundColor: getOrderStatusColor(order.status) }}
+                >
+                  {order.status || 'N/A'}
+                </span>
+              </div>
+            </div>
+          ))}
+
+          {(!order.items || order.items.length === 0) && (
+            <div className="order-details">
+                <p>This order has no items.</p>
+            </div>
+          )}
+
+        </div>
+      ))}
+    </div>
+  ) : (
+    <div className="no-orders">
+      <span className="no-orders-icon">📦</span>
+      <p>No orders found for this customer</p>
+    </div>
+  )}
+</div>
             </div>
 
             <div className="modal-footer">

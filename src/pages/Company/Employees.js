@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ref, push, onValue, set, remove } from 'firebase/database';
-import { database } from '../../firebase/config'; // Fixed: using database instead of db
+// Remove Firebase Auth completely
+import { database } from '../../firebase/config'; // Remove auth import
 import { sendWelcomeMessage, generateUserId, formatDate } from '../../services/whatsappService';
 import { 
   FaPlus, 
@@ -53,9 +54,7 @@ function Employees() {
   
   const toggleForm = () => {
     setIsFormVisible(!isFormVisible);
-    if (isFormVisible) {
-      resetForm();
-    }
+    if (isFormVisible) resetForm();
   };
 
   const resetForm = () => {
@@ -79,7 +78,7 @@ function Employees() {
 
   const closeDetails = () => setSelectedEmployee(null);
 
-  // Validation functions (keeping the same as before)
+  // Simplified validation - email optional for all roles
   const validateField = (name, value) => {
     let error = '';
     
@@ -103,6 +102,7 @@ function Employees() {
         break;
         
       case 'email':
+        // Email is optional for all roles now
         if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
           error = 'Please enter a valid email address';
         }
@@ -166,7 +166,7 @@ function Employees() {
     return error;
   };
 
-  // Input formatters (keeping the same as before)
+  // Input formatters
   const formatInput = (name, value) => {
     switch (name) {
       case 'mobile':
@@ -185,116 +185,115 @@ function Employees() {
     }
   };
 
-  // FIXED: Correct Firebase data processing
+  // Firebase data processing
   useEffect(() => {
-    console.log('🚀 Employee component mounted, starting Firebase connection...');
+    console.log('Employee component mounted, starting Firebase connection...');
     
     const employeeRef = ref(database, 'HTAMS/company/Employees');
-    console.log('🔗 Connecting to Firebase path:', 'HTAMS/company/Employees');
+    console.log('Connecting to Firebase path:', 'HTAMS/company/Employees');
     
-    const unsubscribe = onValue(
-      employeeRef,
-      (snapshot) => {
-        console.log('📥 Firebase snapshot received');
-        console.log('📊 Snapshot exists:', snapshot.exists());
+    const unsubscribe = onValue(employeeRef, (snapshot) => {
+      console.log('Firebase snapshot received');
+      console.log('Snapshot exists:', snapshot.exists());
+      
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        console.log('Raw Firebase data:', data);
         
-        if (snapshot.exists()) {
-          const data = snapshot.val();
-          console.log('👥 Raw Firebase data:', data);
-          
-          let processedData = {};
-          
-          // Check if this is a single employee stored incorrectly (has name, mobile, etc. directly)
-          if (data.name && data.mobile && data.aadhar) {
-            console.log('🔧 Detected single employee stored incorrectly, converting to proper structure');
-            
-            // Create a proper employee ID using mobile number
-            const employeeId = data.mobile;
-            
-            processedData[employeeId] = {
-              name: data.name || 'Unknown',
-              mobile: data.mobile || 'N/A',
-              email: data.email || '',
-              aadhar: data.aadhar || 'N/A',
-              role: data.role || 'Unassigned',
-              joiningDate: data.joiningDate || new Date().toISOString().split('T')[0],
-              shift: data.shift || '',
-              salaryAccount: {
-                accountNo: data.salaryAccount?.accountNo || '',
-                ifscCode: data.salaryAccount?.ifscCode || '',
-                bankName: data.salaryAccount?.bankName || ''
-              },
-              userId: data.userId || '',
-              confirmed: data.confirmed || false,
-              registrationDate: data.registrationDate || new Date().toISOString(),
-              whatsappSent: data.whatsappSent || false,
-              whatsappSentDate: data.whatsappSentDate || ''
-            };
-            
-            console.log('✅ Single employee processed:', processedData);
-          } 
-          // If data has multiple employees with proper IDs as keys
-          else if (typeof data === 'object') {
-            console.log('🔧 Processing multiple employees with proper structure');
-            
-            Object.entries(data).forEach(([id, emp]) => {
-              // Skip if this is not an employee object (has name property)
-              if (emp && typeof emp === 'object' && emp.name) {
-                console.log(`Processing Employee ${id}:`, emp);
-                
-                processedData[id] = {
-                  name: emp.name || 'Unknown',
-                  mobile: emp.mobile || 'N/A',
-                  email: emp.email || '',
-                  aadhar: emp.aadhar || 'N/A',
-                  role: emp.role || 'Unassigned',
-                  joiningDate: emp.joiningDate || new Date().toISOString().split('T')[0],
-                  shift: emp.shift || '',
-                  salaryAccount: {
-                    accountNo: emp.salaryAccount?.accountNo || emp.accountNo || '',
-                    ifscCode: emp.salaryAccount?.ifscCode || emp.ifscCode || '',
-                    bankName: emp.salaryAccount?.bankName || emp.bankName || ''
-                  },
-                  userId: emp.userId || '',
-                  confirmed: emp.confirmed || false,
-                  registrationDate: emp.registrationDate || new Date().toISOString(),
-                  whatsappSent: emp.whatsappSent || false,
-                  whatsappSentDate: emp.whatsappSentDate || ''
-                };
-                
-                console.log(`Processed Employee ${id}:`, processedData[id]);
-              } else {
-                console.log(`Skipping invalid employee data for ${id}:`, emp);
-              }
-            });
-          }
-          
-          console.log('✅ Final processed data:', processedData);
-          console.log('📊 Total valid employees:', Object.keys(processedData).length);
-          
-          setEmployees(processedData);
-          setFilteredEmployees(processedData);
-          
-        } else {
-          console.log('❌ No data at HTAMS/company/Employees/');
-          setEmployees({});
-          setFilteredEmployees({});
+        let processedData = {};
+        
+        // Check if this is a single employee stored incorrectly (has name, mobile, etc. directly)
+        if (data.name && data.mobile && data.aadhar) {
+          console.log('Detected single employee stored incorrectly, converting to proper structure');
+          const employeeId = data.mobile;
+          processedData[employeeId] = {
+            name: data.name || 'Unknown',
+            mobile: data.mobile || 'N/A',
+            email: data.email || '',
+            aadhar: data.aadhar || 'N/A',
+            role: data.role || 'Unassigned',
+            joiningDate: data.joiningDate || new Date().toISOString().split('T')[0],
+            shift: data.shift || '',
+            salaryAccount: {
+              accountNo: data.salaryAccount?.accountNo || '',
+              ifscCode: data.salaryAccount?.ifscCode || '',
+              bankName: data.salaryAccount?.bankName || '',
+            },
+            userId: data.userId || '',
+            confirmed: data.confirmed || false,
+            registrationDate: data.registrationDate || new Date().toISOString(),
+            whatsappSent: data.whatsappSent || false,
+            whatsappSentDate: data.whatsappSentDate || '',
+            // Login credentials - NO authentication
+            defaultPassword: data.mobile || data.defaultPassword, // Mobile as default password
+            passwordChanged: data.passwordChanged || false,
+            lastLoginAt: data.lastLoginAt || null,
+            loginEnabled: true,
+            firstTime: false // No auth setup needed
+          };
+          console.log('Single employee processed:', processedData);
+        } 
+        // If data has multiple employees with proper IDs as keys
+        else if (typeof data === 'object') {
+          console.log('Processing multiple employees with proper structure');
+          Object.entries(data).forEach(([id, emp]) => {
+            // Skip if this is not an employee object (has name property)
+            if (emp && typeof emp === 'object' && emp.name) {
+              console.log(`Processing Employee ${id}:`, emp);
+              processedData[id] = {
+                name: emp.name || 'Unknown',
+                mobile: emp.mobile || 'N/A',
+                email: emp.email || '',
+                aadhar: emp.aadhar || 'N/A',
+                role: emp.role || 'Unassigned',
+                joiningDate: emp.joiningDate || new Date().toISOString().split('T')[0],
+                shift: emp.shift || '',
+                salaryAccount: {
+                  accountNo: emp.salaryAccount?.accountNo || emp.accountNo || '',
+                  ifscCode: emp.salaryAccount?.ifscCode || emp.ifscCode || '',
+                  bankName: emp.salaryAccount?.bankName || emp.bankName || '',
+                },
+                userId: emp.userId || '',
+                confirmed: emp.confirmed || false,
+                registrationDate: emp.registrationDate || new Date().toISOString(),
+                whatsappSent: emp.whatsappSent || false,
+                whatsappSentDate: emp.whatsappSentDate || '',
+                // Login credentials - NO authentication
+                defaultPassword: emp.mobile || emp.defaultPassword,
+                passwordChanged: emp.passwordChanged || false,
+                lastLoginAt: emp.lastLoginAt || null,
+                loginEnabled: emp.loginEnabled !== undefined ? emp.loginEnabled : true,
+                firstTime: false // No auth setup needed
+              };
+              console.log(`Processed Employee ${id}:`, processedData[id]);
+            } else {
+              console.log(`Skipping invalid employee data for ${id}:`, emp);
+            }
+          });
         }
-      },
-      (error) => {
-        console.error('❌ Firebase connection error:', error);
-        console.error('Error code:', error.code);
-        console.error('Error message:', error.message);
         
+        console.log('Final processed data:', processedData);
+        console.log('Total valid employees:', Object.keys(processedData).length);
+        
+        setEmployees(processedData);
+        setFilteredEmployees(processedData);
+      } else {
+        console.log('No data at HTAMS/company/Employees');
         setEmployees({});
         setFilteredEmployees({});
       }
-    );
-  
-    console.log('🎯 Firebase listener attached, waiting for data...');
+    }, (error) => {
+      console.error('Firebase connection error:', error);
+      console.error('Error code:', error.code);
+      console.error('Error message:', error.message);
+      setEmployees({});
+      setFilteredEmployees({});
+    });
+    
+    console.log('Firebase listener attached, waiting for data...');
     
     return () => {
-      console.log('🧹 Cleaning up Firebase listener');
+      console.log('Cleaning up Firebase listener');
       unsubscribe();
     };
   }, []);
@@ -304,7 +303,7 @@ function Employees() {
     const formattedValue = formatInput(name, value);
     
     if (['accountNo', 'ifscCode', 'bankName'].includes(name)) {
-      setForm((prev) => ({
+      setForm(prev => ({
         ...prev,
         salaryAccount: {
           ...prev.salaryAccount,
@@ -318,7 +317,7 @@ function Employees() {
         [name]: error
       }));
     } else {
-      setForm((prev) => ({
+      setForm(prev => ({
         ...prev,
         [name]: formattedValue
       }));
@@ -345,28 +344,38 @@ function Employees() {
         if (error) newErrors[key] = error;
       }
     });
-    
+
+    // Check for duplicate mobile and aadhar
     const existingEmployees = Object.entries(employees);
-    
     const mobileExists = existingEmployees.find(([id, emp]) => 
       emp.mobile === form.mobile && (!editingId || id !== editingId)
     );
     if (mobileExists) {
       newErrors.mobile = 'This mobile number is already registered';
     }
-    
+
     const aadharExists = existingEmployees.find(([id, emp]) => 
       emp.aadhar === form.aadhar && (!editingId || id !== editingId)
     );
     if (aadharExists) {
       newErrors.aadhar = 'This Aadhar number is already registered';
     }
-    
+
+    // Check for duplicate email if provided
+    if (form.email) {
+      const emailExists = existingEmployees.find(([id, emp]) => 
+        emp.email === form.email && (!editingId || id !== editingId)
+      );
+      if (emailExists) {
+        newErrors.email = 'This email is already registered';
+      }
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  // MODIFIED: Submit handler to use mobile number as employee ID
+  // SIMPLIFIED Submit handler - NO Firebase Authentication
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -374,12 +383,12 @@ function Employees() {
       alert('Please fix all validation errors before submitting');
       return;
     }
-    
-    setLoading(true);
 
+    setLoading(true);
     try {
       const userId = !editingId ? generateUserId(form) : form.userId || generateUserId(form);
-      
+
+      // Create employee data without authentication
       const employeeData = {
         name: form.name.trim(),
         mobile: form.mobile,
@@ -391,15 +400,21 @@ function Employees() {
         salaryAccount: {
           accountNo: form.salaryAccount.accountNo,
           ifscCode: form.salaryAccount.ifscCode.toUpperCase(),
-          bankName: form.salaryAccount.bankName.trim()
+          bankName: form.salaryAccount.bankName.trim(),
         },
         userId: userId,
         confirmed: editingId ? form.confirmed : true,
         registrationDate: editingId ? form.registrationDate : new Date().toISOString(),
-        whatsappSent: editingId ? form.whatsappSent : false
+        whatsappSent: editingId ? form.whatsappSent : false,
+        // Login credentials for all roles - NO authentication
+        defaultPassword: form.mobile, // Use mobile as default password
+        passwordChanged: false, // Track if user changed password
+        lastLoginAt: null,
+        loginEnabled: true, // All employees can login
+        firstTime: false // Set to false since no auth setup needed
       };
 
-      console.log('💾 Saving employee data:', employeeData);
+      console.log('Saving employee data:', employeeData);
 
       if (editingId) {
         // Update existing employee
@@ -407,15 +422,14 @@ function Employees() {
         await set(employeeRef, employeeData);
         alert('Employee updated successfully!');
       } else {
-        // CHANGED: Add new employee with mobile number as ID
-        const newEmployeeId = form.mobile; // Using mobile number directly
+        // Add new employee with mobile number as ID
+        const newEmployeeId = form.mobile;
         const employeeRef = ref(database, `HTAMS/company/Employees/${newEmployeeId}`);
         await set(employeeRef, employeeData);
-        
+
         // Send WhatsApp message for new employees
-        console.log('🔄 Starting WhatsApp process for new employee...');
+        console.log('Starting WhatsApp process for new employee...');
         setWhatsappLoading(true);
-        
         try {
           const participantData = {
             userId: userId,
@@ -424,45 +438,50 @@ function Employees() {
             mobile: form.mobile,
             email: form.email || 'N/A',
             role: form.role,
-            portalUrl: 'https://royal-pazz.vercel.app/login'
+            portalUrl: 'https://royal-pazz.vercel.app/employee-login', // Updated URL
+            hasAuth: false, // No Firebase Auth
+            defaultPassword: form.mobile, // Mobile number as password
+            loginInstructions: `Login with Email: ${form.email} and Password: ${form.mobile}`
           };
 
-          console.log('📋 Participant data prepared:', participantData);
+          console.log('Participant data prepared:', participantData);
           const messageSent = await sendWelcomeMessage(participantData);
-          console.log('📥 Message sent result:', messageSent);
-          
+          console.log('Message sent result:', messageSent);
+
           if (messageSent) {
             const updatedData = {
               ...employeeData,
               whatsappSent: true,
               whatsappSentDate: new Date().toISOString()
             };
-            
             await set(employeeRef, updatedData);
-            alert(`✅ Employee added successfully!\n📱 Welcome message sent to WhatsApp: +91${form.mobile}`);
+            
+            let successMessage = `Employee added successfully! Login details sent to WhatsApp: +91${form.mobile}`;
+            alert(successMessage);
           } else {
-            alert(`✅ Employee added successfully!\n⚠️ WhatsApp message failed to send.`);
+            alert(`Employee added successfully! WhatsApp message failed to send.`);
           }
         } catch (whatsappError) {
-          console.error('❌ WhatsApp sending error:', whatsappError);
-          alert(`✅ Employee added successfully!\n⚠️ WhatsApp message failed to send: ${whatsappError.message}`);
+          console.error('WhatsApp sending error:', whatsappError);
+          alert(`Employee added successfully! WhatsApp message failed to send: ${whatsappError.message}`);
         } finally {
           setWhatsappLoading(false);
         }
       }
-      
+
       resetForm();
       setIsFormVisible(false);
     } catch (err) {
-      console.error('💾 Error saving employee:', err);
-      alert('Error: ' + err.message);
+      console.error('Error saving employee:', err);
+      alert(`Error: ${err.message}`);
     } finally {
       setLoading(false);
     }
   };
 
+  // Keep all your existing handler functions
   const handleEdit = (id, emp) => {
-    console.log('✏️ Editing employee:', id, emp);
+    console.log('Editing employee:', id, emp);
     setForm(emp);
     setEditingId(id);
     setIsFormVisible(true);
@@ -470,14 +489,14 @@ function Employees() {
   };
 
   const handleDelete = async (id, name) => {
-    if (window.confirm(`Are you sure you want to delete employee: ${name}?`)) {
+    if (window.confirm(`Are you sure you want to delete employee ${name}?`)) {
       setLoading(true);
       const employeeRef = ref(database, `HTAMS/company/Employees/${id}`);
       try {
         await remove(employeeRef);
         alert(`Employee ${name} deleted successfully!`);
       } catch (err) {
-        alert('Error: ' + err.message);
+        alert(`Error: ${err.message}`);
       } finally {
         setLoading(false);
       }
@@ -498,7 +517,10 @@ function Employees() {
           mobile: employee.mobile,
           email: employee.email || 'N/A',
           role: employee.role,
-          portalUrl: 'https://royal-pazz.vercel.app/login'
+          portalUrl: 'https://royal-pazz.vercel.app/employee-login',
+          hasAuth: false, // No authentication
+          defaultPassword: employee.mobile, // Mobile as password
+          loginInstructions: `Login with Email: ${employee.email} and Password: ${employee.mobile}`
         };
 
         const messageSent = await sendWelcomeMessage(participantData);
@@ -513,13 +535,14 @@ function Employees() {
             whatsappSent: true
           });
           
-          alert(`✅ ${employee.name} confirmed successfully!\n📱 Welcome message sent to WhatsApp: +91${employee.mobile}`);
+          let successMessage = `${employee.name} confirmed successfully! Welcome message sent to WhatsApp: +91${employee.mobile}`;
+          alert(successMessage);
         } else {
-          alert('❌ Failed to send WhatsApp message. Please try again.');
+          alert('Failed to send WhatsApp message. Please try again.');
         }
       } catch (error) {
         console.error('Error confirming participant:', error);
-        alert('❌ Error confirming participant: ' + error.message);
+        alert(`Error confirming participant: ${error.message}`);
       } finally {
         setConfirmingEmployee(null);
         setWhatsappLoading(false);
@@ -528,7 +551,7 @@ function Employees() {
   };
 
   const handleRowClick = (emp) => {
-    console.log('👁️ Viewing employee details:', emp);
+    console.log('Viewing employee details:', emp);
     setSelectedEmployee(emp);
   };
 
@@ -538,11 +561,13 @@ function Employees() {
       const nameMatch = emp.name?.toLowerCase().includes(query) || false;
       const mobileMatch = emp.mobile?.includes(query) || false;
       const roleMatch = emp.role?.toLowerCase().includes(query) || false;
+      
       if (nameMatch || mobileMatch || roleMatch) {
         acc[id] = emp;
       }
       return acc;
     }, {});
+    
     setFilteredEmployees(filtered);
   };
 
@@ -553,9 +578,7 @@ function Employees() {
 
   // Enhanced display helper function
   const getDisplayValue = (value, fallback = 'N/A') => {
-    if (value === null || value === undefined || value === '') {
-      return fallback;
-    }
+    if (value === null || value === undefined || value === '') return fallback;
     return value;
   };
 
@@ -579,7 +602,7 @@ function Employees() {
         </div>
       </div>
 
-      {/* Form section - keeping the same structure as your original code */}
+      {/* Form section */}
       {isFormVisible && (
         <div className="form-container">
           <div className="form-header">
@@ -590,7 +613,7 @@ function Employees() {
               <FaTimes />
             </button>
           </div>
-          
+
           <form onSubmit={handleSubmit} className="employee-form">
             <div className="form-section">
               <h3 className="section-title">Personal Information</h3>
@@ -598,7 +621,7 @@ function Employees() {
                 <div className="form-group">
                   <label htmlFor="name" className="form-label">
                     <FaUser className="label-icon" />
-                    Full Name *
+                    Full Name
                   </label>
                   <input
                     id="name"
@@ -616,7 +639,7 @@ function Employees() {
                 <div className="form-group">
                   <label htmlFor="mobile" className="form-label">
                     <FaPhone className="label-icon" />
-                    Mobile Number *
+                    Mobile Number
                   </label>
                   <input
                     id="mobile"
@@ -634,7 +657,7 @@ function Employees() {
                 <div className="form-group">
                   <label htmlFor="email" className="form-label">
                     <FaEnvelope className="label-icon" />
-                    Email Address
+                    Email Address (Optional)
                   </label>
                   <input
                     id="email"
@@ -651,7 +674,7 @@ function Employees() {
                 <div className="form-group">
                   <label htmlFor="aadhar" className="form-label">
                     <FaIdCard className="label-icon" />
-                    Aadhar Number *
+                    Aadhar Number
                   </label>
                   <input
                     id="aadhar"
@@ -674,7 +697,7 @@ function Employees() {
                 <div className="form-group">
                   <label htmlFor="role" className="form-label">
                     <FaBriefcase className="label-icon" />
-                    Role *
+                    Role
                   </label>
                   <select
                     id="role"
@@ -698,7 +721,7 @@ function Employees() {
                 <div className="form-group">
                   <label htmlFor="joiningDate" className="form-label">
                     <FaCalendar className="label-icon" />
-                    Joining Date *
+                    Joining Date
                   </label>
                   <input
                     id="joiningDate"
@@ -737,7 +760,7 @@ function Employees() {
                 <div className="form-group">
                   <label htmlFor="bankName" className="form-label">
                     <FaUniversity className="label-icon" />
-                    Bank Name *
+                    Bank Name
                   </label>
                   <input
                     id="bankName"
@@ -754,7 +777,7 @@ function Employees() {
 
                 <div className="form-group">
                   <label htmlFor="accountNo" className="form-label">
-                    Account Number *
+                    Account Number
                   </label>
                   <input
                     id="accountNo"
@@ -771,7 +794,7 @@ function Employees() {
 
                 <div className="form-group">
                   <label htmlFor="ifscCode" className="form-label">
-                    IFSC Code *
+                    IFSC Code
                   </label>
                   <input
                     id="ifscCode"
@@ -792,23 +815,24 @@ function Employees() {
               <button 
                 type="button" 
                 onClick={toggleForm} 
-                className="secondary-btn"
+                className="secondary-btn" 
                 disabled={loading}
               >
                 Cancel
               </button>
               <button 
                 type="submit" 
-                className="primary-btn"
+                className="primary-btn" 
                 disabled={loading}
               >
-                {loading ? 'Saving...' : (editingId ? 'Update Employee' : 'Add Employee')}
+                {loading ? 'Saving...' : editingId ? 'Update Employee' : 'Add Employee'}
               </button>
             </div>
           </form>
         </div>
       )}
 
+      {/* Search and table sections - keeping your existing layout */}
       <div className="content-container">
         <div className="search-section">
           <div className="search-container">
@@ -842,19 +866,6 @@ function Employees() {
           <div className="table-header">
             <h3 className="table-title">All Employees ({Object.keys(filteredEmployees).length})</h3>
           </div>
-          
-          {/* Debug section - remove this in production */}
-          <div style={{padding: '10px', background: '#f0f8ff', margin: '10px', borderRadius: '5px', fontSize: '12px'}}>
-            <strong>Debug Info:</strong>
-            <div>Total employees in state: {Object.keys(employees).length}</div>
-            <div>Filtered employees: {Object.keys(filteredEmployees).length}</div>
-            <button onClick={() => {
-              console.log('🔍 Current employees state:', employees);
-              console.log('🔍 Current filteredEmployees state:', filteredEmployees);
-            }} style={{marginTop: '5px', padding: '4px 8px', background: '#007bff', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', fontSize: '10px'}}>
-              Console Log Data
-            </button>
-          </div>
 
           {/* Mobile Card View */}
           <div className="mobile-cards">
@@ -869,6 +880,7 @@ function Employees() {
                     {getDisplayValue(emp.role?.toUpperCase())}
                   </span>
                 </div>
+                
                 <div className="card-body">
                   <div className="contact-info">
                     <div className="contact-item">
@@ -880,6 +892,7 @@ function Employees() {
                       <span>{getDisplayValue(emp.email)}</span>
                     </div>
                   </div>
+                  
                   <div className="employment-info">
                     <div className="info-item">
                       <FaCalendar className="info-icon" />
@@ -891,34 +904,26 @@ function Employees() {
                     </div>
                   </div>
                 </div>
+                
                 <div className="card-actions">
-                  <button
-                    className="action-btn view-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleRowClick(emp);
-                    }}
+                  <button 
+                    className="action-btn view-btn" 
+                    onClick={(e) => {e.stopPropagation(); handleRowClick(emp);}} 
                     title="View Employee"
                   >
                     👁️
                   </button>
-                  <button
-                    className="action-btn edit-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleEdit(id, emp);
-                    }}
+                  <button 
+                    className="action-btn edit-btn" 
+                    onClick={(e) => {e.stopPropagation(); handleEdit(id, emp);}} 
                     title="Edit Employee"
                   >
                     ✏️
                   </button>
                   {!emp.confirmed && (
-                    <button
-                      className="action-btn confirm-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleConfirmParticipant(id, emp);
-                      }}
+                    <button 
+                      className="action-btn confirm-btn" 
+                      onClick={(e) => {e.stopPropagation(); handleConfirmParticipant(id, emp);}} 
                       title="Confirm Participant & Send WhatsApp"
                       disabled={confirmingEmployee === id || whatsappLoading}
                     >
@@ -926,20 +931,17 @@ function Employees() {
                     </button>
                   )}
                   {emp.confirmed && (
-                    <button
-                      className="action-btn confirmed-btn"
-                      title="Participant Confirmed"
+                    <button 
+                      className="action-btn confirmed-btn" 
+                      title="Participant Confirmed" 
                       disabled
                     >
                       ✅
                     </button>
                   )}
-                  <button
-                    className="action-btn delete-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDelete(id, emp.name);
-                    }}
+                  <button 
+                    className="action-btn delete-btn" 
+                    onClick={(e) => {e.stopPropagation(); handleDelete(id, emp.name);}} 
                     title="Delete Employee"
                   >
                     🗑️
@@ -978,41 +980,32 @@ function Employees() {
                     </td>
                     <td className="contact-cell">
                       <div className="contact-info">
-                        <div className="phone">📞 {getDisplayValue(emp.mobile)}</div>
-                        <div className="email">📧 {getDisplayValue(emp.email)}</div>
+                        <div className="phone">{getDisplayValue(emp.mobile)}</div>
+                        <div className="email">{getDisplayValue(emp.email)}</div>
                       </div>
                     </td>
                     <td>{emp.joiningDate ? new Date(emp.joiningDate).toLocaleDateString() : 'N/A'}</td>
                     <td>{getDisplayValue(emp.shift)}</td>
                     <td>
                       <div className="action-buttons">
-                        <button
-                          className="action-btn view-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRowClick(emp);
-                          }}
+                        <button 
+                          className="action-btn view-btn" 
+                          onClick={(e) => {e.stopPropagation(); handleRowClick(emp);}} 
                           title="View Employee"
                         >
                           👁️
                         </button>
-                        <button
-                          className="action-btn edit-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEdit(id, emp);
-                          }}
+                        <button 
+                          className="action-btn edit-btn" 
+                          onClick={(e) => {e.stopPropagation(); handleEdit(id, emp);}} 
                           title="Edit Employee"
                         >
                           ✏️
                         </button>
                         {!emp.confirmed && (
-                          <button
-                            className="action-btn confirm-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleConfirmParticipant(id, emp);
-                            }}
+                          <button 
+                            className="action-btn confirm-btn" 
+                            onClick={(e) => {e.stopPropagation(); handleConfirmParticipant(id, emp);}} 
                             title="Confirm Participant & Send WhatsApp"
                             disabled={confirmingEmployee === id || whatsappLoading}
                           >
@@ -1020,20 +1013,17 @@ function Employees() {
                           </button>
                         )}
                         {emp.confirmed && (
-                          <button
-                            className="action-btn confirmed-btn"
-                            title="Participant Confirmed"
+                          <button 
+                            className="action-btn confirmed-btn" 
+                            title="Participant Confirmed" 
                             disabled
                           >
                             ✅
                           </button>
                         )}
-                        <button
-                          className="action-btn delete-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(id, emp.name);
-                          }}
+                        <button 
+                          className="action-btn delete-btn" 
+                          onClick={(e) => {e.stopPropagation(); handleDelete(id, emp.name);}} 
                           title="Delete Employee"
                         >
                           🗑️
@@ -1050,7 +1040,7 @@ function Employees() {
             <div className="empty-state">
               <FaUser className="empty-icon" />
               <h3>No employees found</h3>
-              <p>The data structure might be incorrect. Check the debug info above.</p>
+              <p>Add employees using the "Add Employee" button above.</p>
             </div>
           )}
         </div>
@@ -1161,6 +1151,7 @@ function Employees() {
           </div>
         </div>
       )}
+  
 
 
 

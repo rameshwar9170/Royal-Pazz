@@ -5,7 +5,7 @@ import { ref, get } from 'firebase/database';
 import { auth, database } from '../firebase/config';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import './CALogin.css';
+// import './CALogin.css';
 
 const CALogin = () => {
   const [formData, setFormData] = useState({
@@ -110,7 +110,7 @@ const CALogin = () => {
         </form>
 
         <div className="ca-login-footer">
-          <p>For CA access only • HTAMS System</p>
+          <p>For CA access only • ONDO System</p>
         </div>
       </div>
       <style jsx>{`/* CALogin.css */

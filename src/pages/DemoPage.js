@@ -4,35 +4,21 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { ref, get, set, serverTimestamp } from 'firebase/database';
 import { auth, db } from '../firebase/config';
 import {
-    FaUser,
-    FaBoxOpen,
-    FaPhone,
-    FaMapMarkerAlt,
-    FaPalette,
-    FaShareAlt,
-    FaSave,
-    FaEye,
-    FaTimes,
-    FaPlusCircle,
-    FaTrashAlt,
-    FaRocket,
-    FaImage,
-    FaCheck,
-    FaStar,
-    FaGlobe,
-    FaHeart,
-    FaExternalLinkAlt,
-    FaChartLine,
-    FaAward,
-    FaShieldAlt
+    FaUser, FaBoxOpen, FaPhone, FaMapMarkerAlt, FaPalette, FaShareAlt,
+    FaSave, FaEye, FaTimes, FaPlusCircle, FaTrashAlt, FaRocket,
+    FaImage, FaCheck, FaStar, FaGlobe, FaHeart, FaExternalLinkAlt,
+    FaChartLine, FaAward, FaShieldAlt
 } from 'react-icons/fa';
 import "../styles/DemoPage.css";
 
+// FIX: 'price' has been renamed to 'mrp' for consistency.
 const initialProduct = {
+    selectedCompanyProduct: '',
+    companyProductData: null,
     title: '',
     description: '',
     imageUrl: '',
-    price: '',
+    mrp: '',
     about: '',
 };
 
@@ -78,6 +64,8 @@ const DemoPage = () => {
     const [completedSections, setCompletedSections] = useState(new Set());
     const [isDataSaved, setIsDataSaved] = useState(false);
     const [previewUrl, setPreviewUrl] = useState('');
+    const [companyProducts, setCompanyProducts] = useState([]);
+    const [loadingProducts, setLoadingProducts] = useState(false);
 
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, async (user) => {
@@ -88,16 +76,26 @@ const DemoPage = () => {
             setUid(user.uid);
             setPreviewUrl(`/preview/${user.uid}`);
             try {
-                const snap = await get(ref(db, `HTAMS/WebBuilder/${user.uid}`));
+                const snap = await get(ref(db, `HTAMS/users/${user.uid}/webBuilder`));
                 if (snap.exists()) {
                     const existing = snap.val();
                     if (existing.product && !existing.products) {
                         existing.products = [existing.product];
                         delete existing.product;
                     }
+                    
+                    if (existing.products) {
+                        existing.products = existing.products.map(product => ({
+                            ...initialProduct,
+                            ...product
+                        }));
+                    }
+                    
                     setFormData((prev) => deepMerge(initialForm, existing));
                     setIsDataSaved(true);
                 }
+                
+                await loadCompanyProducts();
             } catch (e) {
                 console.error('Failed to load existing data:', e);
                 showToast('error', 'Failed to load your data');
@@ -112,15 +110,19 @@ const DemoPage = () => {
     useEffect(() => {
         const completed = new Set();
 
-        if (formData.owner.name.trim()) completed.add('personal');
+        if (formData.owner.name && formData.owner.name.trim()) completed.add('personal');
 
+        // FIX: Validation now checks for 'mrp' instead of 'price'.
         if (formData.products.length > 0 && formData.products.every(p =>
-            p.title.trim() && p.price.trim() && p.description.trim()
+            (p.selectedCompanyProduct && p.selectedCompanyProduct.trim()) && 
+            (p.title && p.title.trim()) && 
+            (p.mrp && p.mrp.toString().trim()) && 
+            (p.description && p.description.trim())
         )) completed.add('products');
 
-        if (formData.contact.phone.trim() && formData.contact.email.trim()) completed.add('contact');
+        if (formData.contact.phone && formData.contact.phone.trim() && formData.contact.email && formData.contact.email.trim()) completed.add('contact');
 
-        if (formData.address.city.trim() && formData.address.country.trim()) completed.add('address');
+        if (formData.address.city && formData.address.city.trim() && formData.address.country && formData.address.country.trim()) completed.add('address');
 
         setCompletedSections(completed);
     }, [formData]);
@@ -130,13 +132,57 @@ const DemoPage = () => {
         setTimeout(() => setToast({ type: '', message: '' }), 5000);
     };
 
+    const loadCompanyProducts = async () => {
+        setLoadingProducts(true);
+        try {
+            const productsRef = ref(db, 'HTAMS/company/products');
+            const snapshot = await get(productsRef);
+            if (snapshot.exists()) {
+                const productsData = snapshot.val();
+                const productsArray = Object.keys(productsData).map(key => ({
+                    id: key,
+                    ...productsData[key]
+                }));
+                setCompanyProducts(productsArray);
+            } else {
+                setCompanyProducts([]);
+            }
+        } catch (error) {
+            console.error('Error loading company products:', error);
+            showToast('error', 'Failed to load company products');
+            setCompanyProducts([]);
+        } finally {
+            setLoadingProducts(false);
+        }
+    };
+
     const handleChange = (path, value) => {
         setFormData(prev => setByPath(prev, path, value));
     };
 
     const handleProductChange = (index, field, value) => {
         const newProducts = [...formData.products];
-        newProducts[index] = { ...newProducts[index], [field]: value };
+        
+        if (!newProducts[index]) {
+            newProducts[index] = { ...initialProduct };
+        }
+        
+        if (field === 'selectedCompanyProduct') {
+            const selectedProduct = companyProducts.find(p => p.id === value);
+            // FIX: Automatically populates 'mrp' from the selected company product.
+            newProducts[index] = {
+                ...initialProduct,
+                selectedCompanyProduct: value,
+                companyProductData: selectedProduct || null,
+                title: selectedProduct ? selectedProduct.name || selectedProduct.title || '' : '',
+                imageUrl: selectedProduct ? (selectedProduct.imageUrls?.[0] || '') : '',
+                description: selectedProduct ? (selectedProduct.description || '') : '',
+                mrp: selectedProduct ? (selectedProduct.mrp || '') : '',
+            };
+        } else if (field !== 'imageUrl') {
+            newProducts[index] = { ...newProducts[index], [field]: value };
+        }
+        
         setFormData(prev => ({ ...prev, products: newProducts }));
     };
 
@@ -159,7 +205,7 @@ const DemoPage = () => {
         }));
         showToast('success', 'Product removed successfully');
     };
-
+    
     const handlePreview = () => {
         if (!isDataSaved) {
             showToast('error', 'Please save your data first to preview your site');
@@ -187,15 +233,19 @@ const DemoPage = () => {
             return false;
         }
 
+        // FIX: Validation now checks 'mrp'.
         const hasInvalidProduct = formData.products.some(p =>
-            !p.title.trim() || !p.price.trim() || !p.description.trim()
+            !(p.selectedCompanyProduct && p.selectedCompanyProduct.trim()) || 
+            !(p.title && p.title.trim()) || 
+            !(p.mrp && p.mrp.toString().trim()) || 
+            !(p.description && p.description.trim())
         );
         if (hasInvalidProduct) {
             showToast('error', 'Please complete all required fields for each product');
             return false;
         }
 
-        if (!formData.contact.phone.trim() || !formData.contact.email.trim()) {
+        if (!(formData.contact.phone && formData.contact.phone.trim()) || !(formData.contact.email && formData.contact.email.trim())) {
             showToast('error', 'Please provide your contact information');
             return false;
         }
@@ -222,11 +272,11 @@ const DemoPage = () => {
                     isPublished: true,
                 },
             };
-            await set(ref(db, `HTAMS/WebBuilder/${uid}`), payload);
+            await set(ref(db, `HTAMS/users/${uid}/webBuilder`), payload);
             setIsDataSaved(true);
             showToast('success', '🎉 Your professional business site has been created successfully!');
         } catch (e) {
-            console.error(e);
+            console.error('Error saving data:', e);
             showToast('error', 'Failed to save. Please check your connection and try again.');
         } finally {
             setSaving(false);
@@ -426,40 +476,87 @@ const DemoPage = () => {
                                     </div>
 
                                     <div className="demo-product-content">
+                                        {/* Company Product Selection */}
+                                        <div className="demo-input-group">
+                                            <label>Select Company Product *</label>
+                                            <select
+                                                value={product.selectedCompanyProduct}
+                                                onChange={(e) => handleProductChange(index, 'selectedCompanyProduct', e.target.value)}
+                                                required
+                                                className="demo-product-select"
+                                            >
+                                                <option value="">Choose a company product...</option>
+                                                {loadingProducts ? (
+                                                    <option disabled>Loading products...</option>
+                                                ) : (
+                                                    companyProducts.map((companyProduct) => (
+                                                        <option key={companyProduct.id} value={companyProduct.id}>
+                                                            {companyProduct.name || companyProduct.title || `Product ${companyProduct.id}`}
+                                                        </option>
+                                                    ))
+                                                )}
+                                            </select>
+                                            {product.companyProductData && (
+                                                <div className="demo-selected-product-info">
+                                                    <small>Selected: {product.companyProductData.name || product.companyProductData.title}</small>
+                                                    {product.companyProductData.description && (
+                                                        <small className="demo-product-desc">{product.companyProductData.description}</small>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+
                                         <div className="demo-row">
                                             <div className="demo-input-group">
-                                                <label>Product/Service Name *</label>
+                                                <label>Your Product Name *</label>
                                                 <input
                                                     type="text"
-                                                    placeholder="Professional Product Name"
+                                                    placeholder="Enter your custom product name"
                                                     value={product.title}
                                                     onChange={(e) => handleProductChange(index, 'title', e.target.value)}
                                                     required
                                                 />
                                             </div>
+                                            {/* FIX: Input field now correctly uses 'mrp' and is read-only */}
                                             <div className="demo-input-group">
-                                                <label>Price (₹) *</label>
+                                                <label>Product Price (MRP) *</label>
                                                 <input
                                                     type="number"
                                                     placeholder="0"
-                                                    value={product.price}
-                                                    onChange={(e) => handleProductChange(index, 'price', e.target.value)}
+                                                    value={product.mrp}
+                                                    readOnly
+                                                    className="demo-readonly-input"
                                                     required
                                                 />
+                                                 <small className="demo-field-hint">Price is set from company product MRP.</small>
                                             </div>
                                         </div>
 
                                         <div className="demo-input-group">
-                                            <label>Product Image URL</label>
+                                            <label>Product Image</label>
                                             <div className="demo-input-with-icon">
                                                 <FaImage className="demo-input-icon" />
                                                 <input
                                                     type="url"
-                                                    placeholder="https://example.com/product-image.jpg"
-                                                    value={product.imageUrl}
-                                                    onChange={(e) => handleProductChange(index, 'imageUrl', e.target.value)}
+                                                    placeholder="Select a company product to get image"
+                                                    value={product.imageUrl || ''}
+                                                    readOnly
+                                                    className="demo-readonly-input"
                                                 />
                                             </div>
+                                            <small className="demo-field-hint">Image automatically loaded from selected company product</small>
+                                            {product.imageUrl && (
+                                                <div className="demo-image-preview">
+                                                    <img 
+                                                        src={product.imageUrl} 
+                                                        alt="Product preview" 
+                                                        className="demo-product-image-preview"
+                                                        onError={(e) => {
+                                                            e.target.style.display = 'none';
+                                                        }}
+                                                    />
+                                                </div>
+                                            )}
                                         </div>
 
                                         <div className="demo-input-group">

@@ -488,7 +488,7 @@ const LevelsManager = () => {
           <div className="auth-card">
             <div className="auth-header">
               <Shield className="auth-icon" />
-              <h2>ONDO Levels Manager</h2>
+              <h2>ONDOLevels Manager</h2>
               <p>Secure Access Required</p>
             </div>
             
@@ -741,7 +741,7 @@ const LevelsManager = () => {
         `}</style>
         <div className="loading-container">
           <div className="loading-spinner"></div>
-          <p>Loading ONDO Levels...</p>
+          <p>Loading ONDOLevels...</p>
         </div>
       </>
     );
@@ -1402,7 +1402,7 @@ const LevelsManager = () => {
         {/* Header */}
         <div className="header">
           <div className="header-content">
-            <h1>🏢 ONDO Levels Management System</h1>
+            <h1>🏢 ONDOLevels Management System</h1>
             {/* <button onClick={handleLogout} className="logout-btn">
               🔒 Logout
             </button> */}
