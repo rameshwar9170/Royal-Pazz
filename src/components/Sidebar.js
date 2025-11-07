@@ -1,17 +1,24 @@
   import React, { useState, useEffect } from 'react';
   import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-  import {
-    FaTachometerAlt,
-    FaUsers,
-    FaBoxOpen,
-    FaUserShield,
-    FaChalkboardTeacher,
-    FaShoppingCart,
-    FaChartLine,
-    FaSignOutAlt,
-    FaBars,
-    FaTimes
-  } from 'react-icons/fa';
+ import {
+  FaTachometerAlt,
+  FaUsers,
+  FaBoxOpen,
+  FaUserShield,
+  FaChalkboardTeacher,
+  FaShoppingCart,
+  FaChartLine,
+  FaSignOutAlt,
+  FaBars,
+  FaTimes,
+  FaVideo,
+  FaFileSignature,
+  FaMoneyCheckAlt,
+  FaLevelUpAlt,
+  FaTruck,
+  FaUserPlus,
+  FaUserFriends
+} from 'react-icons/fa';
   import { signOut } from 'firebase/auth';
   import { auth } from '../firebase/config';
 
@@ -31,77 +38,77 @@
     const isCompanyDashboard = location.pathname.startsWith('/company-dashboard');
 
     const menuItems = [
-      {
-        name: 'Dashboard',
-        path: isCompanyDashboard ? '/company-dashboard' : '/dashboard',
-        icon: <FaTachometerAlt />,
-      },
-      {
-        name: 'Customers',
-        path: isCompanyDashboard ? '/company-dashboard/customers' : '/dashboard/customers',
-        icon: <FaUsers />,
-      },
-      {
-        name: 'Orders',
-        path: isCompanyDashboard ? '/company-dashboard/orders' : '/dashboard/orders',
-        icon: <FaShoppingCart />,
-      },
-      {
-        name: 'Sales Dashboard',
-        path: isCompanyDashboard ? '/company-dashboard/sales-dashboard' : '/dashboard/sales-dashboard',
-        icon: <FaChartLine />,
-      },
-      {
-        name: 'Employees',
-        path: isCompanyDashboard ? '/company-dashboard/employees' : '/dashboard/employees',
-        icon: <FaUserShield />,
-      },
-      {
-        name: 'Trainers',
-        path: isCompanyDashboard ? '/company-dashboard/total-trainers' : '/dashboard/trainers',
-        icon: <FaChalkboardTeacher />,
-      },
-      {
-        name: 'Products',
-        path: isCompanyDashboard ? '/company-dashboard/products' : '/dashboard/products',
-        icon: <FaBoxOpen />,
-      },
-      {
-        name: 'Users',
-        path: isCompanyDashboard ? '/company-dashboard/user-list' : '/dashboard/user-list',
-        icon: <FaUserShield />,
-      },
-      {
-        name: 'Add Admin',
-        path: isCompanyDashboard ? '/company-dashboard/add-admin' : '/dashboard/add-admin',
-        icon: <FaUserShield />,
-      },
-      {
-        name: 'Levels',
-        path: isCompanyDashboard ? '/company-dashboard/levels' : '/dashboard/levels',
-        icon: <FaUserShield />,
-      },
-      {
-        name: 'Withdraw Requests',
-        path: isCompanyDashboard ? '/company-dashboard/withdraw-requests' : '/dashboard/withdraw-requests',
-        icon: <FaUserShield />,
-      },
-      {
-        name: 'Document Verification',
-        path: isCompanyDashboard ? '/company-dashboard/document-verification' : '/dashboard/document-verification',
-        icon: <FaUserShield />,
-      },
-      {
-        name :'dispatch',
-        path: isCompanyDashboard ? '/company-dashboard/dispatch' : '/dashboard/dispatch',
-        icon: <FaUserShield />,
-      },
-      {
-        name :'video-sharing',
-        path: isCompanyDashboard ? '/company-dashboard/video-sharing' : '/dashboard/video-sharing',
-        icon: <FaUserShield />,
-      }
-    ];
+    {
+      name: 'Dashboard',
+      path: isCompanyDashboard ? '/company-dashboard' : '/dashboard',
+      icon: <FaTachometerAlt />,
+    },
+    {
+      name: 'Customers',
+      path: isCompanyDashboard ? '/company-dashboard/customers' : '/dashboard/customers',
+      icon: <FaUsers />,
+    },
+    {
+      name: 'Orders',
+      path: isCompanyDashboard ? '/company-dashboard/orders' : '/dashboard/orders',
+      icon: <FaShoppingCart />,
+    },
+    {
+      name: 'Dispatch',
+      path: isCompanyDashboard ? '/company-dashboard/dispatch' : '/dashboard/dispatch',
+      icon: <FaTruck />,
+    },
+    {
+      name: 'Sales Dashboard',
+      path: isCompanyDashboard ? '/company-dashboard/sales-dashboard' : '/dashboard/sales-dashboard',
+      icon: <FaChartLine />,
+    },
+    {
+      name: 'Employees',
+      path: isCompanyDashboard ? '/company-dashboard/employees' : '/dashboard/employees',
+      icon: <FaUserShield />,
+    },
+    {
+      name: 'Trainers',
+      path: isCompanyDashboard ? '/company-dashboard/total-trainers' : '/dashboard/trainers',
+      icon: <FaChalkboardTeacher />,
+    },
+    {
+      name: 'Products',
+      path: isCompanyDashboard ? '/company-dashboard/products' : '/dashboard/products',
+      icon: <FaBoxOpen />,
+    },
+    {
+      name: 'Users',
+      path: isCompanyDashboard ? '/company-dashboard/user-list' : '/dashboard/user-list',
+      icon: <FaUserFriends />,
+    },
+    {
+      name: 'Add Admin',
+      path: isCompanyDashboard ? '/company-dashboard/add-admin' : '/dashboard/add-admin',
+      icon: <FaUserPlus />,
+    },
+    {
+      name: 'Levels',
+      path: isCompanyDashboard ? '/company-dashboard/levels' : '/dashboard/levels',
+      icon: <FaLevelUpAlt />,
+    },
+    {
+      name: 'Withdraw Requests',
+      path: isCompanyDashboard ? '/company-dashboard/withdraw-requests' : '/dashboard/withdraw-requests',
+      icon: <FaMoneyCheckAlt />,
+    },
+    {
+      name: 'Document Verification',
+      path: isCompanyDashboard ? '/company-dashboard/document-verification' : '/dashboard/document-verification',
+      icon: <FaFileSignature />,
+    },
+    {
+      name: 'Video Sharing',
+      path: isCompanyDashboard ? '/company-dashboard/video-sharing' : '/dashboard/video-sharing',
+      icon: <FaVideo />,
+    },
+  ];
 
     const handleLogout = async () => {
       try {
@@ -120,7 +127,7 @@
             <button className="mobile-toggle-btn" onClick={toggleSidebar}>
               {isOpen ? <FaTimes size={22}/> : <FaBars size={22}/>}
             </button>
-            <h1 className="mobile-title">ONDO</h1>
+            <h1 className="mobile-title">Panchagiri</h1>
           </div>
         )}
 

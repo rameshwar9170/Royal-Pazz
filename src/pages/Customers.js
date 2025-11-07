@@ -41,21 +41,29 @@ const Customers = () => {
     return parts.length > 0 ? parts.join(', ') : 'N/A';
   };
 
-  const makeCustomerRow = (customer, phone) => ({
-    id: phone,
-    name: customer.name || 'N/A',
-    email: customer.email || 'N/A',
-    phone,
-    address: formatAddress(customer.address),
-    customerId: customer.customerId || 'N/A',
-    purchasedProduct: 'Customer Profile',
-    quantity: Object.keys(customer.myOrders || {}).length,
-    totalAmount: 0,
-    date: customer.createdAt ? new Date(customer.createdAt).toLocaleDateString() : 'N/A',
-    paymentMethod: 'N/A',
-    status: Object.keys(customer.myOrders || {}).length > 0 ? 'Has Orders' : 'No Orders',
-    placedBy: 'N/A',
-  });
+  const makeCustomerRow = (customer, phone) => {
+    const orderCount = Object.keys(customer.myOrders || {}).length;
+    return {
+      id: phone,
+      name: customer.name || 'N/A',
+      email: customer.email || 'N/A',
+      phone,
+      address: formatAddress(customer.address),
+      customerId: customer.customerId || 'N/A',
+      birthDate: customer.birthDate ? new Date(customer.birthDate).toLocaleDateString('en-IN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      }) : null,
+      purchasedProduct: orderCount > 0 ? 'Multiple Products' : 'No Orders',
+      quantity: orderCount,
+      totalAmount: 0,
+      date: customer.createdAt ? new Date(customer.createdAt).toLocaleDateString() : 'N/A',
+      paymentMethod: 'N/A',
+      status: orderCount > 0 ? 'Has Orders' : 'No Orders',
+      placedBy: 'N/A',
+    };
+  };
 
   // Function to fetch customer orders
   const fetchCustomerOrders = async (customer) => {
@@ -89,9 +97,9 @@ const Customers = () => {
         const validOrders = orders.filter(order => order !== null);
         
         validOrders.sort((a, b) => {
-          const dateA = new Date(a.date || a.createdAt || 0);
-          const dateB = new Date(b.date || b.createdAt || 0);
-          return dateB - dateA;
+          const dateA = new Date(a.orderDate || a.date || a.createdAt || 0);
+          const dateB = new Date(b.orderDate || b.date || b.createdAt || 0);
+          return dateB - dateA; // Latest orders first (descending order)
         });
         
         setCustomerOrders(validOrders);
@@ -328,34 +336,106 @@ const Customers = () => {
     }
   }, [sortBy, sortOrder, statusFilter, dateFilter, searchQuery, customStartDate, customEndDate]);
 
-  const downloadReport = () => {
+  const downloadReport = async () => {
+    // Enhanced CSV with customer and product details
     const csvData = [
-      ['Sr No', 'Customer ID', 'Name', 'Email', 'Phone', 'Address', 'Order Count', 'Status', 'Date Created']
+      ['Sr No', 'Customer ID', 'Customer Name', 'Email', 'Phone', 'Address', 'Status', 'Date Created', 'Order ID', 'Product Name', 'Quantity', 'Price', 'Total Price', 'Order Date', 'Order Amount']
     ];
 
-    filteredCustomers.forEach((customer, index) => {
-      csvData.push([
-        index + 1,
-        customer.customerId,
-        customer.name,
-        customer.email,
-        customer.phone,
-        customer.address,
-        customer.quantity,
-        customer.status,
-        customer.date
-      ]);
-    });
+    let rowIndex = 1;
+
+    // Fetch detailed order information for each customer
+    for (const customer of filteredCustomers) {
+      try {
+        const ordersRef = ref(db, 'HTAMS/orders');
+        const ordersSnapshot = await get(ordersRef);
+        
+        if (ordersSnapshot.exists()) {
+          const allOrders = ordersSnapshot.val();
+          const customerOrdersList = Object.entries(allOrders)
+            .filter(([orderId, order]) => order.customerPhone === customer.phone)
+            .map(([orderId, order]) => ({ id: orderId, ...order }));
+
+          if (customerOrdersList.length > 0) {
+            // Add each product from each order as a separate row
+            customerOrdersList.forEach(order => {
+              if (order.items && order.items.length > 0) {
+                order.items.forEach(item => {
+                  csvData.push([
+                    rowIndex++,
+                    customer.customerId || 'N/A',
+                    customer.name || 'N/A',
+                    customer.email || 'N/A',
+                    customer.phone || 'N/A',
+                    formatAddress(customer.address),
+                    customer.status || 'N/A',
+                    customer.date || 'N/A',
+                    order.id || 'N/A',
+                    item.productName || 'N/A',
+                    item.quantity || 0,
+                    item.price || 0,
+                    item.totalPrice || 0,
+                    order.orderDate ? new Date(order.orderDate).toLocaleDateString('en-IN') : 'N/A',
+                    order.totalAmount || 0
+                  ]);
+                });
+              } else {
+                // Order without items
+                csvData.push([
+                  rowIndex++,
+                  customer.customerId || 'N/A',
+                  customer.name || 'N/A',
+                  customer.email || 'N/A',
+                  customer.phone || 'N/A',
+                  formatAddress(customer.address),
+                  customer.status || 'N/A',
+                  customer.date || 'N/A',
+                  order.id || 'N/A',
+                  'No items',
+                  0,
+                  0,
+                  0,
+                  order.orderDate ? new Date(order.orderDate).toLocaleDateString('en-IN') : 'N/A',
+                  order.totalAmount || 0
+                ]);
+              }
+            });
+          } else {
+            // Customer without orders
+            csvData.push([
+              rowIndex++,
+              customer.customerId || 'N/A',
+              customer.name || 'N/A',
+              customer.email || 'N/A',
+              customer.phone || 'N/A',
+              formatAddress(customer.address),
+              customer.status || 'N/A',
+              customer.date || 'N/A',
+              'No orders',
+              'N/A',
+              0,
+              0,
+              0,
+              'N/A',
+              0
+            ]);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching orders for customer:', customer.phone, error);
+      }
+    }
 
     const csvString = csvData.map(row =>
-      row.map(field => `"${field}"`).join(',')
+      row.map(field => `"${String(field).replace(/"/g, '""')}"`).join(',')
     ).join('\n');
 
-    const blob = new Blob([csvString], { type: 'text/csv' });
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `customers_report_${new Date().toISOString().split('T')[0]}.csv`;
+    const dateRange = dateFilter === 'custom' ? `${customStartDate}_to_${customEndDate}` : dateFilter;
+    a.download = `customers_detailed_report_${dateRange}_${new Date().toISOString().split('T')[0]}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -396,6 +476,8 @@ const Customers = () => {
         return '#10b981';
       case 'pending':
         return '#f59e0b';
+      case 'paid':
+        return '#059669';
       case 'cancelled':
         return '#ef4444';
       case 'processing':
@@ -421,13 +503,13 @@ const Customers = () => {
       <div className="header-section">
         <div className="title-section">
           <h2 className="customers-title">
-            <span className="title-icon">👥</span>
             {isAdmin ? 'All Company Customer' : 'My Customers'}
           </h2>
           <p className="subtitle">
             {isAdmin ? 'Manage and view all customer orders' : 'View your customer orders and details'}
           </p>
         </div>
+        
         <div className="stats-card">
           <div className="stat-item">
             <span className="stat-number">{filteredCustomers.length}</span>
@@ -599,66 +681,46 @@ const Customers = () => {
         </div>
       </div>
 
-      {/* Mobile Card View */}
+      {/* Mobile Card View - Compact Design */}
       <div className="mobile-cards mobile-only">
         {currentCustomers.length > 0 ? (
           currentCustomers.map((customer, index) => (
-            <div key={customer.id} className="customer-card">
-              <div className="card-header">
-                <div className="customer-name">{customer.name}</div>
-                <div className="serial-badge">{indexOfFirstRecord + index + 1}</div>
-              </div>
-              
-              <div className="card-content">
-                <div className="detail-row">
-                  <span className="detail-label">Customer ID:</span>
-                  <span className="detail-value">{customer.customerId}</span>
-                </div>
-                
-                <div className="detail-row">
-                  <span className="detail-label">Email:</span>
-                  <span className="detail-value">📧 {customer.email}</span>
-                </div>
-                
-                <div className="detail-row">
-                  <span className="detail-label">Phone:</span>
-                  <span className="detail-value">📞 {customer.phone}</span>
-                </div>
-                
-                <div className="detail-row">
-                  <span className="detail-label">Address:</span>
-                  <span className="detail-value">{customer.address}</span>
-                </div>
-                
-                <div className="detail-row">
-                  <span className="detail-label">Orders:</span>
-                  <span className="detail-value">{customer.quantity}</span>
-                </div>
-                
-                <div className="detail-row">
-                  <span className="detail-label">Status:</span>
-                  <span
-                    className="status-badge"
-                    style={{ backgroundColor: getStatusColor(customer.status) }}
-                  >
-                    {customer.status}
-                  </span>
-                </div>
-                
-                <div className="detail-row">
-                  <span className="detail-label">Date:</span>
-                  <span className="detail-value">{customer.date}</span>
-                </div>
-              </div>
-              
-              <div className="card-footer">
+            <div key={customer.id} className="customer-card-compact">
+              <div className="card-header-compact">
+                <div className="customer-name-primary">{customer.name}</div>
                 <button
-                  className="view-button"
+                  className="view-details-btn"
                   onClick={() => openModal(customer)}
                   aria-label={`View details for ${customer.name}`}
                 >
                   View Details
                 </button>
+              </div>
+              
+              <div className="card-content-compact">
+                <div className="secondary-info">
+                  <div className="customer-id-info">
+                    <span className="id-label">ID:</span>
+                    <span className="customer-id-text">#{customer.customerId}</span>
+                  </div>
+                  <div className="date-info">
+                    <span className="date-icon">📅</span>
+                    <span className="date-text">{customer.date}</span>
+                  </div>
+                </div>
+                
+                <div className="primary-info">
+                  <div className="phone-info">
+                    <span className="phone-icon">📞</span>
+                    <span className="phone-number">{customer.phone}</span>
+                  </div>
+                </div>
+                
+                <div className="product-info">
+                  <span className="product-label">Product:</span>
+                  <span className="product-name">{customer.purchasedProduct}</span>
+                  <span className="order-count">({customer.quantity} orders)</span>
+                </div>
               </div>
             </div>
           ))
@@ -702,121 +764,159 @@ const Customers = () => {
             </div>
 
             <div className="modal-body">
-              <div className="detail-section">
-                <h4>👤 Customer Information</h4>
-                <div className="detail-grid">
-                  <div className="detail-item">
-                    <label>Customer ID:</label>
-                    <span>{selectedCustomer.customerId}</span>
+              {/* Compact Customer ID */}
+              <div className="customer-id-compact">
+                {selectedCustomer.customerId}
+              </div>
+
+              {/* Status Badge */}
+              <div className="status-section">
+                <label>STATUS:</label>
+                <span
+                  className="status-badge-large"
+                  style={{ backgroundColor: getStatusColor(selectedCustomer.status) }}
+                >
+                  {selectedCustomer.status}
+                </span>
+              </div>
+
+              {/* Date Created */}
+              <div className="date-section">
+                <label>DATE CREATED:</label>
+                <span className="date-value">{selectedCustomer.date}</span>
+              </div>
+
+              {/* Customer Information - Compact */}
+              <div className="customer-info-compact">
+                <div className="info-item">
+                  <label>Name:</label>
+                  <span>{selectedCustomer.name}</span>
+                </div>
+                <div className="info-item">
+                  <label>Email:</label>
+                  <span>{selectedCustomer.email}</span>
+                </div>
+                <div className="info-item">
+                  <label>Phone:</label>
+                  <span>{selectedCustomer.phone}</span>
+                </div>
+                {selectedCustomer.birthDate && (
+                  <div className="info-item">
+                    <label>Birth Date:</label>
+                    <span>{selectedCustomer.birthDate}</span>
                   </div>
-                  <div className="detail-item">
-                    <label>Name:</label>
-                    <span>{selectedCustomer.name}</span>
-                  </div>
-                  <div className="detail-item">
-                    <label>Email:</label>
-                    <span>{selectedCustomer.email}</span>
-                  </div>
-                  <div className="detail-item">
-                    <label>Phone:</label>
-                    <span>{selectedCustomer.phone}</span>
-                  </div>
-                  <div className="detail-item full-width">
-                    <label>Address:</label>
-                    <span>{formatAddress(selectedCustomer.address)}</span>
-                  </div>
-                  <div className="detail-item">
-                    <label>Total Orders:</label>
-                    <span>{selectedCustomer.quantity}</span>
-                  </div>
-                  <div className="detail-item">
-                    <label>Status:</label>
-                    <span
-                      className="status-badge"
-                      style={{ backgroundColor: getStatusColor(selectedCustomer.status) }}
-                    >
-                      {selectedCustomer.status}
-                    </span>
-                  </div>
-                  <div className="detail-item">
-                    <label>Date Created:</label>
-                    <span>{selectedCustomer.date}</span>
-                  </div>
+                )}
+                <div className="info-item">
+                  <label>Address:</label>
+                  <span>{formatAddress(selectedCustomer.address)}</span>
+                </div>
+                <div className="info-item">
+                  <label>Total Orders:</label>
+                  <span>{selectedCustomer.quantity}</span>
                 </div>
               </div>
 
-            <div className="detail-section">
-  <h4>📦 Customer Orders</h4>
-  {loadingOrders ? (
-    <div className="loading-orders">
-      <div className="spinner"></div>
-      <p>Loading orders...</p>
-    </div>
-  ) : customerOrders.length > 0 ? (
-    <div className="orders-list">
-      {customerOrders.map((order, index) => (
-        <div key={order.id} className="order-item">
-          <div className="order-header">
-            <span className="order-number">Order #{index + 1}</span>
-            <span className="order-id">ID: {order.id}</span>
-          </div>
+              <div className="detail-section">
+                <h4>📦 Customer Orders</h4>
+                {loadingOrders ? (
+                  <div className="loading-orders">
+                    <div className="spinner"></div>
+                    <p>Loading orders...</p>
+                  </div>
+                ) : customerOrders.length > 0 ? (
+                  <div className="orders-list">
+                    {customerOrders.map((order, index) => (
+                      <div key={order.id} className="order-item">
+                        <div className="order-header">
+                          <span className="order-number">Order {index + 1}</span>
+                          <span className="order-id">ID: {order.id}</span>
+                        </div>
+                        <div className="order-details">
+                          <div className="order-detail">
+                            <label>Products:</label>
+                            <div className="products-list">
+                              {order.items && order.items.length > 0 ? (
+                                order.items.map((item, itemIndex) => (
+                                  <div key={itemIndex} className="product-item">
+                                    <span className="product-name">📦 {item.productName}</span>
+                                    <span className="product-quantity">Qty: {item.quantity}</span>
+                                    {item.totalPrice > 0 && (
+                                      <span className="product-price">₹{item.totalPrice.toLocaleString()}</span>
+                                    )}
+                                  </div>
+                                ))
+                              ) : (
+                                <span>{order.productName || order.product || 'N/A'}</span>
+                              )}
+                            </div>
+                          </div>
+                         
+                          <div className="order-details-grid">
+                          <div className="order-detail">
+                            <label>Total Items:</label>
+                            <span>{order.totalItems || order.items?.length || order.quantity || 'N/A'} items</span>
+                          </div>
 
-          {/* This part correctly displays each item in the order */}
-          {order.items && order.items.map((item, itemIndex) => (
-            <div key={itemIndex} className="order-details">
-              <div className="order-detail">
-                <label>Product:</label>
-                {/* FIX: Accessing productName from the item object */}
-                <span>{item.productName || 'N/A'}</span>
-              </div>
-              <div className="order-detail">
-                <label>Quantity:</label>
-                {/* FIX: Accessing quantity from the item object */}
-                <span>{item.quantity || 'N/A'}</span>
-              </div>
-              <div className="order-detail">
-                <label>Amount:</label>
-                 {/* FIX: Accessing totalAmount from the main order object */}
-                <span>₹{order.totalAmount?.toLocaleString('en-IN') || '0'}</span>
-              </div>
-              <div className="order-detail">
-                <label>Date:</label>
-                {/* FIX: Using orderDate and formatting it */}
-                <span>
-                  {order.orderDate 
-                    ? new Date(order.orderDate).toLocaleDateString() 
-                    : 'N/A'
-                  }
-                </span>
-              </div>
-              <div className="order-detail">
-                <label>Status:</label>
-                <span 
-                  className="order-status"
-                  style={{ backgroundColor: getOrderStatusColor(order.status) }}
-                >
-                  {order.status || 'N/A'}
-                </span>
-              </div>
-            </div>
-          ))}
+                          <div className="order-detail">
+                            <label>Amount:</label>
+                            <span>₹{order.totalAmount || order.amount || '0'}</span>
+                          </div>
 
-          {(!order.items || order.items.length === 0) && (
-            <div className="order-details">
-                <p>This order has no items.</p>
-            </div>
-          )}
+                          <div className="order-detail">
+                            <label>Date:</label>
+                            <span className="order-date-highlight">
+                              {order.orderDate 
+                                ? new Date(order.orderDate).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })
+                                : order.date 
+                                ? new Date(order.date).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })
+                                : order.createdAt 
+                                ? new Date(order.createdAt).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })
+                                : 'N/A'}
+                            </span>
+                          </div>
 
-        </div>
-      ))}
-    </div>
-  ) : (
-    <div className="no-orders">
-      <span className="no-orders-icon">📦</span>
-      <p>No orders found for this customer</p>
-    </div>
-  )}
-</div>
+                          <div className="order-detail">
+                            <label>Status:</label>
+                            <span 
+                              className="order-status"
+                              style={{ backgroundColor: getOrderStatusColor(order.status) }}
+                            >
+                              {order.status || 'N/A'}
+                            </span>
+                          </div>
+
+                          {order.paymentMethod && (
+                            <div className="order-detail">
+                              <label>Payment:</label>
+                              <span>{order.paymentMethod}</span>
+                            </div>
+                          )}
+                        </div>
+
+                          <div className="order-detail">
+                            <label>Placed By:</label>
+                            <div className="placed-by-info">
+                              <div className="placer-name">
+                                <span className="name-icon">👤</span>
+                                <span>{order.customerName || 'N/A'}</span>
+                              </div>
+                              <div className="placer-phone">
+                                <span className="phone-icon">📞</span>
+                                <span>{order.customerPhone || 'N/A'}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="no-orders">
+                    <span className="no-orders-icon">📦</span>
+                    <p>No orders found for this customer</p>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="modal-footer">
@@ -840,60 +940,83 @@ const Customers = () => {
           max-width: 100%;
           overflow-x: hidden;
         }
+          .order-details-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 12px;
+          align-items: start;
+        }
 
         /* Header Section */
         .header-section {
-          background: white;
-          border-radius: 16px;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-          padding: 20px;
-          margin-bottom: 20px;
+          border-radius: 12px;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+          padding: 16px;
+          margin-bottom: 16px;
+          display: grid;
+          grid-template-columns: 1fr auto;
+          align-items: center;
+          gap: 16px;
+          background: #002B5C;
+        }
+
+        .title-section {
           display: flex;
           flex-direction: column;
-          gap: 16px;
+          gap: 6px;
         }
 
         .customers-title {
-          font-size: 1.5rem;
+          font-size: 20px;
           font-weight: 700;
-          color: #1e293b;
-          display: flex;
-          align-items: center;
-          gap: 8px;
+          color: #ffffff;
           margin: 0;
-        }
-
-        .title-icon {
-          font-size: 1.5rem;
+          line-height: 1.3;
         }
 
         .subtitle {
-          color: #64748b;
-          font-size: 0.9rem;
-          margin: 4px 0 0 0;
+          color: #d2d4d5;
+          font-size: 13px;
+          margin: 0;
+          line-height: 1.4;
         }
 
         .stats-card {
-          background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-          padding: 16px;
-          border-radius: 12px;
+          background: #F36F21;
+          padding: 16px 20px;
+          border-radius: 10px;
           color: white;
           text-align: center;
-          width: fit-content;
+          min-width: 140px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+
+        .stat-item {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 4px;
         }
 
         .stat-number {
-          font-size: 2rem;
+          font-size: 32px;
           font-weight: 700;
           display: block;
+          line-height: 1;
+          color: white;
         }
 
         .stat-label {
-          font-size: 0.75rem;
-          opacity: 0.9;
+          font-size: 11px;
+          opacity: 0.95;
           color: white;
           text-transform: uppercase;
-          letter-spacing: 0.5px;
+          letter-spacing: 0.8px;
+          font-weight: 600;
         }
 
         /* Search Section */
@@ -942,7 +1065,7 @@ const Customers = () => {
         .search-button {
           width: 100%;
           padding: 14px 20px;
-          background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+          background: #D65D15;
           color: white;
           border: none;
           border-radius: 12px;
@@ -959,9 +1082,9 @@ const Customers = () => {
 
         /* Filter Controls */
         .filter-controls {
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 12px;
           padding-top: 16px;
           border-top: 1px solid #e5e7eb;
         }
@@ -995,10 +1118,7 @@ const Customers = () => {
         }
 
         .custom-date-range {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-          margin-top: 8px;
+          display: contents;
         }
 
         .download-button {
@@ -1070,77 +1190,140 @@ const Customers = () => {
           display: block;
         }
 
-        /* Mobile Card View */
+        /* Mobile Card View - Compact Design */
         .mobile-cards {
           display: flex;
           flex-direction: column;
-          gap: 16px;
+          gap: 8px;
         }
 
-        .customer-card {
+        .customer-card-compact {
           background: white;
-          border-radius: 12px;
-          padding: 16px;
+          border-radius: 8px;
+          padding: 12px;
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
           border: 1px solid #e2e8f0;
+          margin-bottom: 8px;
         }
 
-        .card-header {
+        .card-header-compact {
           display: flex;
           justify-content: space-between;
-          align-items: flex-start;
-          margin-bottom: 12px;
-          padding-bottom: 12px;
+          align-items: center;
+          margin-bottom: 10px;
+          padding-bottom: 8px;
           border-bottom: 1px solid #f1f5f9;
         }
 
-        .customer-name {
-          font-size: 1.1rem;
+        .customer-name-primary {
+          font-size: 1rem;
           font-weight: 600;
           color: #1e293b;
+          flex: 1;
         }
 
-        .serial-badge {
-          background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        .view-details-btn {
+          background: #3b82f6;
           color: white;
-          border-radius: 20px;
-          padding: 4px 12px;
+          border: 1px solid #3b82f6;
+          padding: 6px 12px;
+          border-radius: 6px;
           font-size: 0.75rem;
-          font-weight: 600;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s ease;
         }
 
-        .card-content {
-          margin-bottom: 16px;
+        .view-details-btn:hover {
+          background: #2563eb;
+          color: white;
+          border-color: #2563eb;
         }
 
-        .detail-row {
+        .card-content-compact {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .secondary-info {
           display: flex;
           justify-content: space-between;
-          align-items: flex-start;
-          padding: 8px 0;
+          align-items: center;
+          gap: 12px;
+          padding-bottom: 6px;
           border-bottom: 1px solid #f8fafc;
+        }
+
+        .customer-id-info {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 0.8rem;
+        }
+
+        .id-label {
+          color: #64748b;
+          font-weight: 500;
+        }
+
+        .customer-id-text {
+          color: #6366f1;
+          font-weight: 600;
+          font-family: monospace;
+        }
+
+        .primary-info {
+          display: flex;
+          justify-content: flex-start;
+          align-items: center;
           gap: 12px;
         }
 
-        .detail-row:last-child {
-          border-bottom: none;
+        .phone-info, .date-info {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 0.8rem;
         }
 
-        .detail-label {
-          font-size: 0.875rem;
-          color: #64748b;
-          font-weight: 500;
-          flex-shrink: 0;
-          min-width: 80px;
+        .phone-icon, .date-icon {
+          font-size: 0.75rem;
         }
 
-        .detail-value {
-          font-size: 0.875rem;
+        .phone-number {
           color: #1e293b;
           font-weight: 500;
-          text-align: right;
-          word-break: break-word;
+        }
+
+        .date-text {
+          color: #64748b;
+          font-weight: 400;
+        }
+
+        .product-info {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 0.8rem;
+          flex-wrap: wrap;
+        }
+
+        .product-label {
+          color: #64748b;
+          font-weight: 500;
+        }
+
+        .product-name {
+          color: #1e293b;
+          font-weight: 500;
           flex: 1;
+        }
+
+        .order-count {
+          color: #6366f1;
+          font-weight: 600;
+          font-size: 0.75rem;
         }
 
         .status-badge {
@@ -1152,10 +1335,6 @@ const Customers = () => {
           font-weight: 600;
           text-transform: uppercase;
           letter-spacing: 0.5px;
-        }
-
-        .card-footer {
-          text-align: center;
         }
 
         .view-button {
@@ -1305,8 +1484,85 @@ const Customers = () => {
 
         .modal-body {
           flex: 1;
-          padding: 20px;
+          padding: 0;
           overflow-y: auto;
+        }
+
+        /* Compact Mobile-App Style */
+        .customer-id-compact {
+          font-size: 1.1rem;
+          font-weight: 600;
+          color: #1e293b;
+          padding: 12px 0;
+          border-bottom: 1px solid #e5e7eb;
+          margin-bottom: 16px;
+        }
+
+        .status-section, .date-section {
+          margin-bottom: 16px;
+        }
+
+        .status-section label, .date-section label {
+          font-size: 0.75rem;
+          font-weight: 700;
+          color: #64748b;
+          letter-spacing: 0.5px;
+          display: block;
+          margin-bottom: 8px;
+        }
+
+        .status-badge-large {
+          display: inline-block;
+          padding: 10px 20px;
+          border-radius: 8px;
+          color: white;
+          font-weight: 700;
+          font-size: 0.9rem;
+          text-transform: uppercase;
+          width: 100%;
+          text-align: center;
+        }
+
+        .date-value {
+          font-size: 0.95rem;
+          color: #1e293b;
+          font-weight: 500;
+        }
+
+        .customer-info-compact {
+          background: #f8fafc;
+          border-radius: 8px;
+          padding: 12px;
+          margin-bottom: 16px;
+          border: 1px solid #e5e7eb;
+        }
+
+        .info-item {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          padding: 8px 0;
+          border-bottom: 1px solid #e5e7eb;
+          gap: 12px;
+        }
+
+        .info-item:last-child {
+          border-bottom: none;
+        }
+
+        .info-item label {
+          font-size: 0.85rem;
+          font-weight: 600;
+          color: #64748b;
+          min-width: 80px;
+          flex-shrink: 0;
+        }
+
+        .info-item span {
+          font-size: 0.9rem;
+          color: #1e293b;
+          text-align: right;
+          word-break: break-word;
         }
 
         .detail-section {
@@ -1361,6 +1617,7 @@ const Customers = () => {
           max-height: 400px;
           overflow-y: auto;
           margin-top: 12px;
+            scrollbar-width: none;
         }
 
         .order-item {
@@ -1410,6 +1667,87 @@ const Customers = () => {
           text-transform: uppercase;
         }
 
+        .products-list {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          margin-top: 4px;
+        }
+
+        .product-item {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 10px 12px;
+          background: #f9fafb;
+          border: 1px solid #e5e7eb;
+          border-radius: 8px;
+          flex-wrap: wrap;
+          margin-bottom: 8px;
+        }
+
+        .product-name {
+          font-weight: 600;
+          color: #1f2937;
+          flex: 1;
+          min-width: 150px;
+          font-size: 0.9rem;
+        }
+
+        .product-quantity {
+          background: #dbeafe;
+          color: #1d4ed8;
+          padding: 4px 10px;
+          border-radius: 6px;
+          font-size: 0.8rem;
+          font-weight: 700;
+          white-space: nowrap;
+        }
+
+        .product-price {
+          color: #059669;
+          font-weight: 700;
+          font-size: 0.9rem;
+          background: #d1fae5;
+          padding: 4px 10px;
+          border-radius: 6px;
+          white-space: nowrap;
+        }
+
+        .placed-by-info {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          margin-top: 4px;
+        }
+
+        .placer-name, .placer-phone {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 0.875rem;
+        }
+
+        .placer-name {
+          color: #1f2937;
+          font-weight: 600;
+        }
+
+        .placer-phone {
+          color: #6b7280;
+          font-weight: 500;
+        }
+
+        .name-icon, .phone-icon {
+          font-size: 0.75rem;
+        }
+
+        .order-date-highlight {
+          color: #3b82f6;
+          font-weight: 700;
+          font-size: 0.875rem;
+        }
+
         .order-detail span {
           font-size: 0.875rem;
           color: #374151;
@@ -1446,6 +1784,7 @@ const Customers = () => {
           border-top: 1px solid #e2e8f0;
           background: #f8fafc;
           flex-shrink: 0;
+          padding-bottom: 35px;
         }
 
         .close-button {
@@ -1469,13 +1808,41 @@ const Customers = () => {
         /* Tablet Styles (768px and up) */
         @media (min-width: 768px) {
           .customers-container {
-            padding: 24px;
+            padding: 20px;
           }
           
           .header-section {
-            flex-direction: row;
-            justify-content: space-between;
-            align-items: center;
+            padding: 24px 28px;
+            gap: 24px;
+            border-radius: 16px;
+            margin-bottom: 20px;
+          }
+
+          .title-section {
+            gap: 8px;
+          }
+
+          .customers-title {
+            font-size: 24px;
+            margin-bottom: 8px;
+          }
+
+          .subtitle {
+            font-size: 14px;
+          }
+
+          .stats-card {
+            min-width: 200px;
+            padding: 20px 28px;
+            border-radius: 12px;
+          }
+
+          .stat-number {
+            font-size: 40px;
+          }
+
+          .stat-label {
+            font-size: 12px;
           }
           
           .search-container {
@@ -1492,8 +1859,7 @@ const Customers = () => {
           }
           
           .filter-controls {
-            flex-direction: row;
-            flex-wrap: wrap;
+            grid-template-columns: repeat(4, 1fr);
             gap: 16px;
           }
           
@@ -1507,8 +1873,7 @@ const Customers = () => {
           }
           
           .custom-date-range {
-            flex-direction: row;
-            gap: 16px;
+            display: contents;
           }
 
           .order-details {
@@ -1559,7 +1924,7 @@ const Customers = () => {
           }
           
           .customers-table th {
-            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            background: var(--mobile-bg-primary);
             color: white;
             font-weight: 600;
             font-size: 14px;

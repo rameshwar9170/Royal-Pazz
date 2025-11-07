@@ -170,13 +170,22 @@ const SelerSidebar = ({ isOpen, toggleSidebar, activeMenu, setActiveMenu }) => {
 
       {/* Sidebar */}
       <div className={`dashboard-sidebar ${isOpen ? 'expanded' : 'collapsed'} ${isMobile ? 'mobile-sidebar' : ''} ${!isVerified ? 'locked' : ''}`}>
-        <button className="dashboard-toggle-btn" onClick={toggleSidebar}>
-          <h2 className="dashboard-title">{isOpen && activeMenu}</h2>
-          {/* Close button for mobile inside sidebar */}
-          {isMobile && isOpen && (
-            <FaTimes className="mobile-close-icon" />
-          )}
-        </button>
+        {isMobile && isOpen && (
+          <div className="mobile-sidebar-header">
+            <div className="mobile-sidebar-logo">
+              <span className="mobile-logo-icon">🏢</span>
+              <span className="mobile-logo-text">ONDO</span>
+            </div>
+            <button className="mobile-sidebar-close" onClick={toggleSidebar}>
+              ×
+            </button>
+          </div>
+        )}
+        {!isMobile && (
+          <button className="dashboard-toggle-btn" onClick={toggleSidebar}>
+            <h2 className="dashboard-title">{isOpen && activeMenu}</h2>
+          </button>
+        )}
         
         {/* Verification Status Banner */}
         {!isVerified && isOpen && (
@@ -244,6 +253,147 @@ const SelerSidebar = ({ isOpen, toggleSidebar, activeMenu, setActiveMenu }) => {
         </ul>
 
         <style jsx>{`
+          /* Mobile Sidebar Header Styles */
+          .mobile-sidebar-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            border-bottom: 1px solid #e2e8f0;
+            background: #ffffff;
+          }
+
+          .mobile-sidebar-logo {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+          }
+
+          .mobile-logo-icon {
+            font-size: 20px;
+          }
+
+          .mobile-logo-text {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1f2937;
+          }
+
+          .mobile-sidebar-close {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 20px;
+            color: #6b7280;
+            font-weight: 300;
+          }
+
+          .mobile-sidebar-close:hover {
+            color: #374151;
+          }
+
+          /* Mobile Sidebar Styles */
+          .dashboard-sidebar.mobile-sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 280px;
+            height: 100vh;
+            background: #f8fafc;
+            border-right: 1px solid #e2e8f0;
+            transform: translateX(-100%);
+            transition: transform 0.3s ease;
+            z-index: 1100;
+            overflow-y: hidden;
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+          }
+
+          .dashboard-sidebar.mobile-sidebar.expanded {
+            transform: translateX(0);
+          }
+
+          .dashboard-sidebar.mobile-sidebar .dashboard-menu {
+            padding: 12px 0;
+            margin: 0;
+            list-style: none;
+          }
+
+          .dashboard-sidebar.mobile-sidebar .dashboard-menu-item {
+            margin: 0;
+          }
+
+          .dashboard-sidebar.mobile-sidebar .dashboard-link {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            width: calc(100% - 24px);
+            padding: 12px 16px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: #6b7280;
+            text-decoration: none;
+            border-radius: 12px;
+            margin: 4px 12px;
+          }
+
+          .dashboard-sidebar.mobile-sidebar .dashboard-link:hover {
+            background: #f3f4f6;
+          }
+
+          .dashboard-sidebar.mobile-sidebar .dashboard-link.active {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+          }
+
+          .dashboard-sidebar.mobile-sidebar .dashboard-icon {
+            font-size: 16px;
+            width: 20px;
+            display: flex;
+            justify-content: center;
+          }
+
+          .dashboard-sidebar.mobile-sidebar .dashboard-label {
+            font-size: 14px;
+            font-weight: 400;
+            flex: 1;
+          }
+
+          .dashboard-sidebar.mobile-sidebar .logout-item {
+            margin-top: auto;
+            background: #ffffff;
+            border-radius: 0;
+            border-top: 1px solid #e2e8f0;
+            padding: 16px 20px 0;
+          }
+
+          .dashboard-sidebar.mobile-sidebar .logout-btn {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            background: #ef4444;
+            color: #ffffff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.2s ease;
+          }
+
+          .dashboard-sidebar.mobile-sidebar .logout-btn:hover {
+            background: #dc2626;
+          }
+
           .dashboard-menu {
             display: flex;
             flex-direction: column;

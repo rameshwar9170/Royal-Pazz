@@ -406,8 +406,8 @@ const AgencyTraining = () => {
       {/* Header */}
       <div className="dashboard-header">
         <div className="header-content">
-          <h1 className="dashboard-title">
-            <FaUsers className="title-icon" />
+          <h1  style={{ color: '#ffffff' }}>
+            
             Training Dashboard
           </h1>
           <p className="dashboard-subtitle">Manage and share your training programs</p>
@@ -804,12 +804,13 @@ const AgencyTraining = () => {
 
     /* Dashboard Header */
     .dashboard-header {
-      background: white;
+     background: #002B5C;
       border-radius: 16px;
       padding: 20px;
       margin-bottom: 24px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      // box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
       display: flex;
+      background: #002B5C;
       flex-direction: column;
       gap: 16px;
     }
@@ -817,24 +818,23 @@ const AgencyTraining = () => {
     .header-content {
       flex: 1;
     }
-
-    .dashboard-title {
+      .header-content h1 {
+      color: #ffffffff;
       font-size: 1.75rem;
       font-weight: 700;
-      color: #1e293b;
       margin: 0 0 8px 0;
       display: flex;
       align-items: center;
-      gap: 12px;
-    }
+     
+      }
 
     .title-icon {
       font-size: 1.5rem;
-      color: #6366f1;
+      color: #f4f4f6ff;
     }
 
     .dashboard-subtitle {
-      color: #64748b;
+      color: #ffffffff;
       font-size: 1rem;
       margin: 0;
     }
@@ -845,7 +845,7 @@ const AgencyTraining = () => {
     }
 
     .user-card {
-      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      background: #F36F21;
       padding: 16px 20px;
       border-radius: 12px;
       color: white;

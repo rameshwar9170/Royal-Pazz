@@ -1,18 +1,116 @@
-// src/pages/TrainerParticipants.js
-import React, { useState, useEffect } from 'react';
-import { getDatabase, ref, onValue, update, set } from 'firebase/database';
-import { initializeApp } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { auth } from '../../firebase/config';
+// TrainerParticipants.js - COMPLETE WITH FIXED WHATSAPP INTEGRATION
+import React, { useState, useEffect, useMemo } from 'react';
+import { getDatabase, ref, onValue, update, set, get } from 'firebase/database';
+import { initializeApp, deleteApp } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import {
-  FaUsers, FaCheck, FaTimes, FaEye, FaUserPlus,
-  FaSearch, FaFilter, FaDownload, FaSpinner, FaPhone,
-  FaEnvelope, FaExclamationTriangle, FaInfoCircle,
-  FaIdCard, FaMapMarkerAlt, FaCalendarAlt, FaClock,
-  FaMoneyBillWave, FaLink, FaImage
+  FaUsers, FaCheck, FaTimes, FaSearch, FaFilter, FaDownload,
+  FaSpinner, FaPhone, FaEnvelope, FaExclamationTriangle,
+  FaWhatsapp, FaUserCheck, FaCalendarAlt, FaClock, FaMapMarkerAlt,
+  FaEye, FaTachometerAlt, FaGraduationCap, FaBell
 } from 'react-icons/fa';
 
+/**
+ * Formats date to readable string
+ * @param {string} dateString - Date string
+ * @returns {string} - Formatted date
+ */
+const formatDate = (dateString) => {
+  if (!dateString) return 'Date not set';
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  });
+};
+
+/**
+ * Sends WhatsApp confirmation message to participant after trainer confirms
+ * @param {Object} participantData - Participant information
+ * @returns {Promise<boolean>} - Success status
+ */
+const sendTrainingConfirmationMessage = async (participantData) => {
+  try {
+    console.log('=== SENDING WHATSAPP CONFIRMATION ===');
+    console.log('Participant Data:', participantData);
+    
+    const webhookUrl = 'https://webhook.whatapi.in/webhook/6b9845c02d3c27c2';
+    
+    // Format mobile number - ensure it has country code
+    let formattedMobile = participantData.mobile.toString().replace(/\D/g, '');
+    
+    // Always use participant's mobile number for sending
+    if (!formattedMobile.startsWith('91') && formattedMobile.length === 10) {
+      formattedMobile = '91' + formattedMobile;
+    }
+    
+    console.log('Formatted Mobile (Recipient):', formattedMobile);
+    
+    // Clean the data to avoid encoding issues
+    const cleanName = participantData.name.trim();
+    const cleanEmail = participantData.email.trim();
+    const cleanUserId = participantData.userId.trim();
+    const cleanJoiningDate = participantData.joiningDate.trim();
+    const cleanMobile = participantData.mobile.toString().replace(/\D/g, '');
+    
+    // Construct message as per your API format
+    // Format: ramsir,userId,joiningDate,name,mobile,email
+    const messageParts = [
+      'ramsir',
+      cleanUserId,
+      cleanJoiningDate,
+      cleanName,
+      cleanMobile,
+      cleanEmail
+    ];
+    
+    const message = messageParts.join(',');
+    
+    console.log('Message (before encoding):', message);
+    
+    // Properly encode the message
+    const encodedMessage = encodeURIComponent(message);
+    
+    console.log('Message (after encoding):', encodedMessage);
+    
+    // Build full URL with query parameters - SEND TO PARTICIPANT'S NUMBER
+    const fullUrl = `${webhookUrl}?number=${formattedMobile}&message=${encodedMessage}`;
+    
+    console.log('Full WhatsApp API URL:', fullUrl);
+    
+    // Send GET request to WhatsApp API
+    const response = await fetch(fullUrl, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    console.log('Response Status:', response.status);
+    console.log('Response OK:', response.ok);
+    
+    if (response.ok) {
+      const data = await response.text();
+      console.log('✅ WhatsApp confirmation sent successfully to:', formattedMobile);
+      console.log('API Response:', data);
+      return true;
+    } else {
+      console.error('❌ WhatsApp API failed. Status:', response.status);
+      const errorText = await response.text();
+      console.error('Error Response:', errorText);
+      return false;
+    }
+  } catch (error) {
+    console.error('❌ WhatsApp API Error:', error);
+    console.error('Error details:', error.message);
+    return false;
+  }
+};
+
 const TrainerParticipants = () => {
+  // **State Management**
   const [trainings, setTrainings] = useState([]);
   const [selectedTraining, setSelectedTraining] = useState('');
   const [participants, setParticipants] = useState([]);
@@ -20,339 +118,456 @@ const TrainerParticipants = () => {
   const [processingParticipant, setProcessingParticipant] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [selectedParticipant, setSelectedParticipant] = useState(null);
   const [error, setError] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentTrainer, setCurrentTrainer] = useState(null);
+  const [whatsappLoading, setWhatsappLoading] = useState(false);
+  const [confirmingParticipantId, setConfirmingParticipantId] = useState(null);
+  const [showDetails, setShowDetails] = useState({});
+  const [successMessage, setSuccessMessage] = useState('');
 
-  // Generate a unique ID similar to Firebase
-  const generateUID = () => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let result = '';
-    for (let i = 0; i < 28; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
-  };
-
-  // Create a secondary Firebase app instance for user creation
-  const createSecondaryAuth = () => {
-    try {
-      const secondaryConfig = {
-        apiKey: process.env.REACT_APP_FIREBASE_API_KEY || auth.app.options.apiKey,
-        authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN || auth.app.options.authDomain,
-        projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID || auth.app.options.projectId,
-        storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET || auth.app.options.storageBucket,
-        messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID || auth.app.options.messagingSenderId,
-        appId: process.env.REACT_APP_FIREBASE_APP_ID || auth.app.options.appId,
-        databaseURL: process.env.REACT_APP_FIREBASE_DATABASE_URL || auth.app.options.databaseURL
-      };
-
-      const secondaryApp = initializeApp(secondaryConfig, 'secondary');
-      return getAuth(secondaryApp);
-    } catch (error) {
-      console.log('Secondary auth creation failed:', error.message);
-      return null;
-    }
-  };
-
-  // Format date for display
-  const formatDate = (dateString) => {
-    if (!dateString) return 'Date not set';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric'
-    });
-  };
-
-  // Format timestamp to readable date
-  const formatTimestamp = (timestamp) => {
-    if (!timestamp) return 'Not specified';
-    const date = new Date(timestamp);
-    return date.toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  // Get training status based on your data
-  const getTrainingStatusText = (training) => {
-    if (training.status) {
-      return training.status.charAt(0).toUpperCase() + training.status.slice(1);
-    }
-    if (!training.startDate) return 'Draft';
-    const startDate = new Date(training.startDate);
-    const endDate = training.endDate ? new Date(training.endDate) : null;
-    const today = new Date();
-    if (startDate > today) return 'Upcoming';
-    if (endDate && endDate < today) return 'Completed';
-    return 'Active';
-  };
-
-  const getTrainingStatusColor = (training) => {
-    const status = training.status || 'draft';
-    switch (status.toLowerCase()) {
-      case 'completed': return '#6b7280';
-      case 'active': return '#10b981';
-      case 'upcoming': return '#f59e0b';
-      default: return '#6366f1';
-    }
-  };
-
+  // **Authentication Check**
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      setCurrentUser(user);
-      if (!user) {
-        setError('Please log in to continue');
+    console.log('🔐 Checking trainer authentication...');
+    const trainerData = localStorage.getItem('htamsTrainer');
+
+    if (!trainerData) {
+      console.error('❌ No trainer data found in localStorage');
+      setError('Trainer not authenticated. Please log in again.');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const trainer = JSON.parse(trainerData);
+      console.log('👤 Trainer data loaded:', trainer);
+
+      if (!trainer.trainerId) {
+        console.error('❌ Invalid trainer data - missing trainerId');
+        setError('Invalid trainer data. Please log in again.');
+        setLoading(false);
+        return;
+      }
+
+      setCurrentTrainer(trainer);
+      setError(null);
+      console.log('✅ Trainer authentication successful');
+
+      // Test Firebase connection
+      try {
+        const db = getDatabase();
+        console.log('🔥 Firebase database instance:', db ? 'Connected' : 'Not connected');
+      } catch (dbError) {
+        console.error('❌ Firebase connection error:', dbError);
         setLoading(false);
       }
-    });
-    return () => unsubscribe();
+    } catch (err) {
+      console.error('❌ Error parsing trainer data:', err);
+      setError('Invalid trainer session. Please log in again.');
+      setLoading(false);
+    }
   }, []);
 
+  // **Fetch Trainings**
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentTrainer?.trainerId) {
+      console.log('⏳ Waiting for trainer authentication...');
+      return;
+    }
+
+    console.log('📊 Setting up trainings listener for trainer:', currentTrainer.trainerId);
     const db = getDatabase();
-    const trainerId = currentUser.uid;
     const trainingsRef = ref(db, 'HTAMS/company/trainings');
+
     const unsubscribe = onValue(trainingsRef, (snapshot) => {
       try {
         const data = snapshot.val();
+        console.log('📊 Trainings data received:', data ? Object.keys(data).length : 0, 'trainings');
+
         if (data) {
           const assignedTrainings = Object.entries(data)
-            .filter(([, training]) => training.trainerId === trainerId)
-            .map(([id, training]) => ({
-              id,
-              ...training,
-              sortDate: training.updatedAt || training.startDate || Date.now()
-            }))
-            .sort((a, b) => {
-              const timestampA = typeof a.sortDate === 'number' ? a.sortDate : new Date(a.sortDate).getTime();
-              const timestampB = typeof b.sortDate === 'number' ? b.sortDate : new Date(b.sortDate).getTime();
-              return timestampB - timestampA;
-            });
+            .filter(([, training]) => {
+              const isAssigned = training.trainerId === currentTrainer.trainerId ||
+                training.coTrainerId === currentTrainer.trainerId ||
+                (training.coTrainers && training.coTrainers.includes(currentTrainer.trainerId));
+
+              if (isAssigned) {
+                console.log('✅ Training assigned:', training.location, training.id);
+              }
+              return isAssigned;
+            })
+            .map(([id, training]) => ({ id, ...training }))
+            .sort((a, b) => new Date(b.startDate || 0) - new Date(a.startDate || 0));
+
+          console.log('📊 Assigned trainings:', assignedTrainings.length);
           setTrainings(assignedTrainings);
-          if (assignedTrainings.length > 0 && !selectedTraining) {
-            setSelectedTraining(assignedTrainings[0].id);
+
+          // Auto-select first training if none selected (only on first load)
+          if (assignedTrainings.length > 0) {
+            setSelectedTraining(prev => {
+              if (!prev) {
+                const firstTrainingId = assignedTrainings[0].id;
+                console.log('🎯 Auto-selecting training:', firstTrainingId);
+                return firstTrainingId;
+              }
+              return prev;
+            });
           }
+        } else {
+          console.log('📊 No trainings data found');
+          setTrainings([]);
         }
-        setError(null);
       } catch (err) {
+        console.error('❌ Error processing trainings:', err);
         setError('Failed to load trainings');
       } finally {
         setLoading(false);
       }
     }, (error) => {
+      console.error('❌ Firebase trainings listener error:', error);
       setError('Failed to connect to database');
       setLoading(false);
     });
-    return () => unsubscribe();
-  }, [currentUser, selectedTraining]);
 
+    return () => {
+      console.log('🧹 Cleaning up trainings listener');
+      unsubscribe();
+    };
+  }, [currentTrainer]);
+
+  // **Fetch Participants**
   useEffect(() => {
-    if (!selectedTraining || !currentUser) return;
-    const db = getDatabase();
-    const participantsRef = ref(db, `HTAMS/company/trainings/${selectedTraining}/participants`);
-    const unsubscribe = onValue(participantsRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        const participantsList = Object.entries(data).map(([id, participant]) => ({
-          id,
-          ...participant
-        }));
-        setParticipants(participantsList);
-      } else {
-        setParticipants([]);
-      }
-    });
-    return () => unsubscribe();
-  }, [selectedTraining, currentUser]);
-
-  const handleConfirmParticipant = async (participant) => {
-    if (!currentUser || !currentUser.uid) {
-      alert('❌ Authentication Error: Please log in again to continue.');
+    if (!selectedTraining) {
+      console.log('⏳ No training selected, skipping participants fetch');
+      setParticipants([]);
       return;
     }
-    const currentUserUID = currentUser.uid;
+
+    console.log('👥 Setting up participants listener for training:', selectedTraining);
+    const db = getDatabase();
+    const participantsRef = ref(db, `HTAMS/company/trainings/${selectedTraining}/participants`);
+
+    const unsubscribe = onValue(participantsRef, (snapshot) => {
+      try {
+        const data = snapshot.val();
+        console.log('👥 Participants data received:', data ? Object.keys(data).length : 0, 'participants');
+
+        if (data && typeof data === 'object') {
+          const participantsList = Object.entries(data).map(([id, participant]) => ({
+            id,
+            ...participant
+          }));
+
+          setParticipants(participantsList);
+        } else {
+          setParticipants([]);
+        }
+      } catch (err) {
+        console.error('❌ Error processing participants data:', err);
+        setParticipants([]);
+      }
+    }, (error) => {
+      console.error('❌ Firebase participants listener error:', error);
+      setParticipants([]);
+    });
+
+    return () => {
+      console.log('🧹 Cleaning up participants listener');
+      unsubscribe();
+    };
+  }, [selectedTraining]);
+
+  // **Clear Success Message**
+  useEffect(() => {
+    if (successMessage) {
+      const timer = setTimeout(() => {
+        setSuccessMessage('');
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMessage]);
+
+  // **Confirm Participant with WhatsApp and Firebase Auth Registration**
+  const handleConfirmParticipant = async (participant) => {
+    console.log('🎯 Starting participant confirmation process for:', participant.name);
+    console.log('🎯 Participant mobile:', participant.mobile || participant.phone);
+
+    if (!currentTrainer?.trainerId) {
+      alert('Authentication Error: Please log in again.');
+      return;
+    }
+
+    // Prevent double-clicking
+    if (processingParticipant === participant.id || whatsappLoading) {
+      console.log('⏳ Already processing, ignoring duplicate request');
+      return;
+    }
+
     setProcessingParticipant(participant.id);
+    setConfirmingParticipantId(participant.id);
+    setWhatsappLoading(true);
+
+    let secondaryApp = null;
+    let secondaryAuth = null;
+
     try {
       const db = getDatabase();
-      const phoneNumber = participant.mobile || participant.phone || '';
-      if (!participant.email || !phoneNumber || !participant.name) {
-        throw new Error('Missing required participant information (name, email, or phone)');
-      }
-      let mobilePassword = phoneNumber;
-      if (mobilePassword.length < 6) {
-        mobilePassword = mobilePassword + "123";
-      }
-      let newUserUID = null;
-      let authUserCreated = false;
-      try {
-        const secondaryAuth = createSecondaryAuth();
-        if (secondaryAuth) {
-          const userCredential = await createUserWithEmailAndPassword(
-            secondaryAuth,
-            participant.email,
-            mobilePassword
-          );
-          newUserUID = userCredential.user.uid;
-          authUserCreated = true;
-          await signOut(secondaryAuth);
+
+      // **Fetch level discount from HTAMS/Levels to get the LOWEST discount level**
+      console.log('📊 Fetching level discount data...');
+      const levelsRef = ref(db, 'HTAMS/Levels');
+      const levelsSnapshot = await get(levelsRef);
+      
+      let userLevel = 'AGENCY 15%'; // Fallback default level
+      let userDiscount = 15; // Fallback default discount
+      
+      if (levelsSnapshot.exists()) {
+        const levelsData = levelsSnapshot.val();
+        console.log('📊 Levels data:', levelsData);
+        
+        // Find the level with the LOWEST discount
+        const levelEntries = Object.entries(levelsData);
+        const sortedLevels = levelEntries.sort((a, b) => {
+          const discountA = parseInt(a[1].discount) || 0;
+          const discountB = parseInt(b[1].discount) || 0;
+          return discountA - discountB; // Ascending order: lowest discount first
+        });
+        
+        if (sortedLevels.length > 0) {
+          const [lowestLevelName, lowestLevelData] = sortedLevels[0];
+          userLevel = lowestLevelName;
+          userDiscount = parseInt(lowestLevelData.discount) || 0;
+          console.log(`✅ Assigned lowest discount level: ${userLevel} with ${userDiscount}% discount`);
         } else {
-          throw new Error('Secondary auth not available');
+          console.log(`⚠️ No levels found in database, using fallback: ${userLevel}`);
         }
-      } catch {
-        newUserUID = generateUID();
-        authUserCreated = false;
+      } else {
+        console.log(`⚠️ No levels data found in database, using fallback: ${userLevel}`);
       }
+
+      // **IMPORTANT: Create a secondary Firebase app instance to prevent logging out the trainer**
+      secondaryApp = initializeApp({
+        apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+        authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+        databaseURL: process.env.REACT_APP_FIREBASE_DATABASE_URL,
+        projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+        storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+        messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+        appId: process.env.REACT_APP_FIREBASE_APP_ID,
+      }, `secondary-${Date.now()}`);
+
+      secondaryAuth = getAuth(secondaryApp);
+
+      // Get training details for WhatsApp message
+      const selectedTrainingDetails = trainings.find(t => t.id === selectedTraining);
+
+      if (!selectedTrainingDetails) {
+        throw new Error('Training details not found');
+      }
+
+      // **Step 1: Check if user already exists**
+      console.log('🔍 Checking for existing user...');
+      const existingUserQuery = ref(db, 'HTAMS/users');
+      const existingSnapshot = await get(existingUserQuery);
+
+      if (existingSnapshot.exists()) {
+        const users = existingSnapshot.val();
+        const existingUser = Object.values(users).find(user =>
+          user.email === participant.email
+        );
+
+        if (existingUser) {
+          alert('❌ This email is already registered in the system.');
+          if (secondaryAuth) await secondaryAuth.signOut();
+          if (secondaryApp) await deleteApp(secondaryApp);
+          setProcessingParticipant(null);
+          setConfirmingParticipantId(null);
+          setWhatsappLoading(false);
+          return;
+        }
+      }
+
+      // **Step 2: Get participant mobile number**
+      const phoneNumber = (participant.mobile || participant.phone || '').toString();
+      
+      if (!phoneNumber || phoneNumber.length < 10) {
+        throw new Error('Invalid mobile number');
+      }
+
+      console.log('📱 Participant mobile number:', phoneNumber);
+
+      // **Step 3: Create Firebase Auth account**
+      console.log('🔐 Creating Firebase Auth account...');
+
+      const userCredential = await createUserWithEmailAndPassword(
+        secondaryAuth,
+        participant.email,
+        phoneNumber
+      );
+
+      const userId = userCredential.user.uid;
+      console.log('✅ Firebase Auth account created with UID:', userId);
+
+      // **CRITICAL: Sign out and delete secondary app**
+      await secondaryAuth.signOut();
+      await deleteApp(secondaryApp);
+      console.log('✅ Secondary auth instance cleaned up');
+
+      // **Step 4: Create user data in HTAMS/users**
+      console.log('💾 Creating user data in users node...');
       const userData = {
+        name: participant.name || '',
+        phone: phoneNumber,
+        mobile: phoneNumber,
+        email: participant.email || '',
+        aadhar: participant.aadhar || '',
+        address: participant.address || '',
+        city: participant.city || '',
+        state: participant.state || '',
+        pin: participant.pin || '',
+        pan: participant.pan || '',
+        role: 'agency',
+        Role: 'Agency',
+        currentLevel: userLevel,
+        createdAt: new Date().toISOString(),
+        lastUpdated: Date.now(),
+        isActive: true,
+        firstTime: true,
+        referredBy: participant.referredBy || '',
+        joinedViaTraining: selectedTraining,
+        confirmedByTrainer: currentTrainer.name,
         MySales: "0",
         MyTeam: "",
-        Role: "Agency",
         analytics: {
           totalCommissionsEarned: 0,
           totalCommissionsReceived: 0,
           totalOrders: 0,
           totalSales: 0
         },
-        createdAt: new Date().toISOString(),
-        currentLevel: "Agency",
-        email: participant.email,
-        firstTime: true,
-        isActive: true,
-        joinedViaTraining: selectedTraining,
-        lastUpdated: Date.now(),
-        mobile: phoneNumber,
-        name: participant.name,
-        phone: phoneNumber,
-        referredBy: participant.referredBy || "",
-        role: "agency",
-        initialPassword: phoneNumber,
-        passwordSetByMobile: true,
-        needsPasswordReset: true,
-        confirmedBy: currentUserUID,
-        confirmedAt: new Date().toISOString(),
-        authMethod: authUserCreated ? 'firebase_auth' : 'custom_uid',
-        firebaseAuthUser: authUserCreated,
-        address: participant.address || "",
-        city: participant.city || "",
-        state: participant.state || "",
-        pin: participant.pin || "",
-        aadhar: participant.aadhar || "",
-        pan: participant.pan || "",
-        trainingParticipantId: participant.id,
-        trainingDetails: {
-          trainingId: selectedTraining,
-          joinedAt: participant.joinedAt || Date.now(),
-          confirmedByTrainer: true,
-          formMode: participant.formMode || "",
-          aadhaarVerification: participant.aadhaar_verification || {},
-          panPhotoUrl: participant.panPhotoUrl || "",
-          passportPhotoUrl: participant.passportPhotoUrl || ""
-        }
+        commissionHistory: {},
+        salesHistory: {}
       };
-      await set(ref(db, `HTAMS/users/${newUserUID}`), userData);
+
+      await set(ref(db, `HTAMS/users/${userId}`), userData);
+      console.log('✅ User data saved to HTAMS/users node');
+
+      // **Step 5: Update participant status in training**
+      const joiningDate = new Date().toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+      });
+      
       await update(ref(db, `HTAMS/company/trainings/${selectedTraining}/participants/${participant.id}`), {
         status: 'confirmed',
         confirmedAt: new Date().toISOString(),
-        confirmedBy: currentUserUID,
-        userId: newUserUID,
-        initialPassword: phoneNumber,
-        userCreated: true,
+        confirmedBy: currentTrainer.trainerId,
         confirmedByTrainer: true,
-        userSavedAt: `HTAMS/users/${newUserUID}`,
-        authMethod: authUserCreated ? 'firebase_auth' : 'custom_uid',
-        confirmationDetails: {
-          trainerName: currentUser.displayName || currentUser.email || 'Trainer',
-          confirmationTimestamp: Date.now(),
-          userCreatedUnder: `HTAMS/users`,
-          authenticationMethod: authUserCreated ? 'Firebase Auth (Secondary)' : 'Custom UID'
-        }
+        userAccountCreated: true,
+        createdUserId: userId,
+        joiningDate: joiningDate,
+        trainerName: currentTrainer.name
+      });
+      console.log('✅ Participant status updated in training');
+
+      // **Step 6: Generate User ID**
+      const generateUserId = (name, mobile) => {
+        const cleanMobile = mobile.toString().replace(/\D/g, '');
+        const namePrefix = name.substring(0, 3).toLowerCase().replace(/[^a-z]/g, '');
+        const mobileLastFour = cleanMobile.slice(-4);
+        const randomNum = Math.floor(Math.random() * 100).toString().padStart(2, '0');
+        return `${namePrefix}${mobileLastFour}${randomNum}`;
+      };
+
+      const generatedUserId = generateUserId(participant.name, phoneNumber);
+      console.log('🆔 Generated User ID:', generatedUserId);
+
+      // **Step 7: Send WhatsApp confirmation message**
+      console.log('📱 Preparing WhatsApp message...');
+      console.log('📱 Sending to mobile:', phoneNumber);
+
+      const whatsappSuccess = await sendTrainingConfirmationMessage({
+        name: participant.name,
+        mobile: phoneNumber, // This is the recipient's mobile
+        email: participant.email,
+        userId: generatedUserId,
+        joiningDate: joiningDate
       });
 
-      // WhatsApp webhook logic
-      const welcomeMsg = encodeURIComponent(
-        `Welcome to ONDO Company!\nWe are pleased to welcome you as a valued member of our Sales Team.\n🆔 User ID: ${newUserUID}\n📅 Joining Date: 19/09/2025\n👤 Name: ${participant.name}\n📱 Mobile No: ${phoneNumber}\n✉ Email ID: ${participant.email}\n🌐 Company Portal: https://royal-pazz.vercel.app/login\n🔑 For your security, please log in and change your password after your first login.\nWishing you great success in your journey with us.\n— ONDO Management Team`
-      );
-      const whatsappUrl = `https://webhook.whatapi.in/webhook/68ccf7cfbde42bbd9077346e?number=${phoneNumber}&message=${welcomeMsg}`;
-      fetch(whatsappUrl)
-        .then(res => res.json())
-        .then(result => {
-          console.log("WhatsApp Message Sent:", result);
-        })
-        .catch(e => {
-          console.error("Failed to send WhatsApp message:", e);
-        });
-
-      setShowConfirmModal(false);
-      setSelectedParticipant(null);
-      const authMethodText = authUserCreated ? 'Firebase Authentication (Secondary)' : 'Custom User ID';
-      alert(`✅ Success! User Account Created\n\n👤 User Details:\n• Name: ${participant.name}\n• Email: ${participant.email}\n• Password: ${phoneNumber}\n• User ID: ${newUserUID}\n• Auth Method: ${authMethodText}\n• Saved at: HTAMS/users/${newUserUID}\n\n⚠️ User must change password on first login.`);
-    } catch (error) {
-      let errorMessage = 'Failed to create user account.';
-      if (error.code === 'auth/email-already-in-use') {
-        errorMessage = 'This email address is already registered in the system.';
-      } else if (error.code === 'auth/weak-password') {
-        errorMessage = 'Password is too weak. Please ensure phone number has at least 6 digits.';
-      } else if (error.code === 'auth/invalid-email') {
-        errorMessage = 'Invalid email address format.';
-      } else if (error.message) {
-        errorMessage = error.message;
+      if (whatsappSuccess) {
+        setSuccessMessage(`✅ ${participant.name} confirmed successfully! User account created and WhatsApp message sent to ${phoneNumber}.`);
+        console.log('🎉 Complete success - Auth created, user registered, and WhatsApp sent');
+      } else {
+        setSuccessMessage(`⚠️ ${participant.name} confirmed and registered, but WhatsApp message failed. Please contact them manually at ${phoneNumber}.`);
+        console.log('⚠️ Partial success - Auth and user created but WhatsApp failed');
       }
-      alert(`❌ Error: ${errorMessage}`);
+
+    } catch (error) {
+      console.error('❌ Error in confirmation process:', error);
+
+      if (error.code === 'auth/email-already-in-use') {
+        alert('❌ This email is already registered with Firebase Auth.');
+      } else if (error.code === 'auth/weak-password') {
+        alert('❌ Password is too weak. Phone number must be at least 6 digits.');
+      } else if (error.code === 'auth/invalid-email') {
+        alert('❌ Invalid email format.');
+      } else {
+        alert(`❌ Error: Failed to confirm participant. ${error.message}`);
+      }
     } finally {
+      // **CRITICAL: Always cleanup secondary app instance**
+      try {
+        if (secondaryAuth) {
+          await secondaryAuth.signOut();
+        }
+        if (secondaryApp) {
+          await deleteApp(secondaryApp);
+        }
+      } catch (cleanupError) {
+        console.warn('⚠️ Error during secondary app cleanup:', cleanupError);
+      }
+
       setProcessingParticipant(null);
+      setConfirmingParticipantId(null);
+      setWhatsappLoading(false);
     }
   };
 
+  // **Reject Participant**
   const handleRejectParticipant = async (participant) => {
-    if (!currentUser || !currentUser.uid) {
-      alert('❌ Authentication Error: Please log in again to continue.');
-      return;
-    }
-
-    const confirmReject = window.confirm(
-      `Are you sure you want to reject ${participant.name}?\n\nThis action cannot be undone.`
-    );
-    
+    const confirmReject = window.confirm(`Are you sure you want to reject ${participant.name}?`);
     if (!confirmReject) return;
 
+    console.log('❌ Rejecting participant:', participant.name);
     setProcessingParticipant(participant.id);
-    
+
     try {
       const db = getDatabase();
       await update(ref(db, `HTAMS/company/trainings/${selectedTraining}/participants/${participant.id}`), {
         status: 'rejected',
         rejectedAt: new Date().toISOString(),
-        rejectedBy: currentUser.uid,
-        rejectionReason: 'Rejected by trainer'
+        rejectedBy: currentTrainer.trainerId,
+        trainerName: currentTrainer.name
       });
-      
-      alert(`❌ ${participant.name} has been rejected.`);
+
+      setSuccessMessage(`${participant.name} has been rejected successfully.`);
+      console.log('✅ Participant rejected successfully');
     } catch (error) {
-      console.error('Error rejecting participant:', error);
-      alert('Error rejecting participant: ' + error.message);
+      console.error('❌ Error rejecting participant:', error);
+      alert(`Error rejecting participant: ${error.message}`);
     } finally {
       setProcessingParticipant(null);
     }
   };
 
-  const filteredParticipants = participants.filter(participant => {
-    const phoneNumber = participant.mobile || participant.phone || '';
-    const matchesSearch = participant.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         participant.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         phoneNumber.includes(searchTerm);
-    
-    const matchesStatus = statusFilter === 'all' || participant.status === statusFilter;
-    
-    return matchesSearch && matchesStatus;
-  });
+  // **Toggle Participant Details**
+  const toggleDetails = (participantId) => {
+    setShowDetails(prev => ({
+      ...prev,
+      [participantId]: !prev[participantId]
+    }));
+  };
 
+  // **Helper Functions**
   const getStatusColor = (status) => {
     switch (status) {
       case 'confirmed': return '#10b981';
@@ -367,1117 +582,1054 @@ const TrainerParticipants = () => {
     switch (status) {
       case 'confirmed': return <FaCheck />;
       case 'rejected': return <FaTimes />;
-      case 'joined': return <FaEye />;
-      case 'pending': return <FaInfoCircle />;
-      default: return <FaEye />;
+      case 'joined': return <FaUserCheck />;
+      default: return <FaClock />;
     }
   };
 
-  const exportToCSV = () => {
-    const csvContent = participants.map(p => {
-      const phone = p.mobile || p.phone || 'N/A';
-      return `"${p.name}","${p.email}","${phone}","${p.status || 'pending'}","${p.joinedAt ? formatTimestamp(p.joinedAt) : 'N/A'}","${p.confirmedAt ? new Date(p.confirmedAt).toLocaleDateString() : 'N/A'}","${p.userId || 'N/A'}","${p.authMethod || 'N/A'}"`;
-    }).join('\n');
-    const blob = new Blob([`Name,Email,Phone,Status,Joined Date,Confirmed Date,User ID,Auth Method\n${csvContent}`], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `participants-${selectedTraining}-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const getStatusBadge = (status) => {
+    const color = getStatusColor(status || 'pending');
+    const icon = getStatusIcon(status || 'pending');
+    const text = (status || 'pending').toUpperCase();
+
+    return (
+      <span style={{
+        padding: '0.375rem 0.75rem',
+        borderRadius: '16px',
+        fontSize: '0.7rem',
+        fontWeight: '700',
+        background: `${color}15`,
+        color: color,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '0.375rem',
+        textTransform: 'uppercase',
+        letterSpacing: '0.5px',
+        whiteSpace: 'nowrap'
+      }}>
+        {icon}
+        {text}
+      </span>
+    );
   };
 
-  // Show loading state
+  // **Filter Participants** (Memoized to prevent unnecessary recalculations)
+  const filteredParticipants = useMemo(() => {
+    return participants.filter(participant => {
+      const phoneNumber = participant.mobile || participant.phone || '';
+      const matchesSearch = participant.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        participant.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        phoneNumber.includes(searchTerm);
+
+      const matchesStatus = statusFilter === 'all' || participant.status === statusFilter;
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [participants, searchTerm, statusFilter]);
+
+  // **Export to CSV**
+  const exportToCSV = () => {
+    console.log('📄 Exporting participants to CSV...');
+    const csvContent = [
+      'Name,Email,Phone,Status,User ID,Joined Date,Confirmed Date,Confirmed By',
+      ...participants.map(p => {
+        const phone = p.mobile || p.phone || 'N/A';
+        const joinedDate = p.joinedAt ? new Date(p.joinedAt).toLocaleDateString('en-IN') : 'N/A';
+        const confirmedDate = p.confirmedAt ? new Date(p.confirmedAt).toLocaleDateString('en-IN') : 'N/A';
+        const confirmedBy = p.trainerName || 'N/A';
+        return `"${p.name}","${p.email}","${phone}","${p.status || 'pending'}","${p.userId || 'N/A'}","${joinedDate}","${confirmedDate}","${confirmedBy}"`;
+      })
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const selectedTrainingDetails = trainings.find(t => t.id === selectedTraining);
+    const filename = `participants-${selectedTrainingDetails?.location || 'training'}-${new Date().toISOString().split('T')[0]}.csv`;
+
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    console.log('✅ CSV export completed:', filename);
+  };
+
+  // **Statistics** (Memoized to prevent unnecessary recalculations)
+  const stats = useMemo(() => {
+    const total = participants.length;
+    const confirmed = participants.filter(p => p.status === 'confirmed').length;
+    const pending = participants.filter(p => !p.status || p.status === 'pending').length;
+    const joined = participants.filter(p => p.status === 'joined').length;
+    const rejected = participants.filter(p => p.status === 'rejected').length;
+
+    return { total, confirmed, pending, joined, rejected };
+  }, [participants]);
+
+  // **Render Loading State**
   if (loading) {
     return (
       <div style={{
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
-        height: '400px'
+        height: '100vh',
+        flexDirection: 'column',
+        gap: '1rem',
+        background: 'linear-gradient(to bottom, #f8fafc 0%, #e2e8f0 100%)'
       }}>
-        <div style={{ 
-          textAlign: 'center',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: '1rem'
-        }}>
-          <FaSpinner style={{ fontSize: '2rem', animation: 'spin 1s linear infinite', color: '#3b82f6' }} />
-          <p style={{ color: '#6b7280', fontSize: '1.1rem' }}>
-            Loading participants...
+        <FaSpinner style={{
+          fontSize: '3rem',
+          animation: 'spin 1s linear infinite',
+          color: '#4f46e5'
+        }} />
+        <div style={{ textAlign: 'center' }}>
+          <p style={{ color: '#1f2937', fontSize: '1.125rem', margin: '0 0 0.5rem 0', fontWeight: '600' }}>
+            Loading Participants
+          </p>
+          <p style={{ color: '#6b7280', fontSize: '0.875rem', margin: '0' }}>
+            Please wait...
           </p>
         </div>
       </div>
     );
   }
 
-  // Show error state
-  if (error || (!currentUser && !loading)) {
+  // **Render Error State**
+  if (error || !currentTrainer) {
     return (
       <div style={{
-        textAlign: 'center',
-        padding: '3rem',
-        color: '#dc2626'
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh',
+        padding: '1.5rem',
+        background: 'linear-gradient(to bottom, #f8fafc 0%, #e2e8f0 100%)'
       }}>
         <div style={{
-          background: '#fef2f2',
-          border: '1px solid #fecaca',
-          borderRadius: '8px',
+          background: 'white',
+          border: '2px solid #fecaca',
+          borderRadius: '12px',
           padding: '2rem',
           maxWidth: '400px',
-          margin: '0 auto'
+          textAlign: 'center',
+          boxShadow: '0 4px 20px rgba(239, 68, 68, 0.15)'
         }}>
-          <FaExclamationTriangle style={{ fontSize: '2rem', marginBottom: '1rem' }} />
-          <h3 style={{ margin: '0 0 1rem 0' }}>
-            {error || 'Session Expired'}
-          </h3>
-          <p style={{ margin: '0 0 1rem 0' }}>
-            {error || 'Your session has been affected. Please log in again.'}
+          <FaExclamationTriangle style={{
+            fontSize: '3rem',
+            marginBottom: '1rem',
+            color: '#dc2626'
+          }} />
+          <h2 style={{
+            margin: '0 0 0.75rem 0',
+            color: '#991b1b',
+            fontSize: '1.25rem',
+            fontWeight: '700'
+          }}>
+            Authentication Required
+          </h2>
+          <p style={{
+            margin: '0 0 1.5rem 0',
+            color: '#7f1d1d',
+            fontSize: '0.875rem',
+            lineHeight: '1.5'
+          }}>
+            Your session has expired. Please log in again.
           </p>
           <button
-            onClick={() => window.location.reload()}
+            onClick={() => window.location.href = '/trainer-login'}
             style={{
-              background: '#dc2626',
+              background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
               color: 'white',
               border: 'none',
-              padding: '0.5rem 1rem',
-              borderRadius: '6px',
+              padding: '0.75rem 1.5rem',
+              borderRadius: '8px',
               cursor: 'pointer',
-              fontWeight: '500'
+              fontWeight: '600',
+              fontSize: '0.875rem',
+              boxShadow: '0 2px 8px rgba(220, 38, 38, 0.25)'
             }}
           >
-            Refresh Page
+            Go to Login
           </button>
         </div>
       </div>
     );
   }
 
-  // Find selected training details for display
   const selectedTrainingDetails = trainings.find(training => training.id === selectedTraining);
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-      {/* Header Section */}
-      <div style={{
-        background: 'white',
-        borderRadius: '12px',
-        padding: '2rem',
-        boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-        marginBottom: '2rem'
-      }}>
+    <div style={{
+      minHeight: '100vh',
+      background: 'linear-gradient(to bottom, #f8fafc 0%, #e2e8f0 100%)',
+      padding: '0.75rem',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+    }}>
+      <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+        {/* Compact Header */}
         <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          marginBottom: '1.5rem',
-          flexWrap: 'wrap',
-          gap: '1rem'
-        }}>
-          <div>
-            <h1 style={{
-              fontSize: '2rem',
-              fontWeight: '700',
-              color: '#1a2332',
-              margin: '0 0 0.5rem 0',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem'
-            }}>
-              <FaUsers style={{ color: '#3b82f6' }} />
-              Training Participants
-            </h1>
-            <p style={{
-              color: '#6b7280',
-              margin: '0 0 0.25rem 0',
-              fontSize: '0.95rem'
-            }}>
-              Confirmed users are saved under: <code style={{ background: '#e5e7eb', padding: '0.125rem 0.375rem', borderRadius: '4px', fontFamily: 'monospace' }}>ONDO/users</code>
-            </p>
-            <p style={{
-              color: '#059669',
-              margin: '0',
-              fontSize: '0.875rem',
-              fontWeight: '500'
-            }}>
-              👤 Logged in as: {currentUser?.email || currentUser?.displayName || 'Trainer'}
-            </p>
-          </div>
-          
-          <div style={{
-            background: 'linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)',
-            border: '2px solid #10b981',
-            borderRadius: '8px',
-            padding: '0.75rem 1rem',
-            fontSize: '0.875rem',
-            fontWeight: '500',
-            color: '#047857'
-          }}>
-            💾 Users saved at: <strong>ONDO</strong>
-            <br />
-            <span style={{ fontSize: '0.75rem', opacity: '0.8' }}>
-              🔐 Session Protected Creation
-            </span>
-          </div>
-        </div>
-
-        {/* Controls Row */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-          gap: '1.5rem',
-          marginBottom: '1.5rem'
-        }}>
-          <div>
-            <label style={{
-              display: 'block',
-              fontWeight: '600',
-              marginBottom: '0.5rem',
-              color: '#374151'
-            }}>
-              Select Training (Newest First):
-            </label>
-            <select
-              value={selectedTraining}
-              onChange={(e) => setSelectedTraining(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.75rem',
-                border: '2px solid #e5e7eb',
-                borderRadius: '8px',
-                fontSize: '1rem',
-                background: 'white',
-                outline: 'none',
-                transition: 'border-color 0.3s ease'
-              }}
-              onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
-              onBlur={(e) => e.target.style.borderColor = '#e5e7eb'}
-            >
-              <option value="">Select a training</option>
-              {trainings.map((training) => (
-                <option key={training.id} value={training.id}>
-                  📍 {training.location || 'Location not set'} • 📅 {formatDate(training.startDate)} • 🏷️ {getTrainingStatusText(training)} • 👥 {training.participants ? Object.keys(training.participants).length : 0} participants • 💰 ₹{training.fees || 0}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label style={{
-              display: 'block',
-              fontWeight: '600',
-              marginBottom: '0.5rem',
-              color: '#374151'
-            }}>
-              Search Participants:
-            </label>
-            <div style={{ position: 'relative' }}>
-              <FaSearch style={{
-                position: 'absolute',
-                left: '12px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: '#6b7280'
-              }} />
-              <input
-                type="text"
-                placeholder="Search by name, email, phone, or Aadhar..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem 0.75rem 0.75rem 2.5rem',
-                  border: '2px solid #e5e7eb',
-                  borderRadius: '8px',
-                  fontSize: '1rem',
-                  outline: 'none',
-                  transition: 'border-color 0.3s ease',
-                  boxSizing: 'border-box'
-                }}
-                onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
-                onBlur={(e) => e.target.style.borderColor = '#e5e7eb'}
-              />
-            </div>
-          </div>
-
-          <div>
-            <label style={{
-              display: 'block',
-              fontWeight: '600',
-              marginBottom: '0.5rem',
-              color: '#374151'
-            }}>
-              Filter by Status:
-            </label>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.75rem',
-                border: '2px solid #e5e7eb',
-                borderRadius: '8px',
-                fontSize: '1rem',
-                background: 'white',
-                outline: 'none',
-                transition: 'border-color 0.3s ease'
-              }}
-              onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
-              onBlur={(e) => e.target.style.borderColor = '#e5e7eb'}
-            >
-              <option value="all">All Status</option>
-              <option value="joined">Joined</option>
-              <option value="pending">Pending</option>
-              <option value="confirmed">Confirmed</option>
-              <option value="rejected">Rejected</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Enhanced Selected Training Details */}
-        {selectedTrainingDetails && (
-          <div style={{
-            background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
-            border: '2px solid #0ea5e9',
-            borderRadius: '12px',
-            padding: '1.5rem',
-            marginBottom: '1.5rem'
-          }}>
-            <div style={{
-              fontWeight: '700',
-              color: '#0369a1',
-              marginBottom: '1rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              fontSize: '1.1rem'
-            }}>
-              📋 Selected Training: {selectedTrainingDetails.trainerName || 'Training'} 
-              <span style={{
-                background: getTrainingStatusColor(selectedTrainingDetails) + '20',
-                color: getTrainingStatusColor(selectedTrainingDetails),
-                padding: '0.25rem 0.75rem',
-                borderRadius: '12px',
-                fontSize: '0.8rem',
-                fontWeight: '600'
-              }}>
-                {getTrainingStatusText(selectedTrainingDetails)}
-              </span>
-            </div>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-              gap: '1rem',
-              color: '#047857',
-              fontSize: '0.875rem'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <FaMapMarkerAlt style={{ color: '#f59e0b' }} />
-                <strong>Location:</strong> {selectedTrainingDetails.location || 'Not specified'}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <FaCalendarAlt style={{ color: '#3b82f6' }} />
-                <strong>Start Date:</strong> {formatDate(selectedTrainingDetails.startDate)}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <FaClock style={{ color: '#6366f1' }} />
-                <strong>Time:</strong> {selectedTrainingDetails.time || 'Not set'}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <FaMoneyBillWave style={{ color: '#10b981' }} />
-                <strong>Fees:</strong> ₹{selectedTrainingDetails.fees || 0}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <FaUsers style={{ color: '#10b981' }} />
-                <strong>Participants:</strong> {selectedTrainingDetails.participants ? Object.keys(selectedTrainingDetails.participants).length : 0} / {selectedTrainingDetails.candidates || 'Unlimited'}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <FaLink style={{ color: '#8b5cf6' }} />
-                <strong>Duration:</strong> {selectedTrainingDetails.duration || 0} day(s)
-              </div>
-            </div>
-            
-            {selectedTrainingDetails.joinLink && (
-              <div style={{
-                marginTop: '1rem',
-                padding: '0.75rem',
-                background: 'rgba(16,185,129,0.1)',
-                borderRadius: '8px',
-                fontSize: '0.8rem'
-              }}>
-                <strong>🔗 Join Link:</strong> 
-                <a href={selectedTrainingDetails.joinLink} target="_blank" rel="noopener noreferrer" style={{ color: '#0369a1', marginLeft: '0.5rem' }}>
-                  {selectedTrainingDetails.joinLink}
-                </a>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Statistics */}
-        {selectedTraining && (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-            gap: '1rem'
-          }}>
-            <div style={{
-              background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-              color: 'white',
-              padding: '1rem',
-              borderRadius: '8px',
-              textAlign: 'center'
-            }}>
-              <div style={{ fontSize: '1.5rem', fontWeight: '700' }}>
-                {participants.length}
-              </div>
-              <div style={{ fontSize: '0.9rem', opacity: '0.9' }}>Total Participants</div>
-            </div>
-            
-            <div style={{
-              background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-              color: 'white',
-              padding: '1rem',
-              borderRadius: '8px',
-              textAlign: 'center'
-            }}>
-              <div style={{ fontSize: '1.5rem', fontWeight: '700' }}>
-                {participants.filter(p => p.status === 'joined').length}
-              </div>
-              <div style={{ fontSize: '0.9rem', opacity: '0.9' }}>Joined</div>
-            </div>
-            
-            <div style={{
-              background: 'linear-gradient(135deg, #10b981 0%, #047857 100%)',
-              color: 'white',
-              padding: '1rem',
-              borderRadius: '8px',
-              textAlign: 'center'
-            }}>
-              <div style={{ fontSize: '1.5rem', fontWeight: '700' }}>
-                {participants.filter(p => p.status === 'confirmed').length}
-              </div>
-              <div style={{ fontSize: '0.9rem', opacity: '0.9' }}>Confirmed → Users</div>
-            </div>
-            
-            <div style={{
-              background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-              color: 'white',
-              padding: '1rem',
-              borderRadius: '8px',
-              textAlign: 'center'
-            }}>
-              <div style={{ fontSize: '1.5rem', fontWeight: '700' }}>
-                {participants.filter(p => !p.status || p.status === 'pending').length}
-              </div>
-              <div style={{ fontSize: '0.9rem', opacity: '0.9' }}>Pending</div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Participants Table */}
-      {selectedTraining && (
-        <div style={{
-          background: 'white',
+          background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
           borderRadius: '12px',
-          padding: '2rem',
-          boxShadow: '0 4px 20px rgba(0,0,0,0.08)'
+          padding: '1rem 1.25rem',
+          boxShadow: '0 4px 20px rgba(79, 70, 229, 0.25)',
+          marginBottom: '1rem',
+          color: 'white'
         }}>
           <div style={{
             display: 'flex',
-            justifyContent: 'space-between',
             alignItems: 'center',
-            marginBottom: '1.5rem',
+            justifyContent: 'space-between',
             flexWrap: 'wrap',
-            gap: '1rem'
+            gap: '0.75rem'
           }}>
-            <h2 style={{
-              fontSize: '1.5rem',
-              fontWeight: '600',
-              color: '#1a2332',
-              margin: '0'
-            }}>
-              Participant Details
-            </h2>
-            
+            <div>
+              <h1 style={{
+                fontSize: '1.5rem',
+                fontWeight: '700',
+                margin: '0 0 0.25rem 0',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem'
+              }}>
+                <FaGraduationCap style={{ fontSize: '1.75rem' }} />
+                Participants
+              </h1>
+              <p style={{
+                margin: '0',
+                fontSize: '0.85rem',
+                opacity: '0.95',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.375rem'
+              }}>
+                <FaUserCheck style={{ fontSize: '0.875rem' }} />
+                {currentTrainer?.name}
+              </p>
+            </div>
             <button
               onClick={exportToCSV}
               disabled={participants.length === 0}
               style={{
-                background: participants.length === 0 ? '#9ca3af' : 'linear-gradient(135deg, #10b981 0%, #047857 100%)',
+                background: participants.length === 0 ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.25)',
                 color: 'white',
-                border: 'none',
-                padding: '0.75rem 1.5rem',
+                border: '1px solid rgba(255,255,255,0.3)',
+                padding: '0.625rem 1rem',
                 borderRadius: '8px',
                 cursor: participants.length === 0 ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.5rem',
-                fontWeight: '500',
-                transition: 'transform 0.2s ease'
+                fontWeight: '600',
+                fontSize: '0.875rem',
+                transition: 'all 0.2s'
               }}
-              onMouseOver={(e) => participants.length > 0 && (e.target.style.transform = 'translateY(-2px)')}
-              onMouseOut={(e) => e.target.style.transform = 'translateY(0)'}
             >
               <FaDownload />
-              Export CSV
+              Export
             </button>
+          </div>
+
+          {/* Success/WhatsApp Messages */}
+          {successMessage && (
+            <div style={{
+              background: 'rgba(16, 185, 129, 0.2)',
+              border: '1px solid rgba(16, 185, 129, 0.4)',
+              borderRadius: '8px',
+              padding: '0.75rem',
+              marginTop: '0.75rem',
+              fontSize: '0.875rem',
+              fontWeight: '500',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem'
+            }}>
+              <FaBell />
+              {successMessage}
+            </div>
+          )}
+
+          {whatsappLoading && (
+            <div style={{
+              background: 'rgba(37, 211, 102, 0.2)',
+              border: '1px solid rgba(37, 211, 102, 0.4)',
+              borderRadius: '8px',
+              padding: '0.75rem',
+              marginTop: '0.75rem',
+              fontSize: '0.875rem',
+              fontWeight: '500',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem'
+            }}>
+              <FaWhatsapp className="spinning" />
+              Sending WhatsApp...
+            </div>
+          )}
+        </div>
+
+        {/* Compact Controls */}
+        <div style={{
+          background: 'white',
+          borderRadius: '12px',
+          padding: '1rem',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+          marginBottom: '1rem'
+        }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+            gap: '0.75rem'
+          }}>
+            {/* Training Selection */}
+            <div>
+              <label style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.375rem',
+                fontWeight: '600',
+                marginBottom: '0.5rem',
+                color: '#1f2937',
+                fontSize: '0.875rem'
+              }}>
+                <FaTachometerAlt style={{ color: '#4f46e5', fontSize: '0.875rem' }} />
+                Training
+              </label>
+              <select
+                value={selectedTraining}
+                onChange={(e) => {
+                  setSelectedTraining(e.target.value);
+                  setParticipants([]);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '1.5px solid #e5e7eb',
+                  borderRadius: '8px',
+                  fontSize: '0.875rem',
+                  background: 'white',
+                  fontWeight: '500',
+                  color: '#374151',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="">Select training...</option>
+                {trainings.map(training => (
+                  <option key={training.id} value={training.id}>
+                    {training.location || 'Location not set'} - {formatDate(training.startDate)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Search */}
+            <div>
+              <label style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.375rem',
+                fontWeight: '600',
+                marginBottom: '0.5rem',
+                color: '#1f2937',
+                fontSize: '0.875rem'
+              }}>
+                <FaSearch style={{ color: '#10b981', fontSize: '0.875rem' }} />
+                Search
+              </label>
+              <div style={{ position: 'relative' }}>
+                <FaSearch style={{
+                  position: 'absolute',
+                  left: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: '#9ca3af',
+                  fontSize: '0.875rem'
+                }} />
+                <input
+                  type="text"
+                  placeholder="Name, email, phone..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem 0.75rem 0.75rem 2.5rem',
+                    border: '1.5px solid #e5e7eb',
+                    borderRadius: '8px',
+                    fontSize: '0.875rem',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Status Filter */}
+            <div>
+              <label style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.375rem',
+                fontWeight: '600',
+                marginBottom: '0.5rem',
+                color: '#1f2937',
+                fontSize: '0.875rem'
+              }}>
+                <FaFilter style={{ color: '#8b5cf6', fontSize: '0.875rem' }} />
+                Status
+              </label>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '1.5px solid #e5e7eb',
+                  borderRadius: '8px',
+                  fontSize: '0.875rem',
+                  background: 'white',
+                  fontWeight: '500',
+                  color: '#374151',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="all">All Status</option>
+                <option value="joined">Joined</option>
+                <option value="pending">Pending</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Participants Cards */}
+        <div style={{
+          background: 'white',
+          borderRadius: '12px',
+          padding: '1rem',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+        }}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '1rem',
+            paddingBottom: '0.75rem',
+            borderBottom: '2px solid #f1f5f9'
+          }}>
+            <h2 style={{
+              fontSize: '1.125rem',
+              fontWeight: '700',
+              color: '#1f2937',
+              margin: '0',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem'
+            }}>
+              <FaUsers style={{ color: '#4f46e5', fontSize: '1.125rem' }} />
+              Participants
+              <span style={{
+                fontSize: '0.875rem',
+                color: '#6b7280',
+                fontWeight: '500',
+                background: '#f3f4f6',
+                padding: '0.25rem 0.625rem',
+                borderRadius: '12px'
+              }}>
+                {filteredParticipants.length}/{participants.length}
+              </span>
+            </h2>
           </div>
 
           {filteredParticipants.length === 0 ? (
             <div style={{
               textAlign: 'center',
-              padding: '3rem',
-              color: '#6b7280'
+              padding: '3rem 1.5rem',
+              color: '#6b7280',
+              background: '#f9fafb',
+              borderRadius: '8px',
+              border: '2px dashed #e5e7eb'
             }}>
-              <FaUsers style={{ fontSize: '3rem', marginBottom: '1rem', color: '#d1d5db' }} />
-              <h3 style={{ marginBottom: '0.5rem' }}>No Participants Found</h3>
-              <p>
-                {participants.length === 0 
-                  ? 'No participants have joined this training yet.'
-                  : 'No participants match your search criteria.'
+              <FaUsers style={{
+                fontSize: '3rem',
+                marginBottom: '1rem',
+                color: '#d1d5db'
+              }} />
+              <h3 style={{
+                marginBottom: '0.5rem',
+                fontSize: '1.125rem',
+                fontWeight: '600',
+                color: '#374151'
+              }}>
+                No Participants
+              </h3>
+              <p style={{ fontSize: '0.875rem', margin: '0' }}>
+                {participants.length === 0
+                  ? 'No participants have joined yet.'
+                  : 'No matches found.'
                 }
               </p>
             </div>
           ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{
-                width: '100%',
-                borderCollapse: 'collapse',
-                fontSize: '0.95rem'
-              }}>
-                <thead>
-                  <tr style={{ background: '#f8fafc' }}>
-                    <th style={{ 
-                      padding: '1rem', 
-                      textAlign: 'left', 
-                      borderBottom: '2px solid #e5e7eb', 
-                      fontWeight: '600',
-                      color: '#1a2332'
-                    }}>
-                      Participant Details
-                    </th>
-                    <th style={{ 
-                      padding: '1rem', 
-                      textAlign: 'left', 
-                      borderBottom: '2px solid #e5e7eb', 
-                      fontWeight: '600',
-                      color: '#1a2332'
-                    }}>
-                      Contact & Documents
-                    </th>
-                    <th style={{ 
-                      padding: '1rem', 
-                      textAlign: 'center', 
-                      borderBottom: '2px solid #e5e7eb', 
-                      fontWeight: '600',
-                      color: '#1a2332'
-                    }}>
-                      Status
-                    </th>
-                    <th style={{ 
-                      padding: '1rem', 
-                      textAlign: 'left', 
-                      borderBottom: '2px solid #e5e7eb', 
-                      fontWeight: '600',
-                      color: '#1a2332'
-                    }}>
-                      Joined Date
-                    </th>
-                    <th style={{ 
-                      padding: '1rem', 
-                      textAlign: 'center', 
-                      borderBottom: '2px solid #e5e7eb', 
-                      fontWeight: '600',
-                      color: '#1a2332'
-                    }}>
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredParticipants.map((participant) => {
-                    const phoneNumber = participant.mobile || participant.phone || 'Not provided';
-                    const canConfirm = participant.status === 'joined' && !participant.confirmedByTrainer;
-                    
-                    return (
-                      <tr 
-                        key={participant.id} 
-                        style={{ 
-                          borderBottom: '1px solid #e5e7eb',
-                          transition: 'background-color 0.2s ease'
-                        }}
-                        onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'}
-                        onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                      >
-                        <td style={{ padding: '1rem' }}>
-                          <div>
-                            <div style={{ 
-                              fontWeight: '600', 
-                              color: '#1a2332',
-                              marginBottom: '0.25rem'
-                            }}>
-                              {participant.name}
-                            </div>
-                            <div style={{ 
-                              fontSize: '0.85rem', 
-                              color: '#6b7280',
-                              fontFamily: 'monospace'
-                            }}>
-                              ID: {participant.id}
-                            </div>
-                            
-                            {/* User ID if confirmed */}
-                            {participant.userId && (
-                              <div style={{ 
-                                fontSize: '0.75rem', 
-                                color: '#10b981',
-                                background: '#dcfce7',
-                                padding: '0.125rem 0.375rem',
-                                borderRadius: '4px',
-                                marginTop: '0.25rem',
-                                display: 'inline-block',
-                                fontFamily: 'monospace'
-                              }}>
-                                User: {participant.userId}
-                              </div>
-                            )}
+            <div>
+              {filteredParticipants.map((participant, index) => {
+                const phoneNumber = participant.mobile || participant.phone || 'Not provided';
+                const canConfirm = participant.status === 'joined' || (!participant.status && !participant.confirmedByTrainer);
 
-                            {/* Aadhar with verification status */}
-                            {participant.aadhar && (
-                              <div style={{ 
-                                fontSize: '0.8rem', 
-                                color: participant.aadhaar_verification?.status === 'verified' ? '#10b981' : '#6366f1',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.25rem',
-                                marginTop: '0.25rem'
-                              }}>
-                                <FaIdCard style={{ fontSize: '0.7rem' }} />
-                                Aadhar: {participant.aadhar}
-                                {participant.aadhaar_verification?.status === 'verified' && (
-                                  <span style={{ color: '#10b981', fontSize: '0.7rem' }}>✅</span>
-                                )}
-                              </div>
-                            )}
+                return (
+                  <div
+                    key={participant.id}
+                    style={{
+                      background: '#ffffff',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '10px',
+                      padding: '0.875rem',
+                      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
+                      transition: 'all 0.2s',
+                      marginBottom: '0.75rem'
+                    }}
+                  >
+                    {/* Participant Header */}
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '0.625rem',
+                      gap: '0.5rem'
+                    }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{
+                          fontWeight: '700',
+                          color: '#1f2937',
+                          fontSize: '0.9375rem',
+                          marginBottom: '0.25rem',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {participant.name}
+                        </div>
+                        <div style={{
+                          fontSize: '0.6875rem',
+                          color: '#9ca3af',
+                          fontFamily: 'monospace',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {participant.id}
+                        </div>
+                      </div>
+                      {getStatusBadge(participant.status)}
+                    </div>
 
-                            {/* PAN Card */}
-                            {participant.pan && (
-                              <div style={{ 
-                                fontSize: '0.8rem', 
-                                color: '#8b5cf6',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.25rem',
-                                marginTop: '0.25rem'
-                              }}>
-                                <FaIdCard style={{ fontSize: '0.7rem' }} />
-                                PAN: {participant.pan}
-                              </div>
-                            )}
-                          </div>
-                        </td>
+                    {/* Contact Info */}
+                    <div style={{
+                      display: 'grid',
+                      gap: '0.5rem',
+                      marginBottom: '0.625rem',
+                      fontSize: '0.8125rem'
+                    }}>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        color: '#4b5563',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        <FaEnvelope style={{ color: '#4f46e5', fontSize: '0.8125rem', flexShrink: 0 }} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '0.8125rem' }}>{participant.email}</span>
+                      </div>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        color: '#4b5563'
+                      }}>
+                        <FaPhone style={{ color: '#10b981', fontSize: '0.8125rem', flexShrink: 0 }} />
+                        <span style={{ fontSize: '0.8125rem' }}>{phoneNumber}</span>
+                      </div>
+                    </div>
 
-                        <td style={{ padding: '1rem' }}>
-                          <div style={{ fontSize: '0.9rem' }}>
-                            {/* Email */}
-                            <div style={{ 
-                              marginBottom: '0.5rem',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.5rem'
-                            }}>
-                              <FaEnvelope style={{ color: '#3b82f6', fontSize: '0.8rem' }} />
-                              <span style={{ wordBreak: 'break-all' }}>{participant.email}</span>
-                            </div>
-                            
-                            {/* Phone */}
-                            <div style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.5rem',
-                              marginBottom: '0.25rem'
-                            }}>
-                              <FaPhone style={{ color: '#10b981', fontSize: '0.8rem' }} />
-                              {phoneNumber}
-                            </div>
-                            
-                            {/* Address */}
-                            {participant.address && (
-                              <div style={{
-                                display: 'flex',
-                                alignItems: 'flex-start',
-                                gap: '0.5rem',
-                                fontSize: '0.8rem',
-                                color: '#6b7280',
-                                marginBottom: '0.25rem'
-                              }}>
-                                <FaMapMarkerAlt style={{ color: '#f59e0b', fontSize: '0.7rem', marginTop: '0.1rem' }} />
-                                <span>{participant.address}, {participant.city}, {participant.state} - {participant.pin}</span>
-                              </div>
-                            )}
-
-                            {/* Document Photos */}
-                            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
-                              {participant.panPhotoUrl && (
-                                <span style={{ 
-                                  fontSize: '0.7rem', 
-                                  color: '#8b5cf6',
-                                  background: '#f3e8ff',
-                                  padding: '0.125rem 0.25rem',
-                                  borderRadius: '3px'
-                                }}>
-                                  📄 PAN
-                                </span>
-                              )}
-                              {participant.passportPhotoUrl && (
-                                <span style={{ 
-                                  fontSize: '0.7rem', 
-                                  color: '#0ea5e9',
-                                  background: '#e0f2fe',
-                                  padding: '0.125rem 0.25rem',
-                                  borderRadius: '3px'
-                                }}>
-                                  📷 Photo
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-
-                        <td style={{ padding: '1rem', textAlign: 'center' }}>
-                          <span style={{
-                            padding: '0.5rem 1rem',
-                            borderRadius: '20px',
-                            fontSize: '0.85rem',
-                            fontWeight: '500',
-                            background: `${getStatusColor(participant.status || 'pending')}15`,
-                            color: getStatusColor(participant.status || 'pending'),
-                            display: 'inline-flex',
+                    {/* View Details Button */}
+                    {(participant.address || participant.city || participant.state || participant.pin) && (
+                      <div style={{ marginBottom: '0.625rem' }}>
+                        <button
+                          onClick={() => toggleDetails(participant.id)}
+                          style={{
+                            width: '100%',
+                            background: 'transparent',
+                            border: 'none',
+                            padding: '0.375rem',
+                            cursor: 'pointer',
+                            display: 'flex',
                             alignItems: 'center',
-                            gap: '0.5rem'
+                            justifyContent: 'center',
+                            gap: '0.375rem',
+                            fontSize: '0.8125rem',
+                            fontWeight: '500',
+                            color: '#4f46e5',
+                            transition: 'all 0.2s'
+                          }}
+                        >
+                          <FaMapMarkerAlt style={{ fontSize: '0.75rem' }} />
+                          {showDetails[participant.id] ? 'Hide Address' : 'View Address'}
+                        </button>
+
+                        {/* Address Details */}
+                        {showDetails[participant.id] && (
+                          <div style={{
+                            marginTop: '0.375rem',
+                            background: '#f9fafb',
+                            borderRadius: '6px',
+                            padding: '0.625rem',
+                            fontSize: '0.75rem',
+                            lineHeight: '1.4',
+                            color: '#374151'
                           }}>
-                            {getStatusIcon(participant.status || 'pending')}
-                            {(participant.status || 'pending').toUpperCase()}
-                          </span>
-                        </td>
-
-                        <td style={{ padding: '1rem' }}>
-                          <div style={{ fontSize: '0.9rem', color: '#6b7280' }}>
-                            {participant.joinedAt ? 
-                              formatTimestamp(participant.joinedAt) : 
-                              'Not specified'
-                            }
+                            {participant.address && (
+                              <div style={{ marginBottom: '0.25rem', fontWeight: '500' }}>
+                                {participant.address}
+                              </div>
+                            )}
+                            <div style={{
+                              display: 'flex',
+                              gap: '0.375rem',
+                              flexWrap: 'wrap',
+                              fontSize: '0.6875rem',
+                              color: '#6b7280'
+                            }}>
+                              {participant.city && <span>{participant.city}</span>}
+                              {participant.state && <span>• {participant.state}</span>}
+                              {participant.pin && <span>• PIN: {participant.pin}</span>}
+                            </div>
                           </div>
-                        </td>
+                        )}
+                      </div>
+                    )}
 
-                        <td style={{ padding: '1rem', textAlign: 'center' }}>
-                          {participant.status === 'confirmed' || participant.confirmedByTrainer ? (
-                            // Confirmed User Display
-                            <div style={{
-                              color: '#10b981',
-                              fontSize: '0.85rem',
-                              fontWeight: '600'
-                            }}>
-                              <div style={{ marginBottom: '0.25rem' }}>✅ User Created</div>
-                              <div style={{ 
-                                fontSize: '0.75rem', 
-                                color: '#fff',
-                                background: '#3b82f6',
-                                padding: '0.25rem 0.5rem',
-                                borderRadius: '4px',
-                                marginTop: '0.25rem',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.25rem'
-                              }}>
-                                <FaPhone style={{ fontSize: '0.7rem' }} />
-                                Password: {phoneNumber}
-                              </div>
-                              <div style={{ 
-                                fontSize: '0.7rem', 
-                                color: '#059669',
-                                marginTop: '0.25rem',
-                                background: '#dcfce7',
-                                padding: '0.125rem 0.375rem',
-                                borderRadius: '4px'
-                              }}>
-                                💾 Saved: ONDO
-                              </div>
-                              <div style={{ fontSize: '0.7rem', color: '#dc2626', marginTop: '0.25rem' }}>
-                                ⚠️ Must change on first login
-                              </div>
-                            </div>
-                          ) : participant.status === 'rejected' ? (
-                            // Rejected Display
-                            <div style={{
-                              color: '#dc2626',
-                              fontSize: '0.85rem',
-                              fontWeight: '600'
-                            }}>
-                              ❌ Rejected
-                            </div>
-                          ) : canConfirm ? (
-                            // Action Buttons for Joined participants
-                            <div>
-                              <button
-                                onClick={() => {
-                                  setSelectedParticipant(participant);
-                                  setShowConfirmModal(true);
-                                }}
-                                disabled={processingParticipant === participant.id || !currentUser}
-                                style={{
-                                  background: (!currentUser) ? '#9ca3af' : 'linear-gradient(135deg, #10b981 0%, #047857 100%)',
-                                  color: 'white',
-                                  border: 'none',
-                                  padding: '0.75rem 1.5rem',
-                                  borderRadius: '8px',
-                                  cursor: (processingParticipant === participant.id || !currentUser) ? 'not-allowed' : 'pointer',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '0.5rem',
-                                  fontSize: '0.875rem',
-                                  fontWeight: '600',
-                                  opacity: (processingParticipant === participant.id || !currentUser) ? 0.6 : 1,
-                                  transition: 'all 0.3s ease',
-                                  margin: '0 auto 0.5rem',
-                                  boxShadow: (!currentUser) ? 'none' : '0 4px 12px rgba(16,185,129,0.3)',
-                                  textTransform: 'uppercase',
-                                  letterSpacing: '0.5px'
-                                }}
-                                onMouseOver={(e) => (processingParticipant || !currentUser) ? null : (
-                                  e.target.style.transform = 'translateY(-2px)',
-                                  e.target.style.boxShadow = '0 6px 20px rgba(16,185,129,0.4)'
-                                )}
-                                onMouseOut={(e) => (
-                                  e.target.style.transform = 'translateY(0)',
-                                  e.target.style.boxShadow = (!currentUser) ? 'none' : '0 4px 12px rgba(16,185,129,0.3)'
-                                )}
-                              >
-                                {processingParticipant === participant.id ? (
-                                  <>
-                                    <FaSpinner className="spinning" />
-                                    Creating...
-                                  </>
-                                ) : !currentUser ? (
-                                  <>
-                                    <FaExclamationTriangle />
-                                    Login Required
-                                  </>
-                                ) : (
-                                  <>
-                                    <FaUserPlus />
-                                    Confirm & Create User
-                                  </>
-                                )}
-                              </button>
-                              
-                              <button
-                                onClick={() => handleRejectParticipant(participant)}
-                                disabled={processingParticipant === participant.id || !currentUser}
-                                style={{
-                                  background: (!currentUser) ? '#9ca3af' : 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
-                                  color: 'white',
-                                  border: 'none',
-                                  padding: '0.5rem 1rem',
-                                  borderRadius: '6px',
-                                  cursor: (processingParticipant === participant.id || !currentUser) ? 'not-allowed' : 'pointer',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '0.25rem',
-                                  fontSize: '0.8rem',
-                                  fontWeight: '500',
-                                  opacity: (processingParticipant === participant.id || !currentUser) ? 0.6 : 1,
-                                  transition: 'transform 0.2s ease',
-                                  margin: '0 auto'
-                                }}
-                                onMouseOver={(e) => (processingParticipant || !currentUser) ? null : (e.target.style.transform = 'translateY(-1px)')}
-                                onMouseOut={(e) => e.target.style.transform = 'translateY(0)'}
-                              >
-                                <FaTimes />
-                                Reject
-                              </button>
-                            </div>
-                          ) : (
-                            // Other statuses
-                            <div style={{
-                              color: '#6b7280',
-                              fontSize: '0.85rem',
-                              fontWeight: '500'
-                            }}>
-                              {participant.status === 'joined' ? 'Already Processed' : 'No Action Required'}
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    {/* Actions */}
+                    <div style={{
+                      borderTop: '1px solid #f1f5f9',
+                      paddingTop: '0.625rem'
+                    }}>
+                      {participant.status === 'confirmed' ? (
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '0.375rem',
+                          color: '#6b7280',
+                          fontWeight: '500',
+                          fontSize: '0.8125rem',
+                          fontStyle: 'italic'
+                        }}>
+                          Confirmed
+                        </div>
+                      ) : participant.status === 'rejected' ? (
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '0.375rem',
+                          color: '#6b7280',
+                          fontWeight: '500',
+                          fontSize: '0.8125rem',
+                          fontStyle: 'italic'
+                        }}>
+                          Rejected
+                        </div>
+                      ) : canConfirm ? (
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <button
+                            onClick={() => handleConfirmParticipant(participant)}
+                            disabled={processingParticipant === participant.id || whatsappLoading}
+                            style={{
+                              flex: 1,
+                              minWidth: '120px',
+                              background: (processingParticipant === participant.id || whatsappLoading)
+                                ? '#9ca3af'
+                                : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                              color: 'white',
+                              border: 'none',
+                              padding: '0.5rem 0.75rem',
+                              borderRadius: '6px',
+                              cursor: (processingParticipant === participant.id || whatsappLoading)
+                                ? 'not-allowed'
+                                : 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '0.375rem',
+                              fontSize: '0.75rem',
+                              fontWeight: '600',
+                              transition: 'all 0.2s'
+                            }}
+                          >
+                            {processingParticipant === participant.id ? (
+                              <>
+                                <FaSpinner className="spinning" />
+                                Processing
+                              </>
+                            ) : (
+                              <>
+                                <FaWhatsapp />
+                                Confirm
+                              </>
+                            )}
+                          </button>
+                          <button
+                            onClick={() => handleRejectParticipant(participant)}
+                            disabled={processingParticipant === participant.id}
+                            style={{
+                              background: processingParticipant === participant.id
+                                ? '#9ca3af'
+                                : 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
+                              color: 'white',
+                              border: 'none',
+                              padding: '0.5rem 0.75rem',
+                              borderRadius: '6px',
+                              cursor: processingParticipant === participant.id ? 'not-allowed' : 'pointer',
+                              fontSize: '0.75rem',
+                              fontWeight: '600',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.375rem',
+                              transition: 'all 0.2s'
+                            }}
+                          >
+                            <FaTimes />
+                            Reject
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{
+                          textAlign: 'center',
+                          color: '#6b7280',
+                          fontStyle: 'italic',
+                          fontSize: '0.8125rem'
+                        }}>
+                          No Action Required
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
-      )}
 
-      {/* Enhanced Confirmation Modal */}
-      {showConfirmModal && selectedParticipant && currentUser && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.6)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          backdropFilter: 'blur(4px)'
-        }}>
-          <div style={{
-            background: 'white',
-            borderRadius: '20px',
-            padding: '2.5rem',
-            maxWidth: '600px',
-            width: '90%',
-            boxShadow: '0 25px 60px rgba(0,0,0,0.3)',
-            maxHeight: '85vh',
-            overflowY: 'auto'
-          }}>
-            <h3 style={{
-              fontSize: '1.75rem',
-              fontWeight: '700',
-              color: '#1a2332',
-              margin: '0 0 1rem 0',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.75rem'
-            }}>
-              <div style={{
-                width: '50px',
-                height: '50px',
-                background: 'linear-gradient(135deg, #10b981 0%, #047857 100%)',
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'white'
-              }}>
-                <FaUserPlus style={{ fontSize: '1.25rem' }} />
-              </div>
-              Create User Account
-            </h3>
-            
-            <p style={{ 
-              color: '#6b7280', 
-              marginBottom: '1.5rem', 
-              lineHeight: '1.6',
-              fontSize: '1.05rem'
-            }}>
-              You are about to create a new user account for <strong style={{ color: '#1a2332' }}>{selectedParticipant.name}</strong>. 
-              The system will use protected authentication and save the data under <code style={{ background: '#e5e7eb', padding: '0.125rem 0.375rem', borderRadius: '4px', fontFamily: 'monospace' }}>HTAMS/users</code>.
-            </p>
-            
-            {/* Session Protection Notice */}
-            <div style={{
-              background: 'linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)',
-              border: '2px solid #10b981',
-              borderRadius: '8px',
-              padding: '1rem',
-              marginBottom: '1.5rem'
-            }}>
-              <div style={{
-                fontWeight: '600',
-                color: '#047857',
-                marginBottom: '0.5rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem'
-              }}>
-                🔐 Session Protection Active
-              </div>
-              <div style={{ color: '#047857', fontSize: '0.95rem' }}>
-                • Your trainer session will remain logged in <br/>
-                • Using secondary authentication for user creation <br/>
-                • All participant data will be preserved in user profile
-              </div>
-            </div>
-            
-            {/* Login Credentials Box */}
-            <div style={{
-              background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
-              padding: '1.5rem',
-              borderRadius: '12px',
-              marginBottom: '1.5rem',
-              border: '2px solid #0ea5e9'
-            }}>
-              <div style={{ 
-                fontWeight: '700', 
-                color: '#0369a1', 
-                marginBottom: '1rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                fontSize: '1.1rem'
-              }}>
-                <FaPhone />
-                Login Credentials
-              </div>
-              <div style={{ display: 'grid', gap: '0.75rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <strong>Email:</strong> 
-                  <span style={{ color: '#0369a1' }}>{selectedParticipant.email}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <strong>Password:</strong> 
-                  <span style={{ color: '#0369a1', fontFamily: 'monospace', background: '#bfdbfe', padding: '0.25rem 0.5rem', borderRadius: '4px' }}>
-                    {selectedParticipant.mobile || selectedParticipant.phone}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <strong>Role:</strong> 
-                  <span style={{ color: '#059669' }}>Agency</span>
-                </div>
-              </div>
-              
-              <div style={{ 
-                fontSize: '0.9rem', 
-                color: '#dc2626', 
-                background: '#fee2e2',
-                padding: '0.75rem',
-                borderRadius: '6px',
-                marginTop: '1rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                fontWeight: '500'
-              }}>
-                <FaExclamationTriangle />
-                User must change password on first login for security
-              </div>
-            </div>
-            
-            {/* Enhanced Participant Details */}
-            <div style={{
-              background: '#f8fafc',
-              padding: '1.5rem',
-              borderRadius: '12px',
-              marginBottom: '2rem',
-              border: '1px solid #e5e7eb'
-            }}>
-              <h4 style={{ margin: '0 0 1rem 0', color: '#374151', fontWeight: '600' }}>Complete Participant Information:</h4>
-              <div style={{ display: 'grid', gap: '0.5rem', fontSize: '0.95rem' }}>
-                <div><strong>Name:</strong> {selectedParticipant.name}</div>
-                <div><strong>Email:</strong> {selectedParticipant.email}</div>
-                <div><strong>Mobile:</strong> {selectedParticipant.mobile || selectedParticipant.phone}</div>
-                {selectedParticipant.aadhar && (
-                  <div>
-                    <strong>Aadhar:</strong> {selectedParticipant.aadhar} 
-                    {selectedParticipant.aadhaar_verification?.status === 'verified' && <span style={{ color: '#10b981' }}> ✅ Verified</span>}
-                  </div>
-                )}
-                {selectedParticipant.pan && <div><strong>PAN:</strong> {selectedParticipant.pan}</div>}
-                {selectedParticipant.address && (
-                  <div><strong>Address:</strong> {selectedParticipant.address}, {selectedParticipant.city}, {selectedParticipant.state} - {selectedParticipant.pin}</div>
-                )}
-                <div><strong>Training ID:</strong> {selectedTraining}</div>
-                <div><strong>Joined At:</strong> {formatTimestamp(selectedParticipant.joinedAt)}</div>
-                <div><strong>Form Mode:</strong> {selectedParticipant.formMode || 'Standard'}</div>
-              </div>
-            </div>
-            
-            {/* Action Buttons */}
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => {
-                  setShowConfirmModal(false);
-                  setSelectedParticipant(null);
-                }}
-                style={{
-                  background: '#f3f4f6',
-                  color: '#374151',
-                  border: '1px solid #d1d5db',
-                  padding: '0.875rem 1.75rem',
-                  borderRadius: '10px',
-                  cursor: 'pointer',
-                  fontWeight: '500',
-                  fontSize: '0.95rem',
-                  transition: 'all 0.2s ease'
-                }}
-                onMouseOver={(e) => {
-                  e.target.style.background = '#e5e7eb';
-                  e.target.style.borderColor = '#9ca3af';
-                }}
-                onMouseOut={(e) => {
-                  e.target.style.background = '#f3f4f6';
-                  e.target.style.borderColor = '#d1d5db';
-                }}
-              >
-                Cancel
-              </button>
-              
-              <button
-                onClick={() => handleConfirmParticipant(selectedParticipant)}
-                disabled={processingParticipant === selectedParticipant.id || !currentUser}
-                style={{
-                  background: (!currentUser) ? '#9ca3af' : 'linear-gradient(135deg, #10b981 0%, #047857 100%)',
-                  color: 'white',
-                  border: 'none',
-                  padding: '0.875rem 1.75rem',
-                  borderRadius: '10px',
-                  cursor: (processingParticipant === selectedParticipant.id || !currentUser) ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  fontWeight: '600',
-                  fontSize: '0.95rem',
-                  opacity: (processingParticipant === selectedParticipant.id || !currentUser) ? 0.6 : 1,
-                  transition: 'all 0.3s ease',
-                  boxShadow: (!currentUser) ? 'none' : '0 4px 15px rgba(16,185,129,0.3)'
-                }}
-                onMouseOver={(e) => (processingParticipant || !currentUser) ? null : (
-                  e.target.style.transform = 'translateY(-2px)',
-                  e.target.style.boxShadow = '0 6px 20px rgba(16,185,129,0.4)'
-                )}
-                onMouseOut={(e) => (
-                  e.target.style.transform = 'translateY(0)',
-                  e.target.style.boxShadow = (!currentUser) ? 'none' : '0 4px 15px rgba(16,185,129,0.3)'
-                )}
-              >
-                {processingParticipant === selectedParticipant.id ? (
-                  <>
-                    <FaSpinner className="spinning" />
-                    Creating User...
-                  </>
-                ) : !currentUser ? (
-                  <>
-                    <FaExclamationTriangle />
-                    Authentication Required
-                  </>
-                ) : (
-                  <>
-                    <FaCheck />
-                    Create Protected User
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+        {/* Styles */}
+        <style jsx>{`
+          .spinning {
+            animation: spin 1s linear infinite;
+          }
+          
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
 
-      <style jsx>{`
-        .spinning {
-          animation: spin 1s linear infinite;
-        }
-        
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
+          /* Ultra Compact Mobile - 320px to 380px */
+          @media (max-width: 380px) {
+            .participants-container {
+              padding: 0.25rem !important;
+              overflow-x: hidden !important;
+              max-width: 100vw !important;
+            }
+
+            .participants-header {
+              padding: 0.5rem !important;
+              border-radius: 8px !important;
+              margin-bottom: 0.5rem !important;
+            }
+
+            .participants-header h1 {
+              font-size: 0.875rem !important;
+              font-weight: 600 !important;
+            }
+
+            .participants-header p {
+              font-size: 0.625rem !important;
+            }
+
+            /* Stats Cards - 2 Per Row Ultra Compact */
+            .stats-grid {
+              grid-template-columns: repeat(2, 1fr) !important;
+              gap: 0.3rem !important;
+              margin-bottom: 0.5rem !important;
+            }
+
+            .stat-card {
+              padding: 0.4rem 0.3rem !important;
+              border-radius: 8px !important;
+            }
+
+            .stat-icon {
+              width: 28px !important;
+              height: 28px !important;
+              font-size: 0.75rem !important;
+              margin-bottom: 0.2rem !important;
+            }
+
+            .stat-value {
+              font-size: 1.1rem !important;
+              margin-bottom: 0.0625rem !important;
+              font-weight: 700 !important;
+            }
+
+            .stat-label {
+              font-size: 0.6rem !important;
+              line-height: 1.1 !important;
+            }
+
+            /* Search and Filter Section */
+            .search-filter-section {
+              padding: 0.5rem !important;
+              border-radius: 8px !important;
+              margin-bottom: 0.5rem !important;
+              gap: 0.375rem !important;
+            }
+
+            .search-box {
+              padding: 0.375rem 0.5rem !important;
+              font-size: 0.675rem !important;
+              border-radius: 6px !important;
+            }
+
+            .search-box input {
+              font-size: 0.675rem !important;
+            }
+
+            .filter-buttons {
+              gap: 0.2rem !important;
+              flex-wrap: wrap !important;
+            }
+
+            .filter-btn {
+              padding: 0.3rem 0.5rem !important;
+              font-size: 0.625rem !important;
+              border-radius: 5px !important;
+              white-space: nowrap !important;
+            }
+
+            .filter-btn svg {
+              font-size: 0.65rem !important;
+            }
+
+            /* Participants Table - Ultra Compact */
+            .participants-table-container {
+              padding: 0.5rem !important;
+              border-radius: 8px !important;
+              overflow-x: auto !important;
+              -webkit-overflow-scrolling: touch !important;
+            }
+
+            .participants-table {
+              font-size: 0.625rem !important;
+              min-width: 600px !important;
+            }
+
+            .participants-table th {
+              padding: 0.375rem 0.25rem !important;
+              font-size: 0.6rem !important;
+              font-weight: 600 !important;
+            }
+
+            .participants-table td {
+              padding: 0.375rem 0.25rem !important;
+              font-size: 0.625rem !important;
+            }
+
+            /* Status Badges */
+            .status-badge {
+              padding: 0.2rem 0.375rem !important;
+              font-size: 0.575rem !important;
+              border-radius: 4px !important;
+              font-weight: 600 !important;
+            }
+
+            /* Action Buttons */
+            .action-btn {
+              padding: 0.3rem 0.4rem !important;
+              font-size: 0.6rem !important;
+              border-radius: 4px !important;
+              font-weight: 600 !important;
+            }
+
+            .action-btn svg {
+              font-size: 0.65rem !important;
+            }
+
+            /* Participant Card View */
+            .participant-card {
+              padding: 0.5rem !important;
+              border-radius: 8px !important;
+              margin-bottom: 0.375rem !important;
+              box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+            }
+
+            .participant-name {
+              font-size: 0.8rem !important;
+              margin-bottom: 0.2rem !important;
+              font-weight: 600 !important;
+            }
+
+            .participant-details {
+              font-size: 0.6rem !important;
+              gap: 0.2rem !important;
+            }
+
+            .participant-details svg {
+              font-size: 0.65rem !important;
+            }
+
+            /* Modal Adjustments */
+            .modal-overlay {
+              padding: 0.5rem !important;
+            }
+
+            .modal-content {
+              max-width: calc(100% - 1rem) !important;
+              border-radius: 10px !important;
+            }
+
+            .modal-header {
+              padding: 0.625rem !important;
+            }
+
+            .modal-header h2 {
+              font-size: 0.875rem !important;
+              font-weight: 600 !important;
+            }
+
+            .modal-body {
+              padding: 0.625rem !important;
+            }
+
+            .modal-footer {
+              padding: 0.625rem !important;
+              gap: 0.375rem !important;
+            }
+
+            .modal-btn {
+              padding: 0.375rem 0.625rem !important;
+              font-size: 0.675rem !important;
+              border-radius: 5px !important;
+              font-weight: 600 !important;
+            }
+
+            /* Loading and Error States */
+            .loading-container, .error-container {
+              padding: 1.5rem 0.75rem !important;
+            }
+
+            .loading-spinner {
+              width: 36px !important;
+              height: 36px !important;
+            }
+
+            .loading-text, .error-text {
+              font-size: 0.75rem !important;
+            }
+
+            /* Pagination */
+            .pagination-container {
+              padding: 0.5rem !important;
+              gap: 0.375rem !important;
+              flex-direction: row !important;
+              justify-content: space-between !important;
+              align-items: center !important;
+            }
+
+            .pagination-info {
+              font-size: 0.625rem !important;
+            }
+
+            .pagination-controls {
+              gap: 0.25rem !important;
+            }
+
+            .page-btn {
+              width: 28px !important;
+              height: 28px !important;
+              font-size: 0.675rem !important;
+              border-radius: 5px !important;
+            }
+
+            /* Bulk Actions */
+            .bulk-actions {
+              padding: 0.375rem !important;
+              gap: 0.3rem !important;
+              flex-wrap: wrap !important;
+            }
+
+            .bulk-action-btn {
+              padding: 0.3rem 0.5rem !important;
+              font-size: 0.625rem !important;
+              border-radius: 5px !important;
+              font-weight: 600 !important;
+            }
+
+            /* Tabs/Navigation */
+            .nav-tabs {
+              gap: 0.2rem !important;
+              padding: 0.3rem !important;
+              overflow-x: auto !important;
+              -webkit-overflow-scrolling: touch !important;
+              scrollbar-width: none !important;
+            }
+
+            .nav-tabs::-webkit-scrollbar {
+              display: none !important;
+            }
+
+            .nav-tab {
+              padding: 0.3rem 0.5rem !important;
+              font-size: 0.625rem !important;
+              border-radius: 5px !important;
+              white-space: nowrap !important;
+            }
+          }
+
+          /* Medium Mobile - 381px to 480px */
+          @media (min-width: 381px) and (max-width: 480px) {
+            .participants-container {
+              padding: 0.5rem !important;
+            }
+
+            .stats-grid {
+              grid-template-columns: repeat(2, 1fr) !important;
+              gap: 0.5rem !important;
+            }
+
+            .participants-table th,
+            .participants-table td {
+              padding: 0.5rem 0.375rem !important;
+              font-size: 0.7rem !important;
+            }
+
+            .filter-btn {
+              padding: 0.375rem 0.625rem !important;
+              font-size: 0.7rem !important;
+            }
+          }
+
+          /* Tablet - 481px to 768px */
+          @media (min-width: 481px) and (max-width: 768px) {
+            .stats-grid {
+              grid-template-columns: repeat(4, 1fr) !important;
+              gap: 0.75rem !important;
+            }
+
+            .participants-table {
+              font-size: 0.8rem !important;
+            }
+          }
+        `}</style>
+      </div>
     </div>
   );
 };

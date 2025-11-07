@@ -1,5 +1,5 @@
 // WhatsApp API Service for sending welcome messages to participants
-const WHATSAPP_API_BASE_URL = 'https://webhook.whatapi.in/webhook/68c8001cbde42bbd90745a08';
+const WHATSAPP_API_BASE_URL = 'https://webhook.whatapi.in/webhook/68f31e091b9845c02d3c27c2';
 
 /**
  * Sends a welcome message to a participant via WhatsApp
@@ -17,7 +17,7 @@ export const sendWelcomeMessage = async (participantData) => {
   try {
     console.log('🚀 Starting WhatsApp message send process...');
     console.log('Participant Data:', participantData);
-    
+
     const {
       userId,
       joiningDate,
@@ -25,7 +25,7 @@ export const sendWelcomeMessage = async (participantData) => {
       mobile,
       email,
       role = 'Sales Team',
-      portalUrl = 'https://royal-pazz.vercel.app/login'
+      portalUrl = 'ONDO.co.in'
     } = participantData;
 
     // Validate required fields
@@ -38,15 +38,27 @@ export const sendWelcomeMessage = async (participantData) => {
     // Clean mobile number (remove any non-digits)
     const cleanMobile = mobile.toString().replace(/\D/g, '');
     console.log('📱 Original mobile:', mobile, 'Cleaned mobile:', cleanMobile);
-    
+
     // Validate mobile number (should be 10 digits)
     if (cleanMobile.length !== 10) {
       console.error('❌ Invalid mobile number format:', mobile, 'Length:', cleanMobile.length);
       return false;
     }
 
-    // Use the simple message format that works
-    const welcomeMessage = `HTAMScompany,${userId},${joiningDate},${name},${cleanMobile},${email},${portalUrl}`;
+    // Create the formatted welcome message
+    const welcomeMessage = `Welcome to ONDO !
+✅ You have successfully joined our team as ${role}.
+🆔 User ID: ${userId}
+📅 Joining Date: ${joiningDate}
+👤 Name: ${name}
+📱 Mob No: ${cleanMobile}
+📧 Email Id: ${email}
+🌐 Company Portal: ${portalUrl}
+
+Please change your password after first login.
+
+Welcome to the ONDO !
+- ONDO Management Team`;
 
     console.log('📝 Message to send:', welcomeMessage);
 
@@ -110,7 +122,7 @@ export const sendCustomMessage = async (mobile, message) => {
 
     // Clean mobile number (remove any non-digits)
     const cleanMobile = mobile.toString().replace(/\D/g, '');
-    
+
     // Validate mobile number (should be 10 digits)
     if (cleanMobile.length !== 10) {
       console.error('Invalid mobile number format:', mobile);
@@ -183,74 +195,42 @@ export const formatDate = (date) => {
 
 /**
  * Test function to verify WhatsApp API with provided parameters
- * Tests with: HTAMScompany,abc123,19/09/2025,name,7058779785,shiv@gmail.com,https://royal-pazz.vercel.app/login
+ * Tests with the formatted welcome message
  */
 export const testWhatsAppAPI = async () => {
   console.log('🧪 Testing WhatsApp API with provided parameters...');
-  
+
   const testData = {
     userId: 'abc123',
     joiningDate: '19/09/2025',
     name: 'name',
     mobile: '7058779785',
     email: 'shiv@gmail.com',
-    role: 'Sales Team',
+    role: 'sales',
     portalUrl: 'https://royal-pazz.vercel.app/login'
   };
 
   console.log('Test Data:', testData);
-  
+
   // Test the welcome message function
   const result = await sendWelcomeMessage(testData);
-  
+
   if (result) {
     console.log('✅ WhatsApp API test successful!');
   } else {
     console.log('❌ WhatsApp API test failed!');
   }
-  
+
   return result;
 };
 
-/**
- * Direct API test function that matches your exact URL format
- */
-export const testDirectAPI = async () => {
-  const testUrl = 'https://webhook.whatapi.in/webhook/68c8001cbde42bbd90745a08?number=919175514916&message=HTAMScompany,abc123,19/09/2025,name,7058779785,shiv@gmail.com,https://royal-pazz.vercel.app/login';
-  
-  console.log('🔗 Testing direct API call...');
-  console.log('URL:', testUrl);
-  
-  try {
-    const response = await fetch(testUrl, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    let responseText = '';
-    try {
-      responseText = await response.text();
-    } catch (e) {
-      console.warn('Could not read response text:', e.message);
-    }
-
-    console.log('Direct API Response:', {
-      status: response.status,
-      statusText: response.statusText,
-      body: responseText
-    });
-
-    if (response.ok) {
-      console.log('✅ Direct API test successful!');
-      return true;
-    } else {
-      console.error('❌ Direct API test failed!');
-      return false;
-    }
-  } catch (error) {
-    console.error('❌ Error in direct API test:', error);
-    return false;
-  }
+// Export all functions for use in other components
+const whatsappService = {
+  sendWelcomeMessage,
+  sendCustomMessage,
+  generateUserId,
+  formatDate,
+  testWhatsAppAPI
 };
+
+export default whatsappService;

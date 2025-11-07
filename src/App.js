@@ -1,7 +1,10 @@
-import React, { useContext } from 'react';
+import React, { useContext, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './AuthProvider';
 import { AuthContext } from './AuthContext';
+import MobileAppLayout from './components/MobileAppLayout';
+import { clearNonEssentialCache } from './utils/cacheBuster';
+import './App.css';
 
 // --- Your Existing Component Imports ---
 import Login from './pages/Login';
@@ -48,6 +51,7 @@ import WithdrawMoney from './pages/WithdrawMoney';
 import WithdrawRequests from './pages/Company/WithdrawRequests';
 import DocumentVerification from './pages/DocumentVerification';
 import AdminDocumentVerification from './pages/Company/AdminDocumentVerification';
+import FollowUpCustomers from './pages/Company/FollowUpCustomers';
 import VideoSharingSystem from './pages/Company/VideoSharingSystem ';
 import AdminVideoSharing from './pages/Company/AdminVideoSharing';
 import Dispatch from './pages/Company/Dispatch';
@@ -57,8 +61,8 @@ import TrainerDashboard from './pages/Trainer/TrainerDashboard';
 import TrainerDashboardLayout from './pages/Trainer/TrainerDashboardLayout';
 import TrainerParticipants from './pages/Trainer/TrainerParticipants';
 import QuotationManagement from './pages/Quotation';
-import SetNewPasswordtechnican from './pages/Employee/SetNewPasswordtechnican';
-import EmployeePageLayout from './pages/Employee/EmployeePageLayout';
+// import SetNewPasswordtechnican from './pages/Employee/SetNewPasswordtechnican';
+// import EmployeePageLayout from './pages/Employee/EmployeePageLayout';
 
 // --- CA Component Imports ---
 import CALogin from './CAreports/CALogin';
@@ -68,10 +72,12 @@ import SalesReport from './CAreports/SalesReport';
 import CommissionReport from './CAreports/CommissionReport';
 import AllOrdersReport from './CAreports/AllOrdersReport';
 import UserFinancialReport from './CAreports/UserFinancialReport';
+import useDisablePinchZoom from './utils/useDisablePinchZoom';
 
 
 // --- Your Existing Route Guards ---
 function EmployeeRoute({ children }) {
+   useDisablePinchZoom();
   const employeeData = localStorage.getItem('employeeData');
   if (!employeeData) { return <Navigate to="/employee-login" replace />; }
   try {
@@ -121,6 +127,11 @@ function CaPrivateRoute({ children, allowedRoles }) {
 }
 
 function App() {
+  // Clear localStorage on app startup to ensure fresh data
+  useEffect(() => {
+    clearNonEssentialCache();
+  }, []);
+
   return (
     <AuthProvider>
       <Routes>
@@ -132,8 +143,8 @@ function App() {
         <Route path="/trainer-set-password" element={<TrainerSetPassword />} />
         <Route path="/join-training/:id" element={<JoinTraining />} />
         <Route path="/employee-login" element={<LoginPageEmployee />} />
-        <Route path="/set-new-password" element={<EmployeeRoute><SetNewPasswordtechnican /></EmployeeRoute>} />
-        <Route path="/employee-dashboard" element={<EmployeeRoute><EmployeePageLayout /></EmployeeRoute>} />
+        {/* <Route path="/set-new-password" element={<EmployeeRoute><SetNewPasswordtechnican /></EmployeeRoute>} /> */}
+        {/* <Route path="/employee-dashboard" element={<EmployeeRoute><EmployeePageLayout /></EmployeeRoute>} /> */}
 
         {/* --- Public CA Login Route --- */}
         <Route path="/ca-login" element={<CALogin />} />
@@ -155,6 +166,11 @@ function App() {
           <Route path="all-orders" element={<AllOrdersReport />} />
         </Route>
 
+
+
+
+        
+
         {/* --- The rest of your routes (Unchanged) --- */}
         <Route path="/preview/:uid" element={<PreviewPage />} />
         <Route path="/Policies" element={<PageShell />} />
@@ -163,6 +179,8 @@ function App() {
         <Route path="/policies/refund" element={<RefundPolicy />} />
         <Route path="/policies/shipping" element={<ShippingPolicy />} />
         <Route path="/policies/contact" element={<ContactUs />} />
+
+
 
         
         <Route path="/user-reports/:userId" element={<PrivateRoute allowedRoles={['admin', 'company']}><UserReports /></PrivateRoute>} />
@@ -175,22 +193,31 @@ function App() {
           <Route path="trainees" element={<TrainerTrainings />} />
         </Route>
 
+
+
+
+
+
+
+
+
         <Route path="/dashboard" element={<PrivateRoute allowedRoles={['agency', 'dealer', 'distributor', 'wholesaler', 'mega agency', 'diamond agency', 'mega dealer', 'mega distributor', 'diamond distributor', 'diamond wholesaler', 'admin', 'subadmin', 'company']}><Dashboard /></PrivateRoute>}>
-            <Route index element={<HomePage />} />
-            <Route path="customers" element={<Customers />} />
-            <Route path="orders" element={<Orders />} />
-            <Route path="team" element={<Team />} />
+            <Route index element={<MobileAppLayout><HomePage /></MobileAppLayout>} />
+            <Route path="customers" element={<MobileAppLayout><Customers /></MobileAppLayout>} />
+            <Route path="orders" element={<MobileAppLayout><Orders /></MobileAppLayout>} />
+            <Route path="team" element={<MobileAppLayout><Team /></MobileAppLayout>} />
             <Route path="employees" element={<Employees />} />
             <Route path="products" element={<Products />} />
-            <Route path="Allproducts" element={<AllProducts />} />
+            <Route path="Allproducts" element={<MobileAppLayout><AllProducts /></MobileAppLayout>} />
             <Route path="bill/:orderId" element={<Bill />} />
-            <Route path="AgencyTraining" element={<AgencyTraining />} />
-            <Route path="user-profile" element={<UserProfile />} />
-            <Route path="web-builder" element={<DemoPage />} />
-            <Route path="withdrawal" element={<WithdrawMoney />} />
+            <Route path="AgencyTraining" element={<MobileAppLayout><AgencyTraining /></MobileAppLayout>} />
+            <Route path="user-profile" element={<MobileAppLayout><UserProfile /></MobileAppLayout>} />
+            <Route path="web-builder" element={<MobileAppLayout><DemoPage /></MobileAppLayout>} />
+            <Route path="withdrawal" element={<MobileAppLayout><WithdrawMoney /></MobileAppLayout>} />
             <Route path="DocumentVerification" element={<DocumentVerification />} />
-            <Route path="video-training" element={<VideoSharingSystem />} />
-            <Route path="Quotation" element={<QuotationManagement />} />
+            <Route path="follow-up-customers" element={<MobileAppLayout><FollowUpCustomers /></MobileAppLayout>} />
+            <Route path="video-training" element={<MobileAppLayout><VideoSharingSystem /></MobileAppLayout>} />
+            <Route path="Quotation" element={<MobileAppLayout><QuotationManagement /></MobileAppLayout>} />
         </Route>
 
         <Route path="/company-dashboard" element={<PrivateRoute allowedRoles={['admin', 'company']}><CompanyHome /></PrivateRoute>}>
@@ -207,6 +234,7 @@ function App() {
             <Route path="total-trainers" element={<FetchTrainers />} />
             <Route path="levels" element={<LevelsManager />} />
             <Route path="withdraw-requests" element={<WithdrawRequests />} />
+          
             <Route path="video-sharing" element={<AdminVideoSharing />} />
             <Route path="dispatch" element={<Dispatch />} />
         </Route>

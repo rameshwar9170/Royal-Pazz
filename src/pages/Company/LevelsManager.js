@@ -5,6 +5,7 @@ import { Eye, EyeOff, Lock, Shield, Users, TrendingUp } from 'lucide-react';
 
 const LevelsManager = () => {
   const [levels, setLevels] = useState({});
+  const [sortedLevels, setSortedLevels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -24,76 +25,6 @@ const LevelsManager = () => {
   // Master password (in production, this should be env variable or Firebase Auth)
   const MASTER_PASSWORD = "12345678";
 
-  // Default levels structure
-  const defaultLevels = {
-    "Agency": {
-      "discount": 20,
-      "selfSale": 10000,
-      "teamRequirement": 0,
-      "teamRole": ""
-    },
-    "Dealer": {
-      "discount": 34,
-      "selfSale": 0,
-      "teamRequirement": 5,
-      "teamRole": "Mega Agency"
-    },
-    "Diamond Agency": {
-      "discount": 30,
-      "selfSale": 300000,
-      "teamRequirement": 0,
-      "teamRole": "Diamond Agency"
-    },
-    "Diamond Distributor": {
-      "discount": 44,
-      "selfSale": 0,
-      "teamRequirement": 10,
-      "teamRole": "Dealer"
-    },
-    "Diamond Wholesaler": {
-      "discount": 50,
-      "selfSale": 0,
-      "teamRequirement": 7,
-      "teamRole": "Distributor"
-    },
-    "Distributor": {
-      "discount": 40,
-      "selfSale": 0,
-      "teamRequirement": 5,
-      "teamRole": "Dealer"
-    },
-    "Mega Agency": {
-      "discount": 25,
-      "selfSale": 200000,
-      "teamRequirement": 0,
-      "teamRole": ""
-    },
-    "Mega Dealer": {
-      "discount": 37,
-      "selfSale": 0,
-      "teamRequirement": 10,
-      "teamRole": "Mega Agency"
-    },
-    "Mega Distributor": {
-      "discount": 42,
-      "selfSale": 0,
-      "teamRequirement": 7,
-      "teamRole": "Dealer"
-    },
-    "Mega Wholesaler": {
-      "discount": 48,
-      "selfSale": 0,
-      "teamRequirement": 5,
-      "teamRole": "Distributor"
-    },
-    "Wholesaler": {
-      "discount": 46,
-      "selfSale": 0,
-      "teamRequirement": 3,
-      "teamRole": "Distributor"
-    }
-  };
-
   useEffect(() => {
     if (isAuthenticated) {
       fetchLevels();
@@ -102,7 +33,20 @@ const LevelsManager = () => {
 
   useEffect(() => {
     calculateStatistics();
+    sortLevelsByDiscountAscending();
   }, [levels]);
+
+  // Sort levels by discount percentage - LOWEST TO HIGHEST (15%, 20%, 25%, 30%, etc.)
+  const sortLevelsByDiscountAscending = () => {
+    const levelEntries = Object.entries(levels);
+    const sorted = levelEntries.sort((a, b) => {
+      const discountA = parseInt(a[1].discount) || 0;
+      const discountB = parseInt(b[1].discount) || 0;
+      return discountA - discountB; // Ascending order: lowest discount first
+    });
+    setSortedLevels(sorted);
+    console.log('Sorted levels by discount (low to high):', sorted);
+  };
 
   // Authentication handler
   const handleAuthentication = (e) => {
@@ -123,7 +67,7 @@ const LevelsManager = () => {
     setTotalLevels(levelCount);
 
     if (levelCount > 0) {
-      const discounts = Object.values(levels).map(level => level.discount);
+      const discounts = Object.values(levels).map(level => parseInt(level.discount) || 0);
       const highest = Math.max(...discounts);
       const average = discounts.reduce((sum, discount) => sum + discount, 0) / discounts.length;
       
@@ -140,14 +84,17 @@ const LevelsManager = () => {
       const snapshot = await get(levelsRef);
       
       if (snapshot.exists()) {
-        setLevels(snapshot.val());
+        const fetchedLevels = snapshot.val();
+        setLevels(fetchedLevels);
+        console.log('Fetched levels from Firebase:', fetchedLevels);
       } else {
-        setLevels(defaultLevels);
-        await set(levelsRef, defaultLevels);
+        console.log('No levels found in database');
+        setLevels({});
+        setMessage('No levels found in database. Please add some levels.');
       }
     } catch (error) {
       console.error('Error fetching levels:', error);
-      setMessage('Error fetching levels data');
+      setMessage('Error fetching levels data: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -158,11 +105,19 @@ const LevelsManager = () => {
     try {
       setSaving(true);
       const levelRef = ref(db, `HTAMS/Levels/${levelName}`);
-      await update(levelRef, updatedData);
+      
+      const dataToUpdate = {
+        ...updatedData,
+        discount: parseInt(updatedData.discount) || 0,
+        selfSale: parseInt(updatedData.selfSale) || 0,
+        teamRequirement: parseInt(updatedData.teamRequirement) || 0
+      };
+      
+      await update(levelRef, dataToUpdate);
       
       setLevels(prev => ({
         ...prev,
-        [levelName]: { ...prev[levelName], ...updatedData }
+        [levelName]: { ...prev[levelName], ...dataToUpdate }
       }));
       
       setMessage(`✅ ${levelName} updated successfully!`);
@@ -171,7 +126,7 @@ const LevelsManager = () => {
       setTimeout(() => setMessage(''), 3000);
     } catch (error) {
       console.error('Error updating level:', error);
-      setMessage('❌ Error updating level');
+      setMessage('❌ Error updating level: ' + error.message);
     } finally {
       setSaving(false);
     }
@@ -182,18 +137,26 @@ const LevelsManager = () => {
     try {
       setSaving(true);
       const levelRef = ref(db, `HTAMS/Levels/${levelName}`);
-      await set(levelRef, levelData);
+      
+      const dataToAdd = {
+        ...levelData,
+        discount: parseInt(levelData.discount) || 0,
+        selfSale: parseInt(levelData.selfSale) || 0,
+        teamRequirement: parseInt(levelData.teamRequirement) || 0
+      };
+      
+      await set(levelRef, dataToAdd);
       
       setLevels(prev => ({
         ...prev,
-        [levelName]: levelData
+        [levelName]: dataToAdd
       }));
       
       setMessage(`✅ ${levelName} added successfully!`);
       setTimeout(() => setMessage(''), 3000);
     } catch (error) {
       console.error('Error adding level:', error);
-      setMessage('❌ Error adding new level');
+      setMessage('❌ Error adding new level: ' + error.message);
     } finally {
       setSaving(false);
     }
@@ -215,7 +178,7 @@ const LevelsManager = () => {
         setTimeout(() => setMessage(''), 3000);
       } catch (error) {
         console.error('Error deleting level:', error);
-        setMessage('❌ Error deleting level');
+        setMessage('❌ Error deleting level: ' + error.message);
       } finally {
         setSaving(false);
       }
@@ -226,306 +189,10 @@ const LevelsManager = () => {
   const handleLogout = () => {
     setIsAuthenticated(false);
     setLevels({});
+    setSortedLevels([]);
     setMessage('');
     setEditingLevel(null);
   };
-
-  // Authentication UI
-  if (!isAuthenticated) {
-    return (
-      <>
-        <style>{`
-          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-          
-          :root {
-            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            --secondary-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            --success-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            --warning-gradient: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
-            --danger-gradient: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-            
-            --primary-color: #667eea;
-            --secondary-color: #764ba2;
-            --success-color: #10b981;
-            --warning-color: #f59e0b;
-            --danger-color: #ef4444;
-            --info-color: #3b82f6;
-            
-            --text-primary: #1a202c;
-            --text-secondary: #4a5568;
-            --text-muted: #718096;
-            
-            --bg-primary: #ffffff;
-            --bg-secondary: #f7fafc;
-            --bg-muted: #edf2f7;
-            
-            --border-color: #e2e8f0;
-            --border-radius: 12px;
-            --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-          }
-
-          * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-          }
-
-          body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            line-height: 1.6;
-            color: var(--text-primary);
-            background-color: var(--bg-secondary);
-          }
-
-          .auth-container {
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: var(--primary-gradient);
-            padding: 20px;
-            position: relative;
-            overflow: hidden;
-          }
-
-          .auth-container::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="50" cy="50" r="1" fill="rgba(255,255,255,0.03)"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>');
-            animation: grain 20s linear infinite;
-          }
-
-          @keyframes grain {
-            0% { transform: translate(0, 0); }
-            10% { transform: translate(-5%, -5%); }
-            20% { transform: translate(-10%, 5%); }
-            30% { transform: translate(5%, -10%); }
-            40% { transform: translate(-5%, 15%); }
-            50% { transform: translate(-10%, 5%); }
-            60% { transform: translate(15%, 0); }
-            70% { transform: translate(0, 10%); }
-            80% { transform: translate(-15%, 0); }
-            90% { transform: translate(10%, 5%); }
-            100% { transform: translate(5%, 0); }
-          }
-
-          .auth-card {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(20px);
-            border-radius: 20px;
-            padding: 40px;
-            box-shadow: var(--shadow-xl);
-            max-width: 420px;
-            width: 100%;
-            text-align: center;
-            position: relative;
-            z-index: 1;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-          }
-
-          .auth-header {
-            margin-bottom: 35px;
-          }
-
-          .auth-icon {
-            width: 60px;
-            height: 60px;
-            color: var(--primary-color);
-            margin-bottom: 20px;
-            filter: drop-shadow(0 4px 8px rgba(102, 126, 234, 0.3));
-          }
-
-          .auth-header h2 {
-            color: var(--text-primary);
-            margin-bottom: 8px;
-            font-size: 28px;
-            font-weight: 700;
-            letter-spacing: -0.5px;
-          }
-
-          .auth-header p {
-            color: var(--text-secondary);
-            font-size: 16px;
-            font-weight: 400;
-          }
-
-          .password-input-group {
-            position: relative;
-            margin-bottom: 25px;
-          }
-
-          .input-icon {
-            position: absolute;
-            left: 18px;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 22px;
-            height: 22px;
-            color: var(--text-muted);
-            z-index: 2;
-          }
-
-          .password-input-group input {
-            width: 100%;
-            padding: 18px 18px 18px 55px;
-            border: 2px solid var(--border-color);
-            border-radius: var(--border-radius);
-            font-size: 16px;
-            font-weight: 500;
-            background: var(--bg-primary);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            color: var(--text-primary);
-          }
-
-          .password-input-group input:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-            transform: translateY(-1px);
-          }
-
-          .password-input-group input::placeholder {
-            color: var(--text-muted);
-            font-weight: 400;
-          }
-
-          .password-toggle {
-            position: absolute;
-            right: 18px;
-            top: 50%;
-            transform: translateY(-50%);
-            background: none;
-            border: none;
-            cursor: pointer;
-            color: var(--text-muted);
-            padding: 4px;
-            border-radius: 6px;
-            transition: all 0.2s ease;
-          }
-
-          .password-toggle:hover {
-            color: var(--primary-color);
-            background: rgba(102, 126, 234, 0.1);
-          }
-
-          .auth-error {
-            background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
-            color: #dc2626;
-            padding: 14px 20px;
-            border-radius: var(--border-radius);
-            margin-bottom: 25px;
-            font-size: 14px;
-            font-weight: 500;
-            border: 1px solid #fca5a5;
-            animation: shake 0.5s ease-in-out;
-          }
-
-          @keyframes shake {
-            0%, 100% { transform: translateX(0); }
-            25% { transform: translateX(-5px); }
-            75% { transform: translateX(5px); }
-          }
-
-          .auth-submit {
-            width: 100%;
-            padding: 18px;
-            background: var(--primary-gradient);
-            color: white;
-            border: none;
-            border-radius: var(--border-radius);
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative;
-            overflow: hidden;
-          }
-
-          .auth-submit::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-            transition: left 0.5s ease;
-          }
-
-          .auth-submit:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-lg);
-          }
-
-          .auth-submit:hover::before {
-            left: 100%;
-          }
-
-          .auth-submit:active {
-            transform: translateY(0);
-          }
-
-          .auth-footer {
-            margin-top: 35px;
-            padding-top: 25px;
-            border-top: 1px solid var(--border-color);
-          }
-
-          .auth-footer p {
-            color: var(--text-muted);
-            font-size: 13px;
-            font-weight: 500;
-          }
-        `}</style>
-        <div className="auth-container">
-          <div className="auth-card">
-            <div className="auth-header">
-              <Shield className="auth-icon" />
-              <h2>ONDOLevels Manager</h2>
-              <p>Secure Access Required</p>
-            </div>
-            
-            <form onSubmit={handleAuthentication} className="auth-form">
-              <div className="password-input-group">
-                <Lock className="input-icon" />
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter master password"
-                  required
-                />
-                <button
-                  type="button"
-                  className="password-toggle"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? <EyeOff /> : <Eye />}
-                </button>
-              </div>
-              
-              {authError && <div className="auth-error">{authError}</div>}
-              
-              <button type="submit" className="auth-submit">
-                Access System
-              </button>
-            </form>
-            
-            <div className="auth-footer">
-              <p>🔒 This system is protected and monitored</p>
-            </div>
-          </div>
-        </div>
-      </>
-    );
-  }
 
   // Edit Form Component
   const LevelEditForm = ({ levelName, levelData, onSave, onCancel }) => {
@@ -546,8 +213,8 @@ const LevelsManager = () => {
                 <label>Discount (%)</label>
                 <input
                   type="number"
-                  value={formData.discount}
-                  onChange={(e) => setFormData({...formData, discount: parseInt(e.target.value)})}
+                  value={formData.discount || 0}
+                  onChange={(e) => setFormData({...formData, discount: parseInt(e.target.value) || 0})}
                   required
                   min="0"
                   max="100"
@@ -558,8 +225,8 @@ const LevelsManager = () => {
                 <label>Self Sale Requirement (₹)</label>
                 <input
                   type="number"
-                  value={formData.selfSale}
-                  onChange={(e) => setFormData({...formData, selfSale: parseInt(e.target.value)})}
+                  value={formData.selfSale || 0}
+                  onChange={(e) => setFormData({...formData, selfSale: parseInt(e.target.value) || 0})}
                   required
                   min="0"
                 />
@@ -571,8 +238,8 @@ const LevelsManager = () => {
                 <label>Team Requirement</label>
                 <input
                   type="number"
-                  value={formData.teamRequirement}
-                  onChange={(e) => setFormData({...formData, teamRequirement: parseInt(e.target.value)})}
+                  value={formData.teamRequirement || 0}
+                  onChange={(e) => setFormData({...formData, teamRequirement: parseInt(e.target.value) || 0})}
                   required
                   min="0"
                 />
@@ -582,7 +249,7 @@ const LevelsManager = () => {
                 <label>Team Role</label>
                 <input
                   type="text"
-                  value={formData.teamRole}
+                  value={formData.teamRole || ''}
                   onChange={(e) => setFormData({...formData, teamRole: e.target.value})}
                   placeholder="Required team role"
                 />
@@ -649,7 +316,7 @@ const LevelsManager = () => {
                 <input
                   type="number"
                   value={formData.discount}
-                  onChange={(e) => setFormData({...formData, discount: parseInt(e.target.value)})}
+                  onChange={(e) => setFormData({...formData, discount: parseInt(e.target.value) || 0})}
                   required
                   min="0"
                   max="100"
@@ -661,7 +328,7 @@ const LevelsManager = () => {
                 <input
                   type="number"
                   value={formData.selfSale}
-                  onChange={(e) => setFormData({...formData, selfSale: parseInt(e.target.value)})}
+                  onChange={(e) => setFormData({...formData, selfSale: parseInt(e.target.value) || 0})}
                   required
                   min="0"
                 />
@@ -674,7 +341,7 @@ const LevelsManager = () => {
                 <input
                   type="number"
                   value={formData.teamRequirement}
-                  onChange={(e) => setFormData({...formData, teamRequirement: parseInt(e.target.value)})}
+                  onChange={(e) => setFormData({...formData, teamRequirement: parseInt(e.target.value) || 0})}
                   required
                   min="0"
                 />
@@ -704,6 +371,231 @@ const LevelsManager = () => {
       </div>
     );
   };
+
+  // Authentication UI
+  if (!isAuthenticated) {
+    return (
+      <>
+        <style>{`
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+          
+          :root {
+            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --secondary-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            --success-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            --warning-gradient: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+            --danger-gradient: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            
+            --primary-color: #667eea;
+            --secondary-color: #764ba2;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --info-color: #3b82f6;
+            
+            --text-primary: #1a202c;
+            --text-secondary: #4a5568;
+            --text-muted: #718096;
+            
+            --bg-primary: #ffffff;
+            --bg-secondary: #f7fafc;
+            --bg-muted: #edf2f7;
+            
+            --border-color: #e2e8f0;
+            --border-radius: 12px;
+            --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+          }
+
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
+
+          body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: var(--text-primary);
+            background-color: var(--bg-secondary);
+          }
+
+          .auth-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--primary-gradient);
+            padding: 20px;
+          }
+
+          .auth-card {
+            background: var(--bg-primary);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: var(--shadow-xl);
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+          }
+
+          .auth-header {
+            margin-bottom: 30px;
+          }
+
+          .auth-icon {
+            width: 60px;
+            height: 60px;
+            color: var(--primary-color);
+            margin: 0 auto 20px;
+          }
+
+          .auth-header h2 {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+          }
+
+          .auth-header p {
+            color: var(--text-secondary);
+            font-size: 14px;
+          }
+
+          .auth-form {
+            margin-bottom: 20px;
+          }
+
+          .password-input-group {
+            position: relative;
+            margin-bottom: 20px;
+          }
+
+          .input-icon {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 20px;
+            height: 20px;
+            color: var(--text-muted);
+          }
+
+          .password-input-group input {
+            width: 100%;
+            padding: 15px 15px 15px 50px;
+            border: 2px solid var(--border-color);
+            border-radius: var(--border-radius);
+            font-size: 16px;
+            background: var(--bg-primary);
+            transition: all 0.3s ease;
+          }
+
+          .password-input-group input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+          }
+
+          .password-toggle {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--text-muted);
+            padding: 5px;
+          }
+
+          .password-toggle:hover {
+            color: var(--primary-color);
+          }
+
+          .auth-error {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger-color);
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            font-weight: 500;
+          }
+
+          .auth-submit {
+            width: 100%;
+            background: var(--primary-gradient);
+            color: white;
+            border: none;
+            padding: 15px;
+            border-radius: var(--border-radius);
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+          }
+
+          .auth-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+          }
+
+          .auth-footer p {
+            color: var(--text-muted);
+            font-size: 12px;
+          }
+
+          @media (max-width: 480px) {
+            .auth-card {
+              padding: 30px 20px;
+            }
+          }
+        `}</style>
+        <div className="auth-container">
+          <div className="auth-card">
+            <div className="auth-header">
+              <Shield className="auth-icon" />
+              <h2>ONDO Levels Manager</h2>
+              <p>Secure Access Required</p>
+            </div>
+            
+            <form onSubmit={handleAuthentication} className="auth-form">
+              <div className="password-input-group">
+                <Lock className="input-icon" />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter master password"
+                  required
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? <EyeOff /> : <Eye />}
+                </button>
+              </div>
+              
+              {authError && <div className="auth-error">{authError}</div>}
+              
+              <button type="submit" className="auth-submit">
+                Access System
+              </button>
+            </form>
+            
+            <div className="auth-footer">
+              <p>🔒 This system is protected and monitored</p>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   if (loading) {
     return (
@@ -741,7 +633,7 @@ const LevelsManager = () => {
         `}</style>
         <div className="loading-container">
           <div className="loading-spinner"></div>
-          <p>Loading ONDOLevels...</p>
+          <p>Loading ONDO Levels...</p>
         </div>
       </>
     );
@@ -1078,6 +970,8 @@ const LevelsManager = () => {
           font-size: 20px;
           font-weight: 700;
           letter-spacing: -0.3px;
+          display: flex;
+          align-items: center;
         }
 
         .discount-badge {
@@ -1325,6 +1219,31 @@ const LevelsManager = () => {
           transform: rotate(180deg);
         }
 
+        .empty-state {
+          text-align: center;
+          padding: 50px;
+          background: var(--bg-primary);
+          border-radius: var(--border-radius);
+          margin: 20px 0;
+          border: 2px dashed var(--border-color);
+        }
+
+        .empty-state p {
+          fontSize: 18px;
+          color: var(--text-secondary);
+          margin-bottom: 20px;
+        }
+
+        .sequence-number {
+          font-size: 14px;
+          color: #666;
+          margin-right: 10px;
+          background: rgba(102, 126, 234, 0.1);
+          padding: 2px 8px;
+          border-radius: 12px;
+          font-weight: 600;
+        }
+
         @media (max-width: 1024px) {
           .header-content {
             padding: 0 20px;
@@ -1402,10 +1321,10 @@ const LevelsManager = () => {
         {/* Header */}
         <div className="header">
           <div className="header-content">
-            <h1>🏢 ONDOLevels Management System</h1>
-            {/* <button onClick={handleLogout} className="logout-btn">
+            <h1>🏢 ONDO Levels Management System</h1>
+            <button onClick={handleLogout} className="logout-btn">
               🔒 Logout
-            </button> */}
+            </button>
           </div>
           
           {message && (
@@ -1442,10 +1361,10 @@ const LevelsManager = () => {
           </div>
         </div>
 
-        {/* Levels Grid */}
+        {/* Levels Grid - Sorted by discount percentage (low to high) */}
         <div className="levels-container">
           <div className="levels-header">
-            <h2>📊 Current Levels ({totalLevels})</h2>
+            <h2>📊 Levels Sorted by Discount % (Lowest to Highest)</h2>
             <button 
               onClick={() => setEditingLevel('NEW')}
               className="add-level-btn"
@@ -1454,48 +1373,59 @@ const LevelsManager = () => {
             </button>
           </div>
 
-          <div className="levels-grid">
-            {Object.entries(levels).map(([levelName, levelData]) => (
-              <div key={levelName} className="level-card">
-                <div className="level-header">
-                  <h3>{levelName}</h3>
-                  <div className="discount-badge">
-                    {levelData.discount}%
+          {sortedLevels.length === 0 ? (
+            <div className="empty-state">
+              <p>No levels found. Click "Add New Level" to create your first level.</p>
+            </div>
+          ) : (
+            <div className="levels-grid">
+              {sortedLevels.map(([levelName, levelData], index) => (
+                <div key={levelName} className="level-card">
+                  <div className="level-header">
+                    <h3>
+                      <span className="sequence-number">
+                        #{index + 1}
+                      </span>
+                      {levelName}
+                    </h3>
+                    <div className="discount-badge">
+                      {levelData.discount}%
+                    </div>
+                  </div>
+                  
+                  <div className="level-details">
+                    <div className="detail-row">
+                      <span className="label">💰 Self Sale:</span>
+                      <span className="value">₹{(levelData.selfSale || 0).toLocaleString()}</span>
+                    </div>
+                    <div className="detail-row">
+                      <span className="label">👥 Team Req:</span>
+                      <span className="value">{levelData.teamRequirement || 0}</span>
+                    </div>
+                    <div className="detail-row">
+                      <span className="label">🎯 Team Role:</span>
+                      <span className="value">{levelData.teamRole || 'NONE'}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="level-actions">
+                    <button 
+                      onClick={() => setEditingLevel(levelName)}
+                      className="edit-btn"
+                    >
+                      ✏️ Edit
+                    </button>
+                    <button 
+                      onClick={() => deleteLevel(levelName)}
+                      className="delete-btn"
+                    >
+                      🗑️ Delete
+                    </button>
                   </div>
                 </div>
-                
-                <div className="level-details">
-                  <div className="detail-row">
-                    <span className="label">💰 Self Sale:</span>
-                    <span className="value">₹{levelData.selfSale?.toLocaleString()}</span>
-                  </div>
-                  <div className="detail-row">
-                    <span className="label">👥 Team Req:</span>
-                    <span className="value">{levelData.teamRequirement}</span>
-                  </div>
-                  <div className="detail-row">
-                    <span className="label">🎯 Team Role:</span>
-                    <span className="value">{levelData.teamRole || 'None'}</span>
-                  </div>
-                </div>
-                
-                <div className="level-actions">
-                  <button 
-                    onClick={() => setEditingLevel(levelName)}
-                    className="edit-btn"
-                  >
-                    ✏️ Edit
-                  </button>
-                  <button 
-                    onClick={() => deleteLevel(levelName)}
-                    className="delete-btn"
-                  >
-                    🗑️ Delete
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Modals */}

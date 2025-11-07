@@ -30,6 +30,7 @@ const CompanyHome = () => {
     '/company-dashboard/services': 'Services',
     '/company-dashboard/user-list': 'Users',
     '/company-dashboard/withdra-requests': 'Withdraw Requests',
+    '/company-dashboard/follow-up-customers': 'Follow Up Customers',
   };    
 
   // 🧠 Find matching title

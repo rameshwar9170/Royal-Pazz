@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { auth, database } from '../firebase/config';
-import { ref, set, get, update, push, serverTimestamp } from 'firebase/database';
+import { ref, set, get, update, push, serverTimestamp, runTransaction } from 'firebase/database';
 import { onAuthStateChanged } from 'firebase/auth';
 import './WithdrawMoney.css';
+
 
 const WithdrawMoney = () => {
   const [currentUser, setCurrentUser] = useState(null);
@@ -10,7 +11,7 @@ const WithdrawMoney = () => {
   const [loading, setLoading] = useState(true);
   const [bankDetails, setBankDetails] = useState(null);
   const [showBankForm, setShowBankForm] = useState(false);
-  const [withdrawalMode, setWithdrawalMode] = useState('bank'); // 'bank' or 'upi'
+  const [withdrawalMode, setWithdrawalMode] = useState('bank');
   const [withdrawalAmount, setWithdrawalAmount] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [transactions, setTransactions] = useState([]);
@@ -19,8 +20,8 @@ const WithdrawMoney = () => {
   const [totalWithdrawn, setTotalWithdrawn] = useState(0);
   const [pendingWithdrawals, setPendingWithdrawals] = useState(0);
   const [withdrawableAmount, setWithdrawableAmount] = useState(0);
+  const [tdsSettings, setTdsSettings] = useState({ enabled: false, percentage: 0 });
 
-  // Bank form state
   const [bankForm, setBankForm] = useState({
     accountNumber: '',
     confirmAccountNumber: '',
@@ -31,7 +32,6 @@ const WithdrawMoney = () => {
     accountType: 'savings'
   });
 
-  // UPI form state
   const [upiForm, setUpiForm] = useState({
     upiId: '',
     upiName: ''
@@ -39,23 +39,20 @@ const WithdrawMoney = () => {
 
   const [errors, setErrors] = useState({});
 
-
-  // Utility function to remove undefined/null values from objects
-const cleanObject = (obj) => {
-  if (Array.isArray(obj)) {
-    return obj.map(v => (v && typeof v === 'object') ? cleanObject(v) : v);
-  } else if (obj && typeof obj === 'object') {
-    const result = {};
-    for (const key in obj) {
-      if (obj[key] !== undefined && obj[key] !== null) {
-        result[key] = (typeof obj[key] === 'object') ? cleanObject(obj[key]) : obj[key];
+  const cleanObject = (obj) => {
+    if (Array.isArray(obj)) {
+      return obj.map(v => (v && typeof v === 'object') ? cleanObject(v) : v);
+    } else if (obj && typeof obj === 'object') {
+      const result = {};
+      for (const key in obj) {
+        if (obj[key] !== undefined && obj[key] !== null) {
+          result[key] = (typeof obj[key] === 'object') ? cleanObject(obj[key]) : obj[key];
+        }
       }
+      return result;
     }
-    return result;
-  }
-  return obj;
-};
-
+    return obj;
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -63,14 +60,26 @@ const cleanObject = (obj) => {
         setCurrentUser(user);
         fetchUserData(user.uid);
         fetchTransactions(user.uid);
+        fetchTdsSettings();
       } else {
         setCurrentUser(null);
         setLoading(false);
       }
     });
-
     return () => unsubscribe();
   }, []);
+
+  const fetchTdsSettings = async () => {
+    try {
+      const tdsRef = ref(database, 'HTAMS/settings/tds');
+      const snapshot = await get(tdsRef);
+      if (snapshot.exists()) {
+        setTdsSettings(snapshot.val());
+      }
+    } catch (error) {
+      console.error('Error fetching TDS settings:', error);
+    }
+  };
 
   const fetchUserData = async (uid) => {
     try {
@@ -80,7 +89,10 @@ const cleanObject = (obj) => {
         const data = snapshot.val();
         setUserData(data);
         
-        // Check if bank details exist
+        // Withdrawable Amount = Current MySales balance
+        const currentBalance = parseFloat(data.MySales || 0);
+        setWithdrawableAmount(currentBalance);
+        
         const bankRef = ref(database, `HTAMS/users/${uid}/bankDetails`);
         const bankSnapshot = await get(bankRef);
         if (bankSnapshot.exists()) {
@@ -107,12 +119,10 @@ const cleanObject = (obj) => {
         
         setTransactions(transactionsArray);
         
-        // Calculate total withdrawn amount (approved transactions only)
         const totalWithdrawnAmount = transactionsArray
           .filter(t => t.status === 'approved' && t.type === 'withdrawal')
           .reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
         
-        // Calculate pending withdrawals amount
         const pendingWithdrawalsAmount = transactionsArray
           .filter(t => t.status === 'pending' && t.type === 'withdrawal')
           .reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
@@ -132,15 +142,12 @@ const cleanObject = (obj) => {
     }
   };
 
-  // Calculate withdrawable amount whenever userData, totalWithdrawn, or pendingWithdrawals changes
   useEffect(() => {
-    if (userData && userData.MySales) {
-      const totalEarnings = parseFloat(userData.MySales);
-      // Withdrawable amount = Total Earnings - Total Withdrawn - Pending Withdrawals
-      const withdrawable = totalEarnings - totalWithdrawn - pendingWithdrawals;
-      setWithdrawableAmount(Math.max(0, withdrawable)); // Ensure it's not negative
+    if (userData && userData.MySales !== undefined) {
+      const currentBalance = parseFloat(userData.MySales || 0);
+      setWithdrawableAmount(currentBalance);
     }
-  }, [userData, totalWithdrawn, pendingWithdrawals]);
+  }, [userData]);
 
   const validateBankForm = () => {
     const newErrors = {};
@@ -201,7 +208,6 @@ const cleanObject = (obj) => {
   const validateWithdrawalAmount = () => {
     const newErrors = {};
     const amount = parseFloat(withdrawalAmount);
-    const totalEarnings = parseFloat(userData?.MySales || 0);
 
     if (!withdrawalAmount.trim()) {
       newErrors.withdrawalAmount = 'Withdrawal amount is required';
@@ -211,8 +217,6 @@ const cleanObject = (obj) => {
       newErrors.withdrawalAmount = 'Minimum withdrawal amount is ₹100';
     } else if (amount > withdrawableAmount) {
       newErrors.withdrawalAmount = `Insufficient withdrawable balance. Available: ₹${withdrawableAmount.toLocaleString()}`;
-    } else if ((totalWithdrawn + pendingWithdrawals + amount) > totalEarnings) {
-      newErrors.withdrawalAmount = `Total withdrawal requests cannot exceed earnings. Maximum allowed: ₹${(totalEarnings - totalWithdrawn - pendingWithdrawals).toLocaleString()}`;
     }
 
     setErrors(newErrors);
@@ -265,83 +269,117 @@ const cleanObject = (obj) => {
     }
   };
 
-const submitWithdrawalRequest = async () => {
-  if (!validateWithdrawalAmount()) return;
+  const submitWithdrawalRequest = async () => {
+    if (!validateWithdrawalAmount()) return;
 
-  try {
-    setIsSubmitting(true);
-    const amount = parseFloat(withdrawalAmount);
-    const userId = currentUser.uid;
+    try {
+      setIsSubmitting(true);
+      const grossAmount = parseFloat(withdrawalAmount);
+      const userId = currentUser.uid;
 
-    // Prepare transaction data with fallback values
-    let transactionData = {
-      amount,
-      type: 'withdrawal',
-      mode: withdrawalMode,
-      status: 'pending',
-      requestedAt: Date.now(),
-      timestamp: serverTimestamp(),
-      userDetails: {
-        name: userData?.name || '',
-        mobile: userData?.mobile || userData?.phone || '',
-        email: userData?.email || '',
-        totalEarnings: parseFloat(userData?.MySales) || 0,
-        previousWithdrawn: totalWithdrawn || 0,
-        previousPending: pendingWithdrawals || 0
+      // Calculate TDS if enabled
+      let tdsAmount = 0;
+      let netAmount = grossAmount;
+      
+      if (tdsSettings.enabled && tdsSettings.percentage > 0) {
+        tdsAmount = (grossAmount * tdsSettings.percentage) / 100;
+        netAmount = grossAmount - tdsAmount;
       }
-    };
 
-    // Add payment details based on mode
-    if (withdrawalMode === 'bank' && bankDetails) {
-      transactionData.bankDetails = cleanObject(bankDetails);
+      // DEDUCT GROSS AMOUNT IMMEDIATELY FROM WALLET
+      const userRef = ref(database, `HTAMS/users/${userId}`);
+      
+      let newBalance = 0;
+      let currentMySales = 0;
+      
+      await runTransaction(userRef, (userData) => {
+        if (userData) {
+          currentMySales = parseFloat(userData.MySales || 0);
+          
+          if (currentMySales < grossAmount) {
+            throw new Error('Insufficient balance');
+          }
+          
+          newBalance = currentMySales - grossAmount;
+          userData.MySales = newBalance;
+          userData.lastUpdated = Date.now();
+          
+          return userData;
+        }
+        return userData;
+      });
+
+      // Prepare transaction data with TDS details
+      let transactionData = {
+        amount: grossAmount,
+        grossAmount: grossAmount,
+        tdsApplied: tdsSettings.enabled,
+        tdsPercentage: tdsSettings.percentage,
+        tdsAmount: tdsAmount,
+        netAmount: netAmount,
+        type: 'withdrawal',
+        mode: withdrawalMode,
+        status: 'pending',
+        requestedAt: Date.now(),
+        timestamp: serverTimestamp(),
+        deductedFromWallet: true,
+        alreadyDeducted: true, // FLAG: Amount already deducted
+        previousBalance: currentMySales,
+        newBalance: newBalance,
+        userDetails: {
+          name: userData?.name || '',
+          mobile: userData?.mobile || userData?.phone || '',
+          email: userData?.email || '',
+          totalEarnings: currentMySales,
+          previousWithdrawn: totalWithdrawn || 0,
+          previousPending: pendingWithdrawals || 0
+        }
+      };
+
+      if (withdrawalMode === 'bank' && bankDetails) {
+        transactionData.bankDetails = cleanObject(bankDetails);
+      }
+      if (withdrawalMode === 'upi' && bankDetails?.upi) {
+        transactionData.upiDetails = cleanObject(bankDetails.upi);
+      }
+
+      transactionData = cleanObject(transactionData);
+
+      const newTransactionRef = push(ref(database, 'HTAMS/transactions'));
+      const newTransactionId = newTransactionRef.key;
+
+      const updates = {};
+      updates[`HTAMS/transactions/${newTransactionId}`] = {
+        ...transactionData,
+        id: newTransactionId,
+        userId
+      };
+      updates[`HTAMS/users/${userId}/transactions/${newTransactionId}`] = {
+        ...transactionData,
+        id: newTransactionId
+      };
+
+      await update(ref(database), updates);
+
+      setWithdrawalAmount('');
+      await fetchUserData(userId);
+      await fetchTransactions(userId);
+
+      alert(`Withdrawal request submitted successfully! ₹${grossAmount.toLocaleString()} has been deducted from your wallet.`);
+    } catch (error) {
+      console.error('Error submitting withdrawal request:', error);
+      if (error.message === 'Insufficient balance') {
+        alert('Insufficient wallet balance. Please check your available balance.');
+      } else {
+        alert('Error submitting withdrawal request. Please try again.');
+      }
+    } finally {
+      setIsSubmitting(false);
     }
-    if (withdrawalMode === 'upi' && bankDetails?.upi) {
-      transactionData.upiDetails = cleanObject(bankDetails.upi);
-    }
-
-    // Clean the entire transaction data to remove undefined values
-    transactionData = cleanObject(transactionData);
-
-    // Generate new transaction ID
-    const newTransactionRef = push(ref(database, 'HTAMS/transactions'));
-    const newTransactionId = newTransactionRef.key;
-
-    // Use multi-path update to write to multiple locations atomically
-    const updates = {};
-    updates[`HTAMS/transactions/${newTransactionId}`] = {
-      ...transactionData,
-      id: newTransactionId,
-      userId
-    };
-    updates[`HTAMS/users/${userId}/transactions/${newTransactionId}`] = {
-      ...transactionData,
-      id: newTransactionId
-    };
-
-    // Perform atomic multi-path update
-    await update(ref(database), updates);
-
-    // Update user's lastUpdated without overwriting other data
-    await update(ref(database, `HTAMS/users/${userId}`), {
-      lastUpdated: Date.now()
-    });
-
-    // Reset form and refresh data
-    setWithdrawalAmount('');
-    await fetchTransactions(userId);
-
-    alert('Withdrawal request submitted successfully!');
-  } catch (error) {
-    console.error('Error submitting withdrawal request:', error);
-    alert('Error submitting withdrawal request. Please try again.');
-  } finally {
-    setIsSubmitting(false);
-  }
-};
-
+  };
 
   const cancelWithdrawalRequest = async (transactionId) => {
-    if (!window.confirm('Are you sure you want to cancel this withdrawal request?')) {
+    if (!window.confirm('Are you sure you want to cancel this withdrawal request? The amount will be refunded to your wallet.')) {
       return;
     }
 
@@ -350,22 +388,38 @@ const submitWithdrawalRequest = async () => {
       const transaction = transactions.find(t => t.id === transactionId);
       
       if (transaction && transaction.status === 'pending') {
-        // Update transaction status to cancelled
-        await update(ref(database, `HTAMS/users/${currentUser.uid}/transactions/${transactionId}`), {
-          status: 'cancelled',
-          cancelledAt: Date.now()
+        const refundAmount = parseFloat(transaction.amount);
+        const userId = currentUser.uid;
+
+        // REFUND AMOUNT BACK TO WALLET
+        const userRef = ref(database, `HTAMS/users/${userId}`);
+        
+        await runTransaction(userRef, (userData) => {
+          if (userData) {
+            const currentMySales = parseFloat(userData.MySales || 0);
+            userData.MySales = currentMySales + refundAmount;
+            userData.lastUpdated = Date.now();
+            return userData;
+          }
+          return userData;
         });
 
-        // Update global transaction
+        await update(ref(database, `HTAMS/users/${userId}/transactions/${transactionId}`), {
+          status: 'cancelled',
+          cancelledAt: Date.now(),
+          refundedToWallet: true
+        });
+
         await update(ref(database, `HTAMS/transactions/${transactionId}`), {
           status: 'cancelled',
-          cancelledAt: Date.now()
+          cancelledAt: Date.now(),
+          refundedToWallet: true
         });
 
-        // Refresh transactions to update all amounts
-        await fetchTransactions(currentUser.uid);
+        await fetchUserData(userId);
+        await fetchTransactions(userId);
 
-        alert('Withdrawal request cancelled successfully! The amount is now available for withdrawal again.');
+        alert(`Withdrawal request cancelled successfully! ₹${refundAmount.toLocaleString()} has been refunded to your wallet.`);
       }
     } catch (error) {
       console.error('Error cancelling withdrawal request:', error);
@@ -400,7 +454,6 @@ const submitWithdrawalRequest = async () => {
       <div className="withdraw-header">
         <h1>Withdraw Money</h1>
         
-        {/* Earnings Summary Cards */}
         <div className="earnings-summary">
           <div className="summary-card total-earnings">
             <h3>Total Earnings</h3>
@@ -427,7 +480,6 @@ const submitWithdrawalRequest = async () => {
           </div>
         </div>
 
-        {/* Balance Breakdown */}
         <div className="balance-breakdown">
           <h4>Balance Breakdown</h4>
           <div className="breakdown-details">
@@ -451,7 +503,6 @@ const submitWithdrawalRequest = async () => {
         </div>
       </div>
 
-      {/* Bank Details Section */}
       {!bankDetails && (
         <div className="bank-details-prompt">
           <div className="prompt-content">
@@ -467,7 +518,6 @@ const submitWithdrawalRequest = async () => {
         </div>
       )}
 
-      {/* Bank Details Form */}
       {showBankForm && (
         <div className="modal-overlay">
           <div className="modal-content">
@@ -586,12 +636,10 @@ const submitWithdrawalRequest = async () => {
         </div>
       )}
 
-      {/* Withdrawal Form */}
       {bankDetails && withdrawableAmount > 0 && (
         <div className="withdrawal-form">
           <h3>Create Withdrawal Request</h3>
           
-          {/* Payment Mode Selection */}
           <div className="payment-modes">
             <div className="mode-selector">
               <button
@@ -609,7 +657,6 @@ const submitWithdrawalRequest = async () => {
             </div>
           </div>
 
-          {/* UPI Details Form */}
           {withdrawalMode === 'upi' && !bankDetails?.upi && (
             <div className="upi-form">
               <h4>Add UPI Details</h4>
@@ -647,7 +694,6 @@ const submitWithdrawalRequest = async () => {
             </div>
           )}
 
-          {/* Withdrawal Amount */}
           {((withdrawalMode === 'bank') || (withdrawalMode === 'upi' && bankDetails?.upi)) && (
             <div className="withdrawal-amount-section">
               <div className="form-group">
@@ -668,9 +714,37 @@ const submitWithdrawalRequest = async () => {
                 <small className="helper-text">
                   Minimum: ₹100 | Maximum: ₹{withdrawableAmount.toLocaleString()}
                 </small>
+                
+                {/* TDS Information */}
+                {withdrawalAmount && parseFloat(withdrawalAmount) > 0 && tdsSettings.enabled && (
+                  <div className="tds-info-box" style={{
+                    marginTop: '15px',
+                    padding: '15px',
+                    background: '#fef3c7',
+                    border: '1px solid #fbbf24',
+                    borderRadius: '8px'
+                  }}>
+                    <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#92400e' }}>
+                      💰 TDS Calculation
+                    </h4>
+                    <div style={{ fontSize: '13px', color: '#78350f' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                        <span>Gross Amount:</span>
+                        <strong>₹{parseFloat(withdrawalAmount).toLocaleString()}</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', color: '#f59e0b' }}>
+                        <span>TDS ({tdsSettings.percentage}%):</span>
+                        <strong>- ₹{((parseFloat(withdrawalAmount) * tdsSettings.percentage) / 100).toLocaleString()}</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px solid #fbbf24', color: '#10b981', fontSize: '15px' }}>
+                        <span><strong>Net Amount (You will receive):</strong></span>
+                        <strong>₹{(parseFloat(withdrawalAmount) - (parseFloat(withdrawalAmount) * tdsSettings.percentage) / 100).toLocaleString()}</strong>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* Quick Amount Buttons */}
               <div className="quick-amounts">
                 {[1000, 5000, 10000, Math.min(25000, withdrawableAmount)].map((amount) => (
                   <button
@@ -694,7 +768,6 @@ const submitWithdrawalRequest = async () => {
                 )}
               </div>
 
-              {/* Account Details Display */}
               <div className="account-details">
                 <h4>Transfer Details</h4>
                 {withdrawalMode === 'bank' && (
@@ -718,14 +791,17 @@ const submitWithdrawalRequest = async () => {
                 onClick={submitWithdrawalRequest}
                 disabled={isSubmitting || !withdrawalAmount || parseFloat(withdrawalAmount) <= 0 || parseFloat(withdrawalAmount) > withdrawableAmount}
               >
-                {isSubmitting ? 'Processing...' : `Submit Withdrawal Request`}
+                {isSubmitting ? 'Processing...' : (
+                  tdsSettings.enabled && withdrawalAmount && parseFloat(withdrawalAmount) > 0
+                    ? `Submit Request (Net: ₹${(parseFloat(withdrawalAmount) - (parseFloat(withdrawalAmount) * tdsSettings.percentage) / 100).toLocaleString()})`
+                    : 'Submit Withdrawal Request'
+                )}
               </button>
             </div>
           )}
         </div>
       )}
 
-      {/* No Withdrawable Amount Message */}
       {bankDetails && withdrawableAmount <= 0 && (
         <div className="no-withdrawable-amount">
           <div className="info-card">
@@ -741,7 +817,6 @@ const submitWithdrawalRequest = async () => {
         </div>
       )}
 
-      {/* Transaction History */}
       <div className="transaction-history">
         <div className="history-header">
           <h3>Transaction History</h3>
@@ -804,7 +879,6 @@ const submitWithdrawalRequest = async () => {
         )}
       </div>
 
-      {/* Transaction Details Modal */}
       {showTransactionModal && selectedTransaction && (
         <div className="modal-overlay">
           <div className="modal-content">
@@ -843,6 +917,28 @@ const submitWithdrawalRequest = async () => {
                 <span>Requested Date:</span>
                 <span>{new Date(selectedTransaction.requestedAt).toLocaleString()}</span>
               </div>
+              {selectedTransaction.deductedFromWallet && (
+                <div className="detail-row">
+                  <span>Deducted from Wallet:</span>
+                  <span>Yes</span>
+                </div>
+              )}
+              {selectedTransaction.tdsApplied && (
+                <>
+                  <div className="detail-row">
+                    <span>Gross Amount:</span>
+                    <span style={{ fontWeight: '600' }}>₹{parseFloat(selectedTransaction.grossAmount || selectedTransaction.amount).toLocaleString()}</span>
+                  </div>
+                  <div className="detail-row">
+                    <span>TDS ({selectedTransaction.tdsPercentage}%):</span>
+                    <span style={{ color: '#f59e0b', fontWeight: '600' }}>₹{parseFloat(selectedTransaction.tdsAmount).toLocaleString()}</span>
+                  </div>
+                  <div className="detail-row">
+                    <span>Net Amount (After TDS):</span>
+                    <span style={{ color: '#10b981', fontWeight: '700', fontSize: '16px' }}>₹{parseFloat(selectedTransaction.netAmount).toLocaleString()}</span>
+                  </div>
+                </>
+              )}
               {selectedTransaction.approvedAt && (
                 <div className="detail-row">
                   <span>Approved Date:</span>
@@ -853,6 +949,12 @@ const submitWithdrawalRequest = async () => {
                 <div className="detail-row">
                   <span>Cancelled Date:</span>
                   <span>{new Date(selectedTransaction.cancelledAt).toLocaleString()}</span>
+                </div>
+              )}
+              {selectedTransaction.refundedToWallet && (
+                <div className="detail-row">
+                  <span>Refunded to Wallet:</span>
+                  <span>Yes</span>
                 </div>
               )}
             </div>

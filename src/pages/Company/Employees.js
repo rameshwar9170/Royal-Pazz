@@ -438,7 +438,7 @@ function Employees() {
             mobile: form.mobile,
             email: form.email || 'N/A',
             role: form.role,
-            portalUrl: 'https://royal-pazz.vercel.app/employee-login', // Updated URL
+            portalUrl: 'https://ONDO.co.in/employee-login', // Updated URL
             hasAuth: false, // No Firebase Auth
             defaultPassword: form.mobile, // Mobile number as password
             loginInstructions: `Login with Email: ${form.email} and Password: ${form.mobile}`
@@ -517,7 +517,7 @@ function Employees() {
           mobile: employee.mobile,
           email: employee.email || 'N/A',
           role: employee.role,
-          portalUrl: 'https://royal-pazz.vercel.app/employee-login',
+          portalUrl: 'https://ONDO.co.in/employee-login',
           hasAuth: false, // No authentication
           defaultPassword: employee.mobile, // Mobile as password
           loginInstructions: `Login with Email: ${employee.email} and Password: ${employee.mobile}`
@@ -1165,12 +1165,13 @@ function Employees() {
         }
 
         .page-header {
-          background: #f8fafc;
-          padding: 1rem 1rem 2rem;
-          color: #2d3748;
+          background: #002B5C;
+          padding: 1.5rem 1.5rem 1rem;
+          color: white;
           position: relative;
           overflow: hidden;
-          border-bottom: 1px solid #e2e8f0;
+          margin: 0;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.15);
         }
 
         .header-content {
@@ -1196,18 +1197,18 @@ function Employees() {
           display: flex;
           align-items: center;
           gap: 0.75rem;
-          color: #2d3748;
+          color: white;
         }
 
         .page-icon {
           font-size: clamp(1.25rem, 3vw, 1.5rem);
-          color: #6366f1;
+          color: #F36F21;
           flex-shrink: 0;
         }
 
         .page-subtitle {
           font-size: clamp(0.875rem, 2.5vw, 1rem);
-          color: #64748b;
+          color: rgba(255, 255, 255, 0.85);
           margin: 0.5rem 0 0 0;
           font-weight: 400;
         }
@@ -1217,13 +1218,21 @@ function Employees() {
         }
 
         .total-employees-card {
-          background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+          background: #F36F21;
           color: white;
           padding: 1rem 1.5rem;
-          border-radius: 12px;
+          border-radius: 10px;
           text-align: center;
           min-width: 150px;
-          box-shadow: 0 8px 25px rgba(99, 102, 241, 0.3);
+          box-shadow: 0 4px 12px rgba(243, 111, 33, 0.4);
+          transition: all 0.2s ease;
+          border: 2px solid transparent;
+        }
+
+        .total-employees-card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 16px rgba(243, 111, 33, 0.5);
+          border-color: white;
         }
 
         .total-employees-number {
@@ -1234,15 +1243,15 @@ function Employees() {
         }
 
         .total-employees-label {
-          font-size: clamp(0.75rem, 2vw, 0.875rem);
+          font-size: clamp(0.7rem, 2vw, 0.8rem);
           font-weight: 600;
           margin: 0.5rem 0 0 0;
-          opacity: 0.9;
+          opacity: 0.95;
           letter-spacing: 0.05em;
         }
 
         .primary-btn {
-          background: #6366f1;
+          background: #F36F21;
           color: white;
           border: none;
           padding: 0.75rem 1rem;
@@ -1254,14 +1263,14 @@ function Employees() {
           align-items: center;
           gap: 0.5rem;
           transition: all 0.3s ease;
-          box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+          box-shadow: 0 4px 12px rgba(243, 111, 33, 0.3);
           white-space: nowrap;
         }
 
         .primary-btn:hover {
-          background: #5855eb;
+          background: #d96419;
           transform: translateY(-1px);
-          box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
+          box-shadow: 0 6px 16px rgba(243, 111, 33, 0.4);
         }
 
         .btn-icon {
@@ -1473,8 +1482,8 @@ function Employees() {
 
         .search-input:focus {
           outline: none;
-          border-color: #667eea;
-          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+          border-color: #F36F21;
+          box-shadow: 0 0 0 3px rgba(243, 111, 33, 0.1);
         }
 
         .clear-btn {
@@ -1583,7 +1592,7 @@ function Employees() {
         }
 
         .contact-icon {
-          color: #6366f1;
+          color: #F36F21;
           font-size: 0.75rem;
           width: 12px;
         }
@@ -1602,7 +1611,7 @@ function Employees() {
         }
 
         .info-icon {
-          color: #6366f1;
+          color: #F36F21;
           font-size: 0.75rem;
           width: 12px;
         }
@@ -1624,7 +1633,7 @@ function Employees() {
         }
 
         .employee-table th {
-          background: #4a5568;
+          background: #002B5C;
           color: white;
           padding: 1rem;
           text-align: left;
@@ -1752,22 +1761,22 @@ function Employees() {
         }
 
         .view-btn {
-          background-color: #6366f1;
+          background-color: #002B5C;
           color: white;
         }
 
         .view-btn:hover {
-          background-color: #5855eb;
+          background-color: #003875;
           transform: translateY(-1px);
         }
 
         .edit-btn {
-          background-color: #f59e0b;
+          background-color: #F36F21;
           color: white;
         }
 
         .edit-btn:hover {
-          background-color: #d97706;
+          background-color: #d96419;
           transform: translateY(-1px);
         }
 
@@ -1868,7 +1877,7 @@ function Employees() {
         }
 
         .modal-close-btn {
-          background: #f7fafc;
+          background: #F36F21;
           border: none;
           width: 36px;
           height: 36px;
@@ -1877,14 +1886,14 @@ function Employees() {
           display: flex;
           align-items: center;
           justify-content: center;
-          color: #64748b;
+          color: white;
           transition: all 0.2s ease;
           flex-shrink: 0;
         }
 
         .modal-close-btn:hover {
-          background: #e2e8f0;
-          color: #1a202c;
+          background: #d96419;
+          transform: rotate(90deg);
         }
 
         .modal-body {
@@ -1924,7 +1933,7 @@ function Employees() {
         }
 
         .info-icon {
-          color: #667eea;
+          color: #F36F21;
           font-size: 1rem;
           margin-top: 0.125rem;
           flex-shrink: 0;

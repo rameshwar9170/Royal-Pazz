@@ -14,6 +14,7 @@ const CompanyUserList = () => {
   const [users, setUsers] = useState([]);
   const [trainers, setTrainers] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [levels, setLevels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRole, setSelectedRole] = useState('all');
@@ -35,7 +36,7 @@ const CompanyUserList = () => {
 
   useEffect(() => {
     let loadedUsers = 0;
-    const totalDataSources = 3; // users, trainers, employees
+    const totalDataSources = 4; // users, trainers, employees, levels
 
     const checkAllDataLoaded = () => {
       loadedUsers++;
@@ -112,6 +113,33 @@ const CompanyUserList = () => {
       });
     }
 
+    // Load business levels from HTAMS/Levels/
+    const levelsRef = ref(db, 'HTAMS/Levels');
+    onValue(levelsRef, (snapshot) => {
+      const data = snapshot.val();
+      console.log('Firebase levels data:', data);
+      let levelsList = [];
+      if (data) {
+        levelsList = Object.entries(data).map(([key, level]) => ({
+          id: key,
+          name: key, // The key IS the level name (e.g., "MEGA WHOLESALER", "AGENCY 15%")
+          discount: level.discount || 0,
+          selfSale: level.selfSale || 0,
+          teamRequirement: level.teamRequirement || 0,
+          teamRole: level.teamRole || 'NONE',
+          ...level
+        }));
+        
+        // Sort levels by discount percentage (lowest to highest - min to max)
+        levelsList.sort((a, b) => (a.discount || 0) - (b.discount || 0));
+        console.log('Processed levels list:', levelsList);
+      } else {
+        console.log('No levels data found in Firebase at HTAMS/level');
+      }
+      setLevels(levelsList);
+      checkAllDataLoaded();
+    });
+
     return () => {
       // Cleanup listeners if they exist
     };
@@ -124,7 +152,7 @@ const CompanyUserList = () => {
     ...employees
   ];
 
-  // Complete role mapping based on your Firebase levels and administrative roles
+  // Dynamic role mapping based on Firebase levels
   const roleMapping = {
     // Administrative roles (fixed)
     'admin': ['admin'],
@@ -134,27 +162,24 @@ const CompanyUserList = () => {
     'employee': ['employee'],
     'ca': ['ca'],
     
-    // Business hierarchy levels from Firebase/Levels
-    'agency': ['agency'],
-    'premium agency': ['premium agency'],
-    'agency 24%': ['agency 24%'],
-    'agency 27%': ['agency 27%'],
-    'dealer': ['dealer'],
-    'premium dealer': ['premium dealer'],
-    'distributor': ['distributor'],
-    'premium distributor': ['premium distributor'],
-    'wholesaler': ['wholesaler'],
-    'premium wholesaler': ['premium wholesaler'],
-    
     // Group filters for easier management
     'all_administrative': ['admin', 'subadmin', 'manager', 'trainer', 'employee', 'ca'],
-    'all_agency': ['agency', 'premium agency', 'agency 24%', 'agency 27%'],
-    'all_dealer': ['dealer', 'premium dealer'],
-    'all_distributor': ['distributor', 'premium distributor'],
-    'all_wholesaler': ['wholesaler', 'premium wholesaler'],
-    'all_premium': ['premium agency', 'premium dealer', 'premium distributor', 'premium wholesaler'],
-    'all_business': ['agency', 'premium agency', 'agency 24%', 'agency 27%', 'dealer', 'premium dealer', 'distributor', 'premium distributor', 'wholesaler', 'premium wholesaler']
   };
+
+  // Add dynamic levels from Firebase to roleMapping
+  levels.forEach(level => {
+    const levelName = level.name.toLowerCase();
+    roleMapping[levelName] = [levelName];
+  });
+
+  // Create dynamic group filters
+  const allBusinessLevels = levels.map(level => level.name.toLowerCase());
+  roleMapping['all_business'] = allBusinessLevels;
+  
+  const premiumLevels = levels.filter(level => level.name.toLowerCase().includes('premium')).map(level => level.name.toLowerCase());
+  if (premiumLevels.length > 0) {
+    roleMapping['all_premium'] = premiumLevels;
+  }
 
   // Filter, sort, and paginate users
   const processedUsers = allUsers
@@ -224,7 +249,7 @@ const CompanyUserList = () => {
     }
   };
 
-  // Comprehensive role statistics based on all your Firebase levels
+  // Dynamic role statistics based on Firebase levels
   const getRoleStats = () => {
     const stats = {
       total: allUsers.length,
@@ -233,92 +258,73 @@ const CompanyUserList = () => {
       admin: allUsers.filter(user => user.role?.toLowerCase() === 'admin').length,
       subadmin: allUsers.filter(user => user.role?.toLowerCase() === 'subadmin').length,
       manager: allUsers.filter(user => user.role?.toLowerCase() === 'manager').length,
-      trainer: trainers.length, // Direct count from trainers collection
-      employee: employees.length, // Direct count from employees collection
+      trainer: trainers.length,
+      employee: employees.length,
       ca: allUsers.filter(user => user.role?.toLowerCase() === 'ca').length,
-      
-      // Agency levels
-      agency: allUsers.filter(user => 
-        user.role?.toLowerCase() === 'agency' || 
-        user.currentLevel?.toLowerCase() === 'agency'
-      ).length,
-      'premium agency': allUsers.filter(user => 
-        user.role?.toLowerCase() === 'premium agency' || 
-        user.currentLevel?.toLowerCase() === 'premium agency'
-      ).length,
-      'agency 24%': allUsers.filter(user => 
-        user.role?.toLowerCase() === 'agency 24%' || 
-        user.currentLevel?.toLowerCase() === 'agency 24%'
-      ).length,
-      'agency 27%': allUsers.filter(user => 
-        user.role?.toLowerCase() === 'agency 27%' || 
-        user.currentLevel?.toLowerCase() === 'agency 27%'
-      ).length,
-      
-      // Dealer levels
-      dealer: allUsers.filter(user => 
-        user.role?.toLowerCase() === 'dealer' || 
-        user.currentLevel?.toLowerCase() === 'dealer'
-      ).length,
-      'premium dealer': allUsers.filter(user => 
-        user.role?.toLowerCase() === 'premium dealer' || 
-        user.currentLevel?.toLowerCase() === 'premium dealer'
-      ).length,
-      
-      // Distributor levels
-      distributor: allUsers.filter(user => 
-        user.role?.toLowerCase() === 'distributor' || 
-        user.currentLevel?.toLowerCase() === 'distributor'
-      ).length,
-      'premium distributor': allUsers.filter(user => 
-        user.role?.toLowerCase() === 'premium distributor' || 
-        user.currentLevel?.toLowerCase() === 'premium distributor'
-      ).length,
-      
-      // Wholesaler levels
-      wholesaler: allUsers.filter(user => 
-        user.role?.toLowerCase() === 'wholesaler' || 
-        user.currentLevel?.toLowerCase() === 'wholesaler'
-      ).length,
-      'premium wholesaler': allUsers.filter(user => 
-        user.role?.toLowerCase() === 'premium wholesaler' || 
-        user.currentLevel?.toLowerCase() === 'premium wholesaler'
-      ).length,
       
       // Group statistics
       all_administrative: allUsers.filter(user => {
         const role = user.role?.toLowerCase();
         return ['admin', 'subadmin', 'manager', 'trainer', 'employee', 'ca'].includes(role);
       }).length,
-      all_agency: allUsers.filter(user => {
-        const role = user.role?.toLowerCase() || user.currentLevel?.toLowerCase();
-        return ['agency', 'premium agency', 'agency 24%', 'agency 27%'].includes(role);
-      }).length,
-      all_dealer: allUsers.filter(user => {
-        const role = user.role?.toLowerCase() || user.currentLevel?.toLowerCase();
-        return ['dealer', 'premium dealer'].includes(role);
-      }).length,
-      all_distributor: allUsers.filter(user => {
-        const role = user.role?.toLowerCase() || user.currentLevel?.toLowerCase();
-        return ['distributor', 'premium distributor'].includes(role);
-      }).length,
-      all_wholesaler: allUsers.filter(user => {
-        const role = user.role?.toLowerCase() || user.currentLevel?.toLowerCase();
-        return ['wholesaler', 'premium wholesaler'].includes(role);
-      }).length,
-      all_premium: allUsers.filter(user => {
-        const role = user.role?.toLowerCase() || user.currentLevel?.toLowerCase();
-        return role?.includes('premium');
-      }).length,
-      all_business: allUsers.filter(user => {
-        const role = user.role?.toLowerCase() || user.currentLevel?.toLowerCase();
-        return ['agency', 'premium agency', 'agency 24%', 'agency 27%', 'dealer', 'premium dealer', 'distributor', 'premium distributor', 'wholesaler', 'premium wholesaler'].includes(role);
-      }).length,
     };
+
+    // Add dynamic level counts from Firebase
+    levels.forEach(level => {
+      const levelName = level.name.toLowerCase();
+      stats[levelName] = allUsers.filter(user => 
+        user.role?.toLowerCase() === levelName || 
+        user.currentLevel?.toLowerCase() === levelName
+      ).length;
+    });
+
+    // Calculate all_business count
+    const allBusinessLevels = levels.map(level => level.name.toLowerCase());
+    stats.all_business = allUsers.filter(user => {
+      const role = user.role?.toLowerCase() || user.currentLevel?.toLowerCase();
+      return allBusinessLevels.includes(role);
+    }).length;
+
+    // Calculate all_premium count
+    stats.all_premium = allUsers.filter(user => {
+      const role = user.role?.toLowerCase() || user.currentLevel?.toLowerCase();
+      return role?.includes('premium');
+    }).length;
+
     return stats;
   };
 
   const roleStats = getRoleStats();
+
+  // Group levels by category for better display
+  const groupLevelsByCategory = () => {
+    const categories = {
+      agency: [],
+      dealer: [],
+      distributor: [],
+      wholesaler: [],
+      other: []
+    };
+
+    levels.forEach(level => {
+      const levelName = level.name.toLowerCase();
+      if (levelName.includes('agency')) {
+        categories.agency.push(level);
+      } else if (levelName.includes('dealer')) {
+        categories.dealer.push(level);
+      } else if (levelName.includes('distributor')) {
+        categories.distributor.push(level);
+      } else if (levelName.includes('wholesaler')) {
+        categories.wholesaler.push(level);
+      } else {
+        categories.other.push(level);
+      }
+    });
+
+    return categories;
+  };
+
+  const levelCategories = groupLevelsByCategory();
 
   // Rest of your functions remain the same...
   const fetchUserAdditionalData = async (userId, dataSource) => {
@@ -925,16 +931,14 @@ const CompanyUserList = () => {
   </optgroup>
   
   <optgroup label="💼 Business Levels">
-    <option value="agency">Agency ({roleStats.agency})</option>
-    <option value="premium agency">Premium Agency ({roleStats['premium agency']})</option>
-    <option value="agency 24%">Agency 24% ({roleStats['agency 24%']})</option>
-    <option value="agency 27%">Agency 27% ({roleStats['agency 27%']})</option>
-    <option value="dealer">Dealer ({roleStats.dealer})</option>
-    <option value="premium dealer">Premium Dealer ({roleStats['premium dealer']})</option>
-    <option value="distributor">Distributor ({roleStats.distributor})</option>
-    <option value="premium distributor">Premium Distributor ({roleStats['premium distributor']})</option>
-    <option value="wholesaler">Wholesaler ({roleStats.wholesaler})</option>
-    <option value="premium wholesaler">Premium Wholesaler ({roleStats['premium wholesaler']})</option>
+    {levels.map(level => {
+      const levelName = level.name.toLowerCase();
+      return (
+        <option key={level.id} value={levelName}>
+          {level.name} ({roleStats[levelName] || 0})
+        </option>
+      );
+    })}
   </optgroup>
   
   <optgroup label="📊 Group Filters">
@@ -1042,66 +1046,36 @@ const CompanyUserList = () => {
       </div>
     </div>
 
-    {/* Business Levels - Combined Agency and Business */}
+    {/* Business Levels - Dynamic from Firebase */}
     <div className="stats-category-group business">
       <div className="category-header">
         <span className="category-icon">💼</span>
         <span className="category-title">Business Levels</span>
       </div>
       <div className="category-stats-grid">
-        {/* Agency Levels */}
-        <div className={`stat-card ${selectedRole === 'agency' ? 'active' : ''}`} onClick={() => handleRoleFilter('agency')}>
-          <div className="stat-number">{roleStats.agency}</div>
-          <div className="stat-label">Agency</div>
-        </div>
-        
-        <div className={`stat-card ${selectedRole === 'premium agency' ? 'active' : ''}`} onClick={() => handleRoleFilter('premium agency')}>
-          <div className="stat-number">{roleStats['premium agency']}</div>
-          <div className="stat-label">Premium Agency</div>
-        </div>
-        
-        <div className={`stat-card ${selectedRole === 'agency 24%' ? 'active' : ''}`} onClick={() => handleRoleFilter('agency 24%')}>
-          <div className="stat-number">{roleStats['agency 24%']}</div>
-          <div className="stat-label">Agency 24%</div>
-        </div>
-        
-        <div className={`stat-card ${selectedRole === 'agency 27%' ? 'active' : ''}`} onClick={() => handleRoleFilter('agency 27%')}>
-          <div className="stat-number">{roleStats['agency 27%']}</div>
-          <div className="stat-label">Agency 27%</div>
-        </div>
-        
-        {/* Dealer Levels */}
-        <div className={`stat-card ${selectedRole === 'dealer' ? 'active' : ''}`} onClick={() => handleRoleFilter('dealer')}>
-          <div className="stat-number">{roleStats.dealer}</div>
-          <div className="stat-label">Dealer</div>
-        </div>
-        
-        <div className={`stat-card ${selectedRole === 'premium dealer' ? 'active' : ''}`} onClick={() => handleRoleFilter('premium dealer')}>
-          <div className="stat-number">{roleStats['premium dealer']}</div>
-          <div className="stat-label">Premium Dealer</div>
-        </div>
-        
-        {/* Distributor Levels */}
-        <div className={`stat-card ${selectedRole === 'distributor' ? 'active' : ''}`} onClick={() => handleRoleFilter('distributor')}>
-          <div className="stat-number">{roleStats.distributor}</div>
-          <div className="stat-label">Distributor</div>
-        </div>
-        
-        <div className={`stat-card ${selectedRole === 'premium distributor' ? 'active' : ''}`} onClick={() => handleRoleFilter('premium distributor')}>
-          <div className="stat-number">{roleStats['premium distributor']}</div>
-          <div className="stat-label">Premium Distributor</div>
-        </div>
-        
-        {/* Wholesaler Levels */}
-        <div className={`stat-card ${selectedRole === 'wholesaler' ? 'active' : ''}`} onClick={() => handleRoleFilter('wholesaler')}>
-          <div className="stat-number">{roleStats.wholesaler}</div>
-          <div className="stat-label">Wholesaler</div>
-        </div>
-        
-        <div className={`stat-card ${selectedRole === 'premium wholesaler' ? 'active' : ''}`} onClick={() => handleRoleFilter('premium wholesaler')}>
-          <div className="stat-number">{roleStats['premium wholesaler']}</div>
-          <div className="stat-label">Premium Wholesaler</div>
-        </div>
+        {loading ? (
+          <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '20px', color: '#666' }}>
+            Loading levels...
+          </div>
+        ) : levels.length === 0 ? (
+          <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '20px', color: '#666' }}>
+            No business levels found in Firebase
+          </div>
+        ) : (
+          levels.map(level => {
+            const levelName = level.name.toLowerCase();
+            return (
+              <div 
+                key={level.id}
+                className={`stat-card ${selectedRole === levelName ? 'active' : ''}`} 
+                onClick={() => handleRoleFilter(levelName)}
+              >
+                <div className="stat-number">{roleStats[levelName] || 0}</div>
+                <div className="stat-label">{level.name}</div>
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   </div>

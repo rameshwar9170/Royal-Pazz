@@ -13,6 +13,10 @@ export const AuthProvider = ({ children }) => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         const db = getDatabase();
+        
+        // Clear any cached user data to ensure fresh fetch
+        localStorage.removeItem('htamsUser');
+        localStorage.removeItem('lastLoginType');
 
         // 1️⃣ First try HTAMS/users
         const userRef = ref(db, `HTAMS/users/${user.uid}`);

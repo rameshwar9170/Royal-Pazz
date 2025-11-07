@@ -42,7 +42,7 @@ export const ContactUs = () => {
             </div>
             <p className="text-gray-600 mb-2">For general inquiries and support</p>
             <a href="mailto:support@ONDO.com" className="text-green-600 font-medium hover:text-green-700">
-            ONDO@gmail.com
+              ONDO@gmail.com
             </a>
           </div>
 
@@ -62,7 +62,7 @@ export const ContactUs = () => {
               <h3 className="text-xl font-semibold text-gray-800">Visit Us</h3>
             </div>
             <div className="text-gray-600">
-              <p className="font-medium">ONDO</p>
+              <p className="font-medium">ONDO </p>
               <p>Kolhapur, Maharashtra, India</p>
             </div>
           </div>

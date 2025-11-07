@@ -1,37 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { database } from '../../firebase/config'; // Remove auth import
-import { ref, get, update } from 'firebase/database';
-// Remove all Firebase Auth imports
-import { FaUser, FaLock, FaEye, FaEyeSlash, FaBuilding, FaSpinner } from 'react-icons/fa';
+import { auth, db } from '../../firebase/config';
+import { ref, get } from 'firebase/database';
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
+  sendPasswordResetEmail,
+} from 'firebase/auth';
 
 const LoginPageEmployee = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+  const [isFirstTimeSetup, setIsFirstTimeSetup] = useState(false);
 
   const navigate = useNavigate();
 
-  // Remove Firebase Auth state listener - use localStorage instead
-  useEffect(() => {
-    // Check if user is already logged in via localStorage
-    const employeeData = localStorage.getItem('employeeData');
-    if (employeeData) {
-      try {
-        const parsedData = JSON.parse(employeeData);
-        if (parsedData.isLoggedIn) {
-          navigate('/employee-dashboard', { replace: true });
-        }
-      } catch (error) {
-        console.error('Error parsing stored employee data:', error);
-        localStorage.removeItem('employeeData');
-      }
-    }
-  }, [navigate]);
-
-  // SIMPLIFIED login handler - NO Firebase Authentication
+  // Enhanced employee verification and auth flow
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
@@ -47,11 +34,15 @@ const LoginPageEmployee = () => {
       return;
     }
 
+    if (cleanPassword.length < 6) {
+      setError('❌ Password must be at least 6 characters');
+      setLoading(false);
+      return;
+    }
+
     try {
-      console.log('🔍 Searching for employee in HTAMS/company/Employees...');
-      
-      // Step 1: Get employee data from database
-      const employeeRef = ref(database, 'HTAMS/company/Employees');
+      // Step 1: Verify employee exists in database
+      const employeeRef = ref(db, 'HTAMS/company/Employees');
       const snapshot = await get(employeeRef);
       
       if (!snapshot.exists()) {
@@ -61,9 +52,6 @@ const LoginPageEmployee = () => {
       }
 
       const employeesData = snapshot.val();
-      console.log('📊 Employees data loaded:', Object.keys(employeesData).length, 'employees');
-      
-      // Find employee by email
       const employeeEntry = Object.entries(employeesData).find(
         ([, emp]) => emp.email?.toLowerCase().trim() === cleanEmail
       );
@@ -75,187 +63,173 @@ const LoginPageEmployee = () => {
       }
 
       const [employeeId, employeeData] = employeeEntry;
-      console.log('✅ Employee found:', employeeData.name, 'ID:', employeeId);
+      console.log('✅ Employee verified:', employeeData.name);
 
-      // Step 2: Check if login is enabled
-      if (!employeeData.loginEnabled) {
-        setError('❌ Your account login is disabled. Contact admin.');
-        setLoading(false);
-        return;
-      }
-
-      // Step 3: Verify password
-      let passwordCorrect = false;
-      
-      if (employeeData.passwordChanged) {
-        // User has set custom password - check against stored password
-        // Note: In production, you should hash passwords
-        passwordCorrect = cleanPassword === employeeData.customPassword;
-      } else {
-        // First time login or default password - check against mobile number
-        passwordCorrect = cleanPassword === employeeData.mobile || cleanPassword === employeeData.defaultPassword;
-      }
-
-      if (!passwordCorrect) {
-        if (!employeeData.passwordChanged) {
-          setError(`❌ For first-time login, use your mobile number (${employeeData.mobile}) as password`);
-        } else {
-          setError('❌ Incorrect password. Contact admin if you forgot your password.');
+      // Step 2: Check if this is first time setup
+      if (!isFirstTimeSetup) {
+        // Try login first
+        try {
+          const userCredential = await signInWithEmailAndPassword(
+            auth, 
+            employeeData.email.trim(), 
+            cleanPassword
+          );
+          
+          // Success - store data and redirect
+          localStorage.setItem('employeeData', JSON.stringify({
+            ...employeeData,
+            employeeId,
+            uid: userCredential.user.uid
+          }));
+          
+          setError('✅ Login successful!');
+          setTimeout(() => navigate('/employee-dashboard'), 1000);
+          setLoading(false);
+          return;
+          
+        } catch (loginError) {
+          console.log('Login failed, trying registration...', loginError.code);
+          
+          if (loginError.code === 'auth/user-not-found' || 
+              loginError.code === 'auth/invalid-credential') {
+            // User doesn't exist in Firebase Auth - create account
+            setIsFirstTimeSetup(true);
+          } else {
+            throw loginError; // Re-throw other errors
+          }
         }
-        setLoading(false);
-        return;
       }
 
-      // Step 4: Successful login
-      console.log('✅ Login successful');
+      // Step 3: First time setup - create Firebase Auth account
+      if (isFirstTimeSetup || error.includes('first time')) {
+        try {
+          console.log('Creating new Firebase Auth account...');
+          const userCredential = await createUserWithEmailAndPassword(
+            auth,
+            employeeData.email.trim(),
+            cleanPassword
+          );
 
-      // Update last login time in database
-      await update(ref(database, `HTAMS/company/Employees/${employeeId}`), {
-        lastLoginAt: new Date().toISOString(),
-        loginCount: (employeeData.loginCount || 0) + 1
-      });
+          // Update profile
+          await updateProfile(userCredential.user, {
+            displayName: employeeData.name || 'Employee',
+          });
 
-      // Store employee data in localStorage (session management)
-      const sessionData = {
-        ...employeeData,
-        employeeId,
-        isLoggedIn: true,
-        loginTimestamp: new Date().toISOString()
-      };
-      
-      localStorage.setItem('employeeData', JSON.stringify(sessionData));
-      
-      setError('✅ Login successful! Redirecting...');
-      
-      // Check if user needs to set new password (first time with mobile)
-      if (!employeeData.passwordChanged && cleanPassword === employeeData.mobile) {
-        // Redirect to set new password
-        setTimeout(() => {
-          navigate('/set-new-password');
-        }, 1000);
-      } else {
-        // Redirect to dashboard
-        setTimeout(() => {
-          navigate('/employee-dashboard', { replace: true });
-        }, 1000);
+          // Store employee data
+          localStorage.setItem('employeeData', JSON.stringify({
+            ...employeeData,
+            employeeId,
+            uid: userCredential.user.uid
+          }));
+
+          setError('✅ Account created successfully!');
+          setTimeout(() => navigate('/employee-dashboard'), 1000);
+          
+        } catch (registerError) {
+          console.error('Registration error:', registerError);
+          
+          if (registerError.code === 'auth/email-already-in-use') {
+            setError('❌ Account exists but password incorrect. Try "Reset Password" or contact admin.');
+          } else if (registerError.code === 'auth/weak-password') {
+            setError('❌ Password too weak. Use at least 6 characters with numbers/symbols.');
+          } else if (registerError.code === 'auth/operation-not-allowed') {
+            setError('❌ Email/password authentication not enabled. Contact admin.');
+          } else {
+            setError('❌ Setup failed: ' + registerError.message);
+          }
+        }
       }
-      
+
     } catch (error) {
-      console.error('❌ Login error:', error);
-      setError('❌ System error. Please try again or contact IT support.');
+      console.error('Overall error:', error);
+      setError('❌ System error. Please try again or contact support.');
     }
 
     setLoading(false);
   };
 
-  // Reset password function - simplified for database-only approach
+  // Force first-time setup mode
+  const forceFirstTimeSetup = () => {
+    setIsFirstTimeSetup(true);
+    setError('🔄 Switched to first-time setup mode. Enter your email and choose a password (6+ chars).');
+  };
+
+  // Reset password function
   const resetPassword = async () => {
     if (!email.trim()) {
       setError('❌ Please enter your email first.');
       return;
     }
 
-    setLoading(true);
-    
     try {
-      // Find employee in database
-      const employeeRef = ref(database, 'HTAMS/company/Employees');
-      const snapshot = await get(employeeRef);
-      
-      if (snapshot.exists()) {
-        const employeesData = snapshot.val();
-        const employeeEntry = Object.entries(employeesData).find(
-          ([, emp]) => emp.email?.toLowerCase().trim() === email.trim().toLowerCase()
-        );
-
-        if (!employeeEntry) {
-          setError('❌ Email not found in company records.');
-          setLoading(false);
-          return;
-        }
-
-        const [employeeId, employeeData] = employeeEntry;
-        
-        // Reset to default password (mobile number)
-        await update(ref(database, `HTAMS/company/Employees/${employeeId}`), {
-          passwordChanged: false,
-          customPassword: null,
-          passwordResetAt: new Date().toISOString()
-        });
-        
-        setError(`✅ Password reset! Use your mobile number: ${employeeData.mobile}`);
-        
-      } else {
-        setError('❌ Database not accessible. Contact admin.');
-      }
-      
+      await sendPasswordResetEmail(auth, email.trim());
+      setError('📧 Password reset email sent! Check your inbox.');
     } catch (error) {
-      console.error('❌ Password reset error:', error);
-      setError('❌ Reset failed: ' + error.message);
-    } finally {
-      setLoading(false);
+      if (error.code === 'auth/user-not-found') {
+        setError('❌ No account found with this email. Try "First Time Setup" instead.');
+      } else {
+        setError('❌ Reset failed: ' + error.message);
+      }
+    }
+  };
+
+  // Check Firebase configuration
+  const checkFirebaseConfig = () => {
+    console.log('Firebase Config:', {
+      apiKey: auth.app.options.apiKey?.substring(0, 10) + '...',
+      authDomain: auth.app.options.authDomain,
+      projectId: auth.app.options.projectId,
+      currentUser: auth.currentUser
+    });
+    
+    if (!auth.app.options.apiKey || !auth.app.options.authDomain) {
+      setError('❌ Firebase configuration missing. Check your firebase/config.js file.');
+    } else {
+      setError('✅ Firebase configuration looks good.');
     }
   };
 
   return (
     <div style={styles.container}>
       <div style={styles.loginBox}>
-        <div style={styles.header}>
-          <FaBuilding style={styles.headerIcon} />
-          <h2 style={styles.title}>🏢 Employee Login</h2>
-          <p style={styles.subtitle}>Access your employee dashboard</p>
-        </div>
+        <h2 style={styles.title}>
+          {isFirstTimeSetup ? '🆕 First Time Setup' : '🏢 Employee Login'}
+        </h2>
+        <p style={styles.subtitle}>
+          {isFirstTimeSetup 
+            ? 'Create your account with company email' 
+            : 'Access your employee dashboard'
+          }
+        </p>
         
         <form onSubmit={handleLogin} style={styles.form}>
           <div style={styles.inputGroup}>
-            <label style={styles.label}>
-              <FaUser style={styles.labelIcon} />
-              Email Address
-            </label>
+            <label style={styles.label}>Email Address</label>
             <input
               type="email"
               placeholder="Enter your company email"
               value={email}
               required
-              onChange={(e) => {
-                setEmail(e.target.value);
-                setError('');
-              }}
+              onChange={(e) => setEmail(e.target.value)}
               style={styles.input}
-              disabled={loading}
             />
           </div>
           
           <div style={styles.inputGroup}>
             <label style={styles.label}>
-              <FaLock style={styles.labelIcon} />
-              Password
+              {isFirstTimeSetup ? 'Choose Password' : 'Password'}
             </label>
-            <div style={styles.passwordWrapper}>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                placeholder="Enter password (mobile number for first-time)"
-                value={password}
-                required
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  setError('');
-                }}
-                style={styles.passwordInput}
-                disabled={loading}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                style={styles.eyeButton}
-                disabled={loading}
-              >
-                {showPassword ? <FaEyeSlash /> : <FaEye />}
-              </button>
-            </div>
-            <small style={styles.helpText}>
-              🔑 First-time users: Use mobile number | Existing users: Use your password
-            </small>
+            <input
+              type="password"
+              placeholder={isFirstTimeSetup 
+                ? "Create a password (6+ characters)" 
+                : "Enter your password"
+              }
+              value={password}
+              required
+              onChange={(e) => setPassword(e.target.value)}
+              style={styles.input}
+            />
           </div>
           
           <button 
@@ -263,18 +237,26 @@ const LoginPageEmployee = () => {
             disabled={loading} 
             style={{
               ...styles.submitButton,
-              backgroundColor: loading ? '#9CA3AF' : '#2563EB'
+              backgroundColor: loading ? '#9CA3AF' : 
+                isFirstTimeSetup ? '#10B981' : '#2563EB'
             }}
           >
-            {loading ? (
-              <span style={styles.loadingContent}>
-                <FaSpinner style={styles.spinner} />
-                Processing...
-              </span>
-            ) : '🚀 Login'}
+            {loading ? '⏳ Processing...' : 
+             isFirstTimeSetup ? '🆕 Create Account' : '🚀 Login'}
           </button>
           
           <div style={styles.actionButtons}>
+            {!isFirstTimeSetup && (
+              <button 
+                type="button" 
+                onClick={forceFirstTimeSetup}
+                style={styles.setupButton}
+                disabled={loading}
+              >
+                🆕 First Time Setup
+              </button>
+            )}
+            
             <button 
               type="button" 
               onClick={resetPassword}
@@ -282,6 +264,15 @@ const LoginPageEmployee = () => {
               disabled={loading}
             >
               🔑 Reset Password
+            </button>
+            
+            <button 
+              type="button" 
+              onClick={checkFirebaseConfig}
+              style={styles.configButton}
+              disabled={loading}
+            >
+              🔧 Check Config
             </button>
           </div>
           
@@ -298,19 +289,13 @@ const LoginPageEmployee = () => {
         </form>
         
         <div style={styles.helpSection}>
-          <h4 style={styles.helpTitle}>🆘 Quick Help:</h4>
+          <h4>🆘 Quick Fixes:</h4>
           <div style={styles.quickFixes}>
-            <p><strong>🆕 New Employee?</strong> Use your mobile number as password</p>
-            <p><strong>👤 Existing User?</strong> Use your email and set password</p>
-            <p><strong>🔐 First Login?</strong> Password = Your mobile number</p>
-            <p><strong>❓ Need Help?</strong> Contact HR department</p>
+            <p><strong>New Employee?</strong> Click "First Time Setup"</p>
+            <p><strong>Existing User?</strong> Use your exact email from HR records</p>
+            <p><strong>Forgot Password?</strong> Click "Reset Password"</p>
+            <p><strong>Still Issues?</strong> Click "Check Config" then contact IT</p>
           </div>
-        </div>
-
-        <div style={styles.footerSection}>
-          <p style={styles.footerText}>
-            Having trouble? Contact your HR department or IT support.
-          </p>
         </div>
       </div>
     </div>
@@ -325,42 +310,33 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     padding: '20px',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+    fontFamily: 'Inter, sans-serif'
   },
   loginBox: {
     backgroundColor: 'white',
-    borderRadius: '16px',
+    borderRadius: '12px',
     boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
-    padding: '40px',
+    padding: '32px',
     width: '100%',
-    maxWidth: '500px',
-    position: 'relative'
-  },
-  header: {
-    textAlign: 'center',
-    marginBottom: '30px'
-  },
-  headerIcon: {
-    fontSize: '3rem',
-    color: '#2563EB',
-    marginBottom: '16px'
+    maxWidth: '500px'
   },
   title: {
-    fontSize: '28px',
-    fontWeight: '700',
+    textAlign: 'center',
     color: '#1F2937',
-    margin: '0 0 8px 0'
+    marginBottom: '8px',
+    fontSize: '28px',
+    fontWeight: '700'
   },
   subtitle: {
-    fontSize: '16px',
+    textAlign: 'center',
     color: '#6B7280',
-    margin: 0,
-    lineHeight: '1.5'
+    marginBottom: '24px',
+    fontSize: '16px'
   },
   form: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '24px'
+    gap: '20px'
   },
   inputGroup: {
     display: 'flex',
@@ -369,15 +345,8 @@ const styles = {
   },
   label: {
     fontSize: '14px',
-    fontWeight: '600',
-    color: '#374151',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px'
-  },
-  labelIcon: {
-    fontSize: '14px',
-    color: '#6B7280'
+    fontWeight: '500',
+    color: '#374151'
   },
   input: {
     width: '100%',
@@ -385,38 +354,7 @@ const styles = {
     border: '2px solid #E5E7EB',
     borderRadius: '8px',
     fontSize: '16px',
-    boxSizing: 'border-box',
-    transition: 'border-color 0.2s ease'
-  },
-  passwordWrapper: {
-    position: 'relative',
-    display: 'flex',
-    alignItems: 'center'
-  },
-  passwordInput: {
-    width: '100%',
-    padding: '12px 50px 12px 16px',
-    border: '2px solid #E5E7EB',
-    borderRadius: '8px',
-    fontSize: '16px',
-    boxSizing: 'border-box',
-    transition: 'border-color 0.2s ease'
-  },
-  eyeButton: {
-    position: 'absolute',
-    right: '12px',
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    color: '#6B7280',
-    fontSize: '18px',
-    padding: '4px'
-  },
-  helpText: {
-    fontSize: '12px',
-    color: '#6B7280',
-    fontStyle: 'italic',
-    marginTop: '4px'
+    boxSizing: 'border-box'
   },
   submitButton: {
     width: '100%',
@@ -426,35 +364,43 @@ const styles = {
     color: 'white',
     fontSize: '16px',
     fontWeight: '600',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  loadingContent: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px'
-  },
-  spinner: {
-    animation: 'spin 1s linear infinite'
+    cursor: 'pointer'
   },
   actionButtons: {
-    display: 'flex',
-    justifyContent: 'center',
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr 1fr',
+    gap: '8px',
     marginTop: '8px'
   },
+  setupButton: {
+    padding: '8px 12px',
+    borderRadius: '6px',
+    border: '2px solid #10B981',
+    backgroundColor: 'white',
+    color: '#10B981',
+    fontSize: '12px',
+    cursor: 'pointer',
+    fontWeight: '500'
+  },
   resetButton: {
-    padding: '8px 16px',
+    padding: '8px 12px',
     borderRadius: '6px',
     border: '2px solid #F59E0B',
     backgroundColor: 'white',
     color: '#F59E0B',
-    fontSize: '14px',
+    fontSize: '12px',
     cursor: 'pointer',
-    fontWeight: '500',
-    transition: 'all 0.2s ease'
+    fontWeight: '500'
+  },
+  configButton: {
+    padding: '8px 12px',
+    borderRadius: '6px',
+    border: '2px solid #6366F1',
+    backgroundColor: 'white',
+    color: '#6366F1',
+    fontSize: '12px',
+    cursor: 'pointer',
+    fontWeight: '500'
   },
   message: {
     padding: '12px 16px',
@@ -462,50 +408,19 @@ const styles = {
     fontSize: '14px',
     textAlign: 'center',
     border: '1px solid',
-    marginTop: '16px',
-    lineHeight: '1.4'
+    marginTop: '16px'
   },
   helpSection: {
     backgroundColor: '#F8FAFC',
-    padding: '20px',
+    padding: '16px',
     borderRadius: '8px',
-    marginTop: '24px'
-  },
-  helpTitle: {
-    fontSize: '16px',
-    fontWeight: '600',
-    color: '#374151',
-    margin: '0 0 12px 0'
+    marginTop: '20px'
   },
   quickFixes: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px',
-    fontSize: '14px',
-    color: '#4B5563'
-  },
-  footerSection: {
-    textAlign: 'center',
-    marginTop: '20px',
-    paddingTop: '20px',
-    borderTop: '1px solid #E5E7EB'
-  },
-  footerText: {
-    fontSize: '12px',
-    color: '#6B7280',
-    margin: 0
+    gap: '8px'
   }
 };
-
-// Add CSS animation for spinner
-const styleSheet = document.createElement("style");
-styleSheet.type = "text/css";
-styleSheet.innerText = `
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
-`;
-document.head.appendChild(styleSheet);
 
 export default LoginPageEmployee;

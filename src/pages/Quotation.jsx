@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+
 import { database } from '../firebase/config';
 import { ref, get, set, push } from 'firebase/database';
 import { PDFDownloadLink, Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
@@ -100,11 +101,17 @@ const QuotationManagement = () => {
       const snapshot = await get(ref(database, 'HTAMS/company/products'));
       if (snapshot.exists()) {
         const data = snapshot.val();
-        const productList = Object.keys(data).map(key => ({
-          id: key,
-          ...data[key],
-          mrp: parseFloat(data[key].mrp) || 0,
-        }));
+        const productList = Object.keys(data).map(key => {
+          const rawPrice = data[key].mrp ?? data[key].price ?? data[key].rate ?? 0;
+          const parsedPrice = parseFloat(rawPrice);
+          const normalizedPrice = Number.isNaN(parsedPrice) ? 0 : parsedPrice;
+
+          return {
+            id: key,
+            ...data[key],
+            mrp: normalizedPrice,
+          };
+        });
         setProducts(productList);
       }
     } catch (error) {
@@ -169,8 +176,25 @@ const QuotationManagement = () => {
     if (existingProduct) {
         setSelectedProducts(prev => prev.map(p => p.id === product.id ? { ...p, quantity: p.quantity + 1 } : p));
     } else {
-        setSelectedProducts(prev => [...prev, { ...product, quantity: 1, mrp: parseFloat(product.mrp) || 0 }]);
+        const rawPrice = product.mrp ?? product.price ?? product.rate ?? 0;
+        const parsedPrice = parseFloat(rawPrice);
+        const normalizedPrice = Number.isNaN(parsedPrice) ? 0 : parsedPrice;
+        setSelectedProducts(prev => [
+          ...prev,
+          { ...product, quantity: 1, mrp: normalizedPrice },
+        ]);
     }
+  };
+
+  const incrementProductQuantity = (product) => {
+    addProduct(product);
+  };
+
+  const decrementProductQuantity = (productId) => {
+    const current = selectedProducts.find(item => item.id === productId);
+    if (!current) return;
+    const nextQuantity = (parseInt(current.quantity, 10) || 0) - 1;
+    updateProductQuantity(productId, nextQuantity);
   };
 
   const updateProductQuantity = (productId, quantity) => {
@@ -188,9 +212,11 @@ const QuotationManagement = () => {
 
   const calculateTotals = () => {
     const subtotal = selectedProducts.reduce((sum, p) => {
-        const mrp = parseFloat(p.mrp) || 0;
-        const quantity = parseInt(p.quantity) || 0;
-        return sum + (mrp * quantity);
+        const rawPrice = p.mrp ?? p.price ?? p.rate ?? 0;
+        const parsedPrice = parseFloat(rawPrice);
+        const unitPrice = Number.isNaN(parsedPrice) ? 0 : parsedPrice;
+        const quantity = parseInt(p.quantity, 10) || 0;
+        return sum + (unitPrice * quantity);
     }, 0);
     const discountAmount = subtotal * ((quotationData.discount || 0) / 100);
     const total = subtotal - discountAmount;
@@ -212,6 +238,7 @@ const QuotationManagement = () => {
     }
 
     const totals = calculateTotals();
+
     const quotationRecord = {
         ...quotationData,
         customer: selectedCustomer,
@@ -322,18 +349,26 @@ ${quotation.products.map((product, index) =>
                     <Text style={[pdfStyles.tableCell, pdfStyles.tableCellHeader, { width: '19%' }]}>Rate (Inc. GST)</Text>
                     <Text style={[pdfStyles.tableCell, pdfStyles.tableCellHeader, { width: '19%' }]}>Amount</Text>
                 </View>
-                {data.products.map((product, index) => (
-                    <View key={index} style={pdfStyles.tableRow}>
-                        <Text style={[pdfStyles.tableCell, { width: '8%' }]}>{index + 1}</Text>
-                        <View style={[pdfStyles.tableCell, { width: '42%' }]}>
-                            <Text>{product.name}</Text>
-                            {product.description && <Text style={pdfStyles.productDescription}>{product.description}</Text>}
+                {data.products.map((product, index) => {
+                    const quantity = Number(product.quantity) || 0;
+                    const rawPrice = product.mrp ?? product.price ?? product.rate ?? 0;
+                    const numericPrice = Number(rawPrice);
+                    const unitPrice = Number.isNaN(numericPrice) ? 0 : numericPrice;
+                    const lineTotal = unitPrice * quantity;
+
+                    return (
+                        <View key={index} style={pdfStyles.tableRow}>
+                            <Text style={[pdfStyles.tableCell, { width: '8%' }]}>{index + 1}</Text>
+                            <View style={[pdfStyles.tableCell, { width: '42%' }]}>
+                                <Text>{product.name}</Text>
+                                {product.description && <Text style={pdfStyles.productDescription}>{product.description}</Text>}
+                            </View>
+                            <Text style={[pdfStyles.tableCell, { width: '12%' }]}>{quantity}</Text>
+                            <Text style={[pdfStyles.tableCell, { width: '19%' }]}>₹{unitPrice.toFixed(2)}</Text>
+                            <Text style={[pdfStyles.tableCell, { width: '19%' }]}>₹{lineTotal.toFixed(2)}</Text>
                         </View>
-                        <Text style={[pdfStyles.tableCell, { width: '12%' }]}>{product.quantity}</Text>
-                        <Text style={[pdfStyles.tableCell, { width: '19%' }]}>₹{parseFloat(product.mrp).toFixed(2)}</Text>
-                        <Text style={[pdfStyles.tableCell, { width: '19%' }]}>₹{(parseFloat(product.mrp) * product.quantity).toFixed(2)}</Text>
-                    </View>
-                ))}
+                    );
+                })}
             </View>
 
             <View style={pdfStyles.totalsSection}>
@@ -384,7 +419,7 @@ ${quotation.products.map((product, index) =>
   const totals = calculateTotals();
 
   return (
-    <div style={styles.container}>
+    <div style={styles.container} className="quotation-container">
       <style>{`
         @keyframes fadeIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
         @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
@@ -413,14 +448,68 @@ ${quotation.products.map((product, index) =>
             .mobile-xs { font-size: 0.8rem !important; padding: 6px 10px !important; }
             .mobile-xs-hide { display: none !important; }
         }
+
+        @media (max-width: 1024px) {
+          .quotation-container { padding: 18px !important; }
+          /* .quotation-section { padding: 22px !important; } */
+        }
+
+        @media (max-width: 768px) {
+          .quotation-container { padding: 16px !important; }
+          .quotation-header { flex-direction: column !important; align-items: flex-start !important; gap: 18px !important; padding: 18px !important; }
+          .quotation-progress-container { padding: 18px !important; }
+          .quotation-progress-bar { flex-direction: column !important; gap: 18px !important; }
+          .quotation-progress-step { min-width: auto !important; align-items: flex-start !important; }
+          .quotation-progress-line { display: none !important; }
+          /* .quotation-section { padding: 20px !important; } */
+          .quotation-product-grid { grid-template-columns: repeat(2, minmax(140px, 1fr)) !important; gap: 12px !important; }
+          .quotation-selected-product-card { grid-template-columns: 1fr !important; gap: 12px !important; }
+          .quotation-quantity-controls { width: 100%; justify-content: space-between; }
+          .quotation-quantity-controls input { max-width: 140px; }
+          .quotation-details-grid { grid-template-columns: 1fr !important; gap: 16px !important; }
+          .quotation-summary-card { position: static !important; top: auto !important; }
+          .quotation-summary-header { gap: 12px !important; }
+          .quotation-action-buttons { flex-direction: column !important; }
+          .quotation-popup-overlay { padding: 12px !important; }
+          .quotation-popup-panel { max-height: 90vh !important; }
+          .quotation-popup-body { padding: 22px !important; }
+          .quotation-card-details { flex-direction: column !important; align-items: flex-start !important; }
+          .quotation-card-actions { flex-direction: column !important; }
+        }
+
+        @media (max-width: 480px) {
+          .quotation-container { padding: 12px !important; }
+          .quotation-header { padding: 16px !important; }
+          /* .quotation-section { padding: 16px !important; } */
+          .quotation-progress-container { padding: 16px !important; }
+          .quotation-progress-step { gap: 12px !important; }
+          .quotation-progress-step-number { width: 32px !important; height: 32px !important; font-size: 1rem !important; }
+          .quotation-summary-card { padding: 18px !important; }
+          .quotation-summary-title { font-size: 1.15rem !important; }
+          .quotation-summary-row { font-size: 0.95rem !important; }
+          .quotation-total-row { font-size: 1.05rem !important; }
+          .quotation-confirm-row { flex-direction: column !important; align-items: flex-start !important; }
+          .quotation-popup-actions { flex-direction: column !important; }
+        }
+
+        @media (max-width: 360px) {
+          .quotation-container { padding: 10px !important; }
+          .quotation-header { padding: 14px !important; gap: 12px !important; }
+          .quotation-product-grid { grid-template-columns: 1fr !important; gap: 10px !important; }
+          .quotation-product-card { padding: 0 !important; }
+          .quotation-selected-product-card { padding: 12px !important; }
+          .quotation-summary-card { padding: 16px !important; }
+          .quotation-mobile-card { padding: 14px !important; }
+          .quotation-card-actions { gap: 4px !important; }
+        }
       `}</style>
       
-      <div style={styles.header} className="fadeIn">
-        <div style={styles.headerContent}>
+      <div style={styles.header} className="fadeIn quotation-header">
+        <div style={styles.headerContent} className="quotation-header-content">
             <h1 style={styles.title}>Quotation Management</h1>
             <p style={styles.subtitle}>Create professional quotations with ease</p>
         </div>
-        <div style={styles.viewToggle} className="mobile-stack">
+        <div style={styles.viewToggle} className="mobile-stack quotation-view-toggle">
             <button style={currentView === 'form' ? styles.activeToggleBtn : styles.toggleBtn} onClick={() => setCurrentView('form')} className="mobile-small">
                 Create New
             </button>
@@ -431,31 +520,31 @@ ${quotation.products.map((product, index) =>
       </div>
 
       {currentView === 'form' ? (
-        <div style={styles.formView}>
-            <div style={styles.progressContainer} className="fadeIn">
-                <div style={styles.progressBar}>
-                    <div style={styles.progressStep}>
-                        <div style={currentStep >= 1 ? styles.stepActive : styles.stepInactive}>1</div>
+        <div style={styles.formView} className="quotation-form-view">
+            <div style={styles.progressContainer} className="fadeIn quotation-progress-container">
+                <div style={styles.progressBar} className="quotation-progress-bar">
+                    <div style={styles.progressStep} className="quotation-progress-step">
+                        <div style={currentStep >= 1 ? styles.stepActive : styles.stepInactive} className="quotation-progress-step-number">1</div>
                         <span style={styles.stepLabel}>Select Customer</span>
                     </div>
-                    <div style={styles.progressLine}></div>
-                    <div style={styles.progressStep}>
-                        <div style={currentStep >= 2 ? styles.stepActive : styles.stepInactive}>2</div>
+                    <div style={styles.progressLine} className="quotation-progress-line"></div>
+                    <div style={styles.progressStep} className="quotation-progress-step">
+                        <div style={currentStep >= 2 ? styles.stepActive : styles.stepInactive} className="quotation-progress-step-number">2</div>
                         <span style={styles.stepLabel}>Add Products</span>
                     </div>
-                    <div style={styles.progressLine}></div>
-                    <div style={styles.progressStep}>
-                        <div style={currentStep >= 3 ? styles.stepActive : styles.stepInactive}>3</div>
+                    <div style={styles.progressLine} className="quotation-progress-line"></div>
+                    <div style={styles.progressStep} className="quotation-progress-step">
+                        <div style={currentStep >= 3 ? styles.stepActive : styles.stepInactive} className="quotation-progress-step-number">3</div>
                         <span style={styles.stepLabel}>Quotation Details</span>
                     </div>
                 </div>
             </div>
 
-            <div style={styles.section} className="slideUp">
+            <div style={styles.section} className="slideUp quotation-section">
                 <div style={styles.stepHeader}>
                     <h3 style={styles.sectionTitle}><span style={styles.stepNumber}>1</span> Customer Selection</h3>
                 </div>
-                <div style={styles.customerSelection}>
+                <div style={styles.customerSelection} className="quotation-customer-selection">
                     <select style={styles.customerSelect} value={selectedCustomer?.id || ''} onChange={(e) => {
                         const customer = customers.find(c => c.id === e.target.value);
                         setSelectedCustomer(customer || null);
@@ -502,72 +591,129 @@ ${quotation.products.map((product, index) =>
 
             {selectedCustomer && (
                 <>
-                    <div style={styles.section} className="slideInLeft">
+                    <div style={styles.section} className="slideInLeft quotation-section">
                         <div style={styles.stepHeader}>
                             <h3 style={styles.sectionTitle}><span style={styles.stepNumber}>2</span> Add Products <small>(GST Already Included)</small></h3>
                             <p style={styles.sectionSubtitle}>Select products for your quotation</p>
                         </div>
-                    <div style={styles.productGrid}>
-  {products.slice(0, 8).map((product) => (
-    <div key={product.id} style={styles.productCard} className='mobile-full'>
-      <div style={styles.productImage}>
-        <span style={styles.productIcon}>🛍️</span>
-      </div>
-      <div style={styles.productContent}>
-        <div style={styles.productHeader}>
-          <h4 style={styles.productName}>{product.name}</h4>
-          
-          {/* --- CORRECTED PRICE DISPLAY --- */}
-          <div style={{
-            fontSize: '1.1rem',
-            fontWeight: 'bold',
-            color: '#3b82f6'
-          }}>
-            {/* Displaying MRP instead of Price */}
-            ₹{Number(product.mrp || 0).toLocaleString('en-IN')}
-          </div>
-          {/* --- END OF CORRECTION --- */}
+                    <div style={styles.productGrid} className="quotation-product-grid">
+  {products.map((product) => {
+    const rawPrice = product.mrp ?? product.price ?? product.rate ?? 0;
+    const numericPrice = Number(rawPrice);
+    const displayPrice = Number.isNaN(numericPrice) ? 0 : numericPrice;
+    const selectedInfo = selectedProducts.find(item => item.id === product.id);
+    const isSelected = Boolean(selectedInfo);
+    const selectedQuantity = isSelected ? parseInt(selectedInfo.quantity, 10) || 0 : 0;
 
+    return (
+      <div
+        key={product.id}
+        style={{
+          ...styles.productCard,
+          ...(isSelected ? styles.productCardSelected : {}),
+        }}
+        className='mobile-full quotation-product-card'
+      >
+        <div style={styles.productImage}>
+          <span style={styles.productIcon}>🛍️</span>
         </div>
-        <p style={styles.productDesc}>{product.description || 'Premium quality product'}</p>
-        <button style={styles.addBtn} onClick={() => addProduct(product)} className='mobile-small'>
-          <span style={styles.addIcon}>+</span> Add to Quote
-        </button>
+        <div style={styles.productContent}>
+          <div style={styles.productHeader}>
+            <h4 style={styles.productName}>{product.name}</h4>
+            <div style={{
+              fontSize: '1.1rem',
+              fontWeight: 'bold',
+              color: '#3b82f6'
+            }}>
+              ₹{displayPrice.toLocaleString('en-IN')}
+            </div>
+          </div>
+          {isSelected && (
+            <div style={styles.productSelectedBadge} aria-live="polite">
+              Added • Qty {selectedQuantity}
+            </div>
+          )}
+          <p style={styles.productDesc}>{product.description || 'Premium quality product'}</p>
+          {isSelected ? (
+            <>
+              <div style={styles.productCartControls} aria-live="polite">
+                <button
+                  style={styles.cartControlBtn}
+                  onClick={() => decrementProductQuantity(product.id)}
+                  aria-label={`Decrease ${product.name} quantity`}
+                >
+                  −
+                </button>
+                <div style={styles.cartQuantity}>{selectedQuantity}</div>
+                <button
+                  style={styles.cartControlBtn}
+                  onClick={() => incrementProductQuantity(product)}
+                  aria-label={`Increase ${product.name} quantity`}
+                >
+                  +
+                </button>
+              </div>
+              <button
+                style={styles.cartRemoveBtn}
+                onClick={() => removeProduct(product.id)}
+                aria-label={`Remove ${product.name} from quotation`}
+              >
+                Remove
+              </button>
+            </>
+          ) : (
+            <button
+              style={styles.addBtn}
+              onClick={() => addProduct(product)}
+              className='mobile-small'
+            >
+              <span style={styles.addIcon}>+</span> Add to Quote
+            </button>
+          )}
+        </div>
       </div>
-    </div>
-  ))}
+    );
+  })}
 </div>
 
 
                     </div>
 
                     {selectedProducts.length > 0 && (
-                        <div style={styles.section} className="slideInRight">
+                        <div style={styles.section} className="slideInRight quotation-section">
                             <h3 style={styles.sectionTitle}>
                                 <span style={styles.stepNumber}>✓</span> Selected Products ({selectedProducts.length})
                             </h3>
-                            <div style={styles.selectedProductsContainer}>
-                                {selectedProducts.map(product => (
-                                    <div key={product.id} style={styles.selectedProductCard} className="mobile-full">
-                                        <div style={styles.selectedProductInfo}>
-                                          <div style={styles.selectedProductDetails}>
-                                              <h5 style={styles.selectedProductName}>{product.name}</h5>
-                                              <p style={styles.selectedProductPrice}>₹{product.mrp.toFixed(2)} each</p>
-                                          </div>
+                            <div style={styles.selectedProductsContainer} className="quotation-selected-products">
+                                {selectedProducts.map(product => {
+                                    const quantity = parseInt(product.quantity, 10) || 0;
+                                    const rawPrice = product.mrp ?? product.price ?? product.rate ?? 0;
+                                    const numericPrice = Number(rawPrice);
+                                    const unitPrice = Number.isNaN(numericPrice) ? 0 : numericPrice;
+                                    const lineTotal = unitPrice * quantity;
+
+                                    return (
+                                        <div key={product.id} style={styles.selectedProductCard} className="mobile-full quotation-selected-product-card">
+                                            <div style={styles.selectedProductInfo}>
+                                              <div style={styles.selectedProductDetails}>
+                                                  <h5 style={styles.selectedProductName}>{product.name}</h5>
+                                                  <p style={styles.selectedProductPrice}>₹{unitPrice.toFixed(2)} each</p>
+                                              </div>
+                                            </div>
+                                            <div style={styles.quantityControls} className="quotation-quantity-controls">
+                                                <label style={styles.qtyLabel}>Qty:</label>
+                                                <input type="number" value={product.quantity} onChange={e => updateProductQuantity(product.id, e.target.value)} style={styles.qtyInput} min="1" />
+                                            </div>
+                                            <div style={styles.productAmount}>
+                                                <span style={styles.amountLabel}>Amount:</span>
+                                                <span style={styles.amountValue}>₹{lineTotal.toFixed(2)}</span>
+                                            </div>
+                                            <button style={styles.removeProductBtn} onClick={() => removeProduct(product.id)} title="Remove product">
+                                                &times;
+                                            </button>
                                         </div>
-                                        <div style={styles.quantityControls}>
-                                            <label style={styles.qtyLabel}>Qty:</label>
-                                            <input type="number" value={product.quantity} onChange={e => updateProductQuantity(product.id, e.target.value)} style={styles.qtyInput} min="1" />
-                                        </div>
-                                        <div style={styles.productAmount}>
-                                            <span style={styles.amountLabel}>Amount:</span>
-                                            <span style={styles.amountValue}>₹{(product.mrp * product.quantity).toFixed(2)}</span>
-                                        </div>
-                                        <button style={styles.removeProductBtn} onClick={() => removeProduct(product.id)} title="Remove product">
-                                            &times;
-                                        </button>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
                     )}
@@ -575,14 +721,14 @@ ${quotation.products.map((product, index) =>
             )}
 
             {selectedCustomer && selectedProducts.length > 0 && (
-                <div style={styles.section} className="slideUp">
+                <div style={styles.section} className="slideUp quotation-section">
                     <div style={styles.stepHeader}>
                         <h3 style={styles.sectionTitle}><span style={styles.stepNumber}>3</span> Quotation Details <small>(No Additional GST)</small></h3>
                         <p style={styles.sectionSubtitle}>Add final details and generate quotation</p>
                     </div>
-                    <div style={styles.quotationDetailsGrid}>
-                        <div style={styles.detailsForm}>
-                            <div style={styles.formRow} className="mobile-stack">
+                    <div style={styles.quotationDetailsGrid} className="quotation-details-grid">
+                        <div style={styles.detailsForm} className="quotation-details-form">
+                            <div style={styles.formRow} className="mobile-stack quotation-form-row">
                                 <div style={styles.inputGroup} className="mobile-full">
                                     <label style={styles.label}>Valid Until</label>
                                     <input type="date" value={quotationData.validUntil} onChange={e => setQuotationData(prev => ({ ...prev, validUntil: e.target.value }))} style={styles.input} min={new Date().toISOString().split('T')[0]} />
@@ -597,30 +743,30 @@ ${quotation.products.map((product, index) =>
                                 <textarea value={quotationData.notes} onChange={e => setQuotationData(prev => ({ ...prev, notes: e.target.value }))} style={styles.textarea} rows={3} placeholder="Any special instructions or terms..."></textarea>
                             </div>
                         </div>
-                        <div style={styles.summaryCard} className="mobile-full">
-                            <div style={styles.summaryHeader}>
-                                <h4 style={styles.summaryTitle}>Quotation Summary</h4>
+                        <div style={styles.summaryCard} className="mobile-full quotation-summary-card">
+                            <div style={styles.summaryHeader} className="quotation-summary-header">
+                                <h4 style={styles.summaryTitle} className="quotation-summary-title">Quotation Summary</h4>
                                 <div style={styles.quotationId}>ID: {quotationData.quotationId}</div>
                             </div>
-                            <div style={styles.summaryContent}>
-                                <div style={styles.summaryRow}>
+                            <div style={styles.summaryContent} className="quotation-summary-content">
+                                <div style={styles.summaryRow} className="quotation-summary-row">
                                     <span>Subtotal (GST Included)</span>
                                     <span style={styles.summaryAmount}>₹{totals.subtotal}</span>
                                 </div>
                                 {parseFloat(totals.discountAmount) > 0 && (
-                                    <div style={styles.summaryRow}>
+                                    <div style={styles.summaryRow} className="quotation-summary-row">
                                         <span>Discount ({quotationData.discount}%)</span>
                                         <span style={styles.discountAmount}>-₹{totals.discountAmount}</span>
                                     </div>
                                 )}
-                                <div style={styles.totalRow}>
+                                <div style={styles.totalRow} className="quotation-total-row">
                                     <span><strong>Total Amount</strong></span>
                                     <span style={styles.totalAmount}><strong>₹{totals.total}</strong></span>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    <div style={styles.actionButtons} className="mobile-stack">
+                    <div style={styles.actionButtons} className="mobile-stack quotation-action-buttons">
                         <button style={styles.generateBtn} onClick={generateQuotation} disabled={!selectedCustomer || selectedProducts.length === 0} className="mobile-full pulse">
                             Generate Quotation
                         </button>
@@ -632,9 +778,9 @@ ${quotation.products.map((product, index) =>
             )}
         </div>
       ) : (
-        <div style={styles.tableView} className="slideUp">
-          <div style={styles.section}>
-            <div style={styles.tableHeader} className="mobile-stack">
+        <div style={styles.tableView} className="slideUp quotation-table-view">
+          <div style={styles.section} className="quotation-section">
+            <div style={styles.tableHeader} className="mobile-stack quotation-table-header">
                 <h3 style={styles.sectionTitle}>All Quotations ({quotations.length})</h3>
                 <div style={styles.tableActions}>
                     <button style={styles.refreshBtn} onClick={fetchQuotations} className="mobile-small">Refresh</button>
@@ -648,9 +794,9 @@ ${quotation.products.map((product, index) =>
                     <button style={styles.createBtn} onClick={() => setCurrentView('form')}>Create First Quotation</button>
                 </div>
             ) : (
-                <div style={styles.quotationsTableContainer}>
+                <div style={styles.quotationsTableContainer} className="quotation-table-container">
                     <div style={styles.quotationsTable} className="mobile-hide">
-                        <div style={styles.quotationTableHeader}>
+                        <div style={styles.quotationTableHeader} className="quotation-grid-header">
                             <span>Quotation ID</span>
                             <span>Customer</span>
                             <span>Date</span>
@@ -659,7 +805,7 @@ ${quotation.products.map((product, index) =>
                             <span>Actions</span>
                         </div>
                         {quotations.map(quotation => (
-                            <div key={quotation.id} style={styles.quotationRow}>
+                            <div key={quotation.id} style={styles.quotationRow} className="quotation-row">
                                 <span style={styles.quotationCell}>
                                     <div style={styles.quotationIdCell}>
                                         <strong>{quotation.quotationId}</strong>
@@ -702,23 +848,23 @@ ${quotation.products.map((product, index) =>
                     </div>
                     <div style={styles.mobileCardsContainer} className="mobile-show">
                          {quotations.map(quotation => (
-                            <div key={quotation.id} style={styles.mobileQuotationCard}>
-                                <div style={styles.mobileCardHeader}>
+                            <div key={quotation.id} style={styles.mobileQuotationCard} className="quotation-mobile-card">
+                                <div style={styles.mobileCardHeader} className="quotation-card-header">
                                     <div>
                                         <strong style={styles.mobileQuotationId}>{quotation.quotationId}</strong>
                                         <span style={styles.mobileStatusBadge}>{quotation.status}</span>
                                     </div>
                                     <div style={styles.mobileDate}>{new Date(quotation.date).toLocaleDateString('en-GB')}</div>
                                 </div>
-                                <div style={styles.mobileCardContent}>
-                                    <div style={styles.mobileCustomerInfo}>
+                                <div style={styles.mobileCardContent} className="quotation-card-content">
+                                    <div style={styles.mobileCustomerInfo} className="quotation-card-customer">
                                         <div style={styles.mobileCustomerAvatar}>{quotation.customer.name.charAt(0)}</div>
                                         <div>
                                             <div style={styles.mobileCustomerName}>{quotation.customer.name}</div>
                                             <div style={styles.mobileCustomerEmail}>{quotation.customer.email}</div>
                                         </div>
                                     </div>
-                                    <div style={styles.mobileCardDetails}>
+                                    <div style={styles.mobileCardDetails} className="quotation-card-details">
                                         <div style={styles.mobileDetailItem}>
                                             <span>Items</span>
                                             <span><span style={styles.mobileItemsBadge}>{quotation.products.length}</span></span>
@@ -729,7 +875,7 @@ ${quotation.products.map((product, index) =>
                                         </div>
                                     </div>
                                 </div>
-                                <div style={styles.mobileCardActions}>
+                                <div style={styles.mobileCardActions} className="quotation-card-actions">
                                     <PDFDownloadLink document={<QuotationPDF data={quotation} userInfo={currentUser} />} fileName={`quotation-${quotation.quotationId}.pdf`} style={styles.mobileActionBtn}>
                                         PDF
                                     </PDFDownloadLink>
@@ -746,14 +892,14 @@ ${quotation.products.map((product, index) =>
       )}
 
       {showCustomerForm && (
-        <div style={styles.popupOverlay} className="fadeIn">
-            <div style={styles.customerFormPopup} className="slideUp">
+        <div style={styles.popupOverlay} className="fadeIn quotation-popup-overlay">
+            <div style={styles.customerFormPopup} className="slideUp quotation-popup-panel">
                 <div style={styles.popupHeader}>
                     <h2 style={styles.popupTitle}>Add New Customer</h2>
                     <button style={styles.closeBtn} onClick={() => setShowCustomerForm(false)}>&times;</button>
                 </div>
-                <div style={styles.popupBody}>
-                    <div style={styles.formRow} className="mobile-stack">
+                <div style={styles.popupBody} className="quotation-popup-body">
+                    <div style={styles.formRow} className="mobile-stack quotation-form-row">
                         <div style={styles.inputGroup} className="mobile-full">
                             <label style={styles.label}>Name*</label>
                             <input type="text" value={customerForm.name} onChange={e => setCustomerForm(prev => ({ ...prev, name: e.target.value }))} style={styles.input} placeholder="Customer full name" />
@@ -763,7 +909,7 @@ ${quotation.products.map((product, index) =>
                             <input type="email" value={customerForm.email} onChange={e => setCustomerForm(prev => ({ ...prev, email: e.target.value }))} style={styles.input} placeholder="customer@email.com" />
                         </div>
                     </div>
-                    <div style={styles.formRow} className="mobile-stack">
+                    <div style={styles.formRow} className="mobile-stack quotation-form-row">
                         <div style={styles.inputGroup} className="mobile-full">
                             <label style={styles.label}>Phone*</label>
                             <input type="tel" value={customerForm.phone} onChange={e => setCustomerForm(prev => ({ ...prev, phone: e.target.value }))} style={styles.input} placeholder="+91-9876543210" />
@@ -773,7 +919,7 @@ ${quotation.products.map((product, index) =>
                         <label style={styles.label}>Address</label>
                         <textarea value={customerForm.address} onChange={e => setCustomerForm(prev => ({ ...prev, address: e.target.value }))} style={styles.textarea} rows={2} placeholder="Complete address"></textarea>
                     </div>
-                    <div style={styles.formRow} className="mobile-stack">
+                    <div style={styles.formRow} className="mobile-stack quotation-form-row">
                         <div style={styles.inputGroup} className="mobile-full">
                             <label style={styles.label}>City</label>
                             <input type="text" value={customerForm.city} onChange={e => setCustomerForm(prev => ({ ...prev, city: e.target.value }))} style={styles.input} placeholder="City" />
@@ -840,8 +986,8 @@ ${quotation.products.map((product, index) =>
       )}
 
       {showQuotationDetails && selectedQuotationData && (
-        <div style={styles.popupOverlay} className="fadeIn">
-            <div style={styles.detailsPopup} className="slideUp">
+        <div style={styles.popupOverlay} className="fadeIn quotation-popup-overlay">
+            <div style={styles.detailsPopup} className="slideUp quotation-popup-panel">
                  <div style={styles.popupHeader}>
                     <h2 style={styles.popupTitle}>Quotation Details</h2>
                     <button style={styles.closeBtn} onClick={() => {setShowQuotationDetails(false); setSelectedQuotationData(null);}}>&times;</button>
@@ -871,22 +1017,30 @@ ${quotation.products.map((product, index) =>
                     <div style={styles.detailsCard}>
                         <h4 style={styles.cardTitle}>Products ({selectedQuotationData.products.length})</h4>
                         <div style={styles.productsDetailTable}>
-                             {selectedQuotationData.products.map((product, index) => (
-                                <div key={index} style={styles.productDetailRow} className="mobile-stack">
-                                    <div style={styles.productDetailInfo} className="mobile-full">
-                                        <span style={styles.productDetailNumber}>{index + 1}.</span>
-                                        <div style={styles.productDetailContent}>
-                                            <span style={styles.productDetailName}>{product.name}</span>
-                                            {product.description && <p style={styles.productDetailDesc}>{product.description}</p>}
+                             {selectedQuotationData.products.map((product, index) => {
+                                const quantity = parseInt(product.quantity, 10) || 0;
+                                const rawPrice = product.mrp ?? product.price ?? product.rate ?? 0;
+                                const numericPrice = Number(rawPrice);
+                                const unitPrice = Number.isNaN(numericPrice) ? 0 : numericPrice;
+                                const lineTotal = unitPrice * quantity;
+
+                                return (
+                                    <div key={index} style={styles.productDetailRow} className="mobile-stack">
+                                        <div style={styles.productDetailInfo} className="mobile-full">
+                                            <span style={styles.productDetailNumber}>{index + 1}.</span>
+                                            <div style={styles.productDetailContent}>
+                                                <span style={styles.productDetailName}>{product.name}</span>
+                                                {product.description && <p style={styles.productDetailDesc}>{product.description}</p>}
+                                            </div>
+                                        </div>
+                                        <div style={styles.productDetailStats} className="mobile-full mobile-center">
+                                            <span style={styles.productDetailQty}>Qty: {quantity}</span>
+                                            <span style={styles.productDetailPrice}>@ ₹{unitPrice.toFixed(2)}</span>
+                                            <span style={styles.productDetailTotal}>₹{lineTotal.toFixed(2)}</span>
                                         </div>
                                     </div>
-                                    <div style={styles.productDetailStats} className="mobile-full mobile-center">
-                                        <span style={styles.productDetailQty}>Qty: {product.quantity}</span>
-                                        <span style={styles.productDetailPrice}>@ ₹{product.price.toFixed(2)}</span>
-                                        <span style={styles.productDetailTotal}>₹{(product.price * product.quantity).toFixed(2)}</span>
-                                    </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
                     <div style={styles.detailsCard}>
@@ -915,7 +1069,7 @@ ${quotation.products.map((product, index) =>
                         </div>
                      )}
                 </div>
-                <div style={styles.popupActions} className="mobile-stack">
+                <div style={styles.popupActions} className="mobile-stack quotation-popup-actions">
                     <PDFDownloadLink document={<QuotationPDF data={selectedQuotationData} userInfo={currentUser} />} fileName={`quotation-${selectedQuotationData.quotationId}.pdf`} style={styles.detailActionBtnPDF} className="mobile-full mobile-center">
                          Download PDF
                     </PDFDownloadLink>
@@ -941,7 +1095,7 @@ const styles = {
     backgroundColor: '#f8fafc',
     minHeight: '100vh',
     '@media (min-width: 768px)': {
-      padding: '20px'
+      padding: '16px'
     }
   },
   
@@ -962,17 +1116,17 @@ const styles = {
 
   // Enhanced Header
   header: {
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    background: '#002B5C',
     color: 'white',
-    padding: '20px',
-    borderRadius: '15px',
-    marginBottom: '25px',
+    padding: '14px',
+    borderRadius: '12px',
+    marginBottom: '18px',
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    boxShadow: '0 10px 40px rgba(102, 126, 234, 0.3)',
+    boxShadow: '0 8px 30px rgba(102, 126, 234, 0.3)',
     flexWrap: 'wrap',
-    gap: '15px'
+    gap: '8px'
   },
 
   headerContent: {
@@ -981,16 +1135,16 @@ const styles = {
   },
 
   title: {
-    fontSize: '1.8rem',
+    fontSize: '1rem',
     fontWeight: '700',
     margin: '0 0 5px 0',
     '@media (min-width: 768px)': {
-      fontSize: '2.2rem'
+      fontSize: '1.8rem'
     }
   },
 
   subtitle: {
-    fontSize: '1rem',
+    fontSize: '0.9rem',
     margin: '0',
     opacity: '0.9',
     fontWeight: '400'
@@ -998,7 +1152,7 @@ const styles = {
 
   viewToggle: {
     display: 'flex',
-    gap: '10px',
+    gap: '8px',
     flexWrap: 'wrap'
   },
 
@@ -1006,10 +1160,10 @@ const styles = {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     color: 'white',
     border: '1px solid rgba(255, 255, 255, 0.3)',
-    padding: '10px 18px',
+    padding: '8px 14px',
     borderRadius: '10px',
     cursor: 'pointer',
-    fontSize: '0.9rem',
+    fontSize: '0.85rem',
     fontWeight: '500',
     transition: 'all 0.3s ease',
     whiteSpace: 'nowrap'
@@ -1019,10 +1173,10 @@ const styles = {
     backgroundColor: 'white',
     color: '#667eea',
     border: '1px solid white',
-    padding: '10px 18px',
+    padding: '8px 14px',
     borderRadius: '10px',
     cursor: 'pointer',
-    fontSize: '0.9rem',
+    fontSize: '0.85rem',
     fontWeight: '600',
     boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
     whiteSpace: 'nowrap'
@@ -1031,9 +1185,9 @@ const styles = {
   // Progress Indicator
   progressContainer: {
     background: 'white',
-    padding: '20px',
+    padding: '16px',
     borderRadius: '15px',
-    marginBottom: '25px',
+    marginBottom: '20px',
     boxShadow: '0 4px 20px rgba(0,0,0,0.08)'
   },
 
@@ -1049,13 +1203,13 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    gap: '8px',
-    minWidth: '120px'
+    gap: '6px',
+    minWidth: '100px'
   },
 
   stepActive: {
-    width: '40px',
-    height: '40px',
+    width: '36px',
+    height: '36px',
     borderRadius: '50%',
     background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
     color: 'white',
@@ -1063,13 +1217,13 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     fontWeight: '600',
-    fontSize: '1.2rem',
+    fontSize: '1rem',
     boxShadow: '0 4px 15px rgba(16, 185, 129, 0.4)'
   },
 
   stepInactive: {
-    width: '40px',
-    height: '40px',
+    width: '36px',
+    height: '36px',
     borderRadius: '50%',
     backgroundColor: '#e5e7eb',
     color: '#9ca3af',
@@ -1077,21 +1231,21 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     fontWeight: '600',
-    fontSize: '1.2rem'
+    fontSize: '1rem'
   },
 
   stepLabel: {
-    fontSize: '0.9rem',
+    fontSize: '0.8rem',
     fontWeight: '500',
     color: '#64748b',
     textAlign: 'center'
   },
 
   progressLine: {
-    width: '80px',
+    width: '60px',
     height: '3px',
     backgroundColor: '#e5e7eb',
-    margin: '0 10px',
+    margin: '0 8px',
     borderRadius: '2px',
     '@media (max-width: 768px)': {
       display: 'none'
@@ -1102,23 +1256,23 @@ const styles = {
   formView: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '25px'
+    gap: '20px'
   },
 
   section: {
     background: 'white',
-    padding: '25px',
-    borderRadius: '15px',
+    // padding: '18px',
+    borderRadius: '12px',
     boxShadow: '0 6px 25px rgba(0,0,0,0.08)',
     border: '1px solid #e2e8f0'
   },
 
   stepHeader: {
-    marginBottom: '20px'
+    marginBottom: '12px'
   },
 
   sectionTitle: {
-    fontSize: '1.4rem',
+    fontSize: '1.2rem',
     color: '#1e293b',
     marginBottom: '8px',
     fontWeight: '600',
@@ -1126,11 +1280,11 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
     flexWrap: 'wrap',
-    gap: '15px'
+    gap: '10px'
   },
 
   sectionSubtitle: {
-    fontSize: '1rem',
+    fontSize: '0.9rem',
     color: '#64748b',
     margin: '0',
     fontWeight: '400'
@@ -1140,31 +1294,31 @@ const styles = {
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '35px',
-    height: '35px',
+    width: '30px',
+    height: '30px',
     borderRadius: '50%',
     background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
     color: 'white',
-    fontSize: '1.2rem',
+    fontSize: '1rem',
     fontWeight: '600',
-    marginRight: '15px'
+    marginRight: '12px'
   },
 
   // Customer Selection
   customerSelection: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '20px'
+    gap: '12px'
   },
 
   addCustomerBtn: {
     backgroundColor: '#10b981',
     color: 'white',
     border: 'none',
-    padding: '10px 18px',
-    borderRadius: '10px',
+    padding: '8px 14px',
+    borderRadius: '8px',
     cursor: 'pointer',
-    fontSize: '0.9rem',
+    fontSize: '0.85rem',
     fontWeight: '600',
     whiteSpace: 'nowrap',
     transition: 'all 0.3s ease'
@@ -1172,10 +1326,10 @@ const styles = {
 
   customerSelect: {
     width: '100%',
-    padding: '15px',
-    border: '2px solid #e5e7eb',
-    borderRadius: '12px',
-    fontSize: '1.1rem',
+    padding: '12px',
+    border: '1px solid #e5e7eb',
+    borderRadius: '10px',
+    fontSize: '1rem',
     backgroundColor: '#fafafa',
     color: '#374151',
     transition: 'all 0.3s ease'
@@ -1183,30 +1337,30 @@ const styles = {
 
   customerCard: {
     backgroundColor: '#f0f9ff',
-    border: '2px solid #0ea5e9',
-    borderRadius: '15px',
-    padding: '20px',
-    marginTop: '15px'
+    border: '1px solid #0ea5e9',
+    borderRadius: '12px',
+    padding: '16px',
+    marginTop: '12px'
   },
 
   customerCardHeader: {
     display: 'flex',
     alignItems: 'center',
-    gap: '15px',
-    marginBottom: '15px',
+    gap: '10px',
+    marginBottom: '10px',
     flexWrap: 'wrap'
   },
 
   customerAvatar: {
-    width: '50px',
-    height: '50px',
+    width: '40px',
+    height: '40px',
     borderRadius: '50%',
     background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
     color: 'white',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '1.5rem',
+    fontSize: '1.2rem',
     fontWeight: '600',
     flexShrink: 0
   },
@@ -1218,59 +1372,63 @@ const styles = {
   customerName: {
     margin: '0',
     color: '#0c4a6e',
-    fontSize: '1.3rem',
+    fontSize: '1.1rem',
     fontWeight: '600'
   },
 
   customerCompany: {
     margin: '5px 0 0 0',
     color: '#0369a1',
-    fontSize: '1rem',
+    fontSize: '0.9rem',
     fontWeight: '400'
   },
 
   customerBadge: {
     backgroundColor: '#10b981',
     color: 'white',
-    padding: '6px 12px',
-    borderRadius: '20px',
-    fontSize: '0.85rem',
+    padding: '4px 8px',
+    borderRadius: '12px',
+    fontSize: '0.75rem',
     fontWeight: '600'
   },
 
   customerDetails: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-    gap: '12px'
+    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+    gap: '10px'
   },
 
   customerDetailItem: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    padding: '8px 0'
+    gap: '6px',
+    padding: '6px 0'
   },
 
   detailIcon: {
-    fontSize: '1.1rem'
+    fontSize: '1rem'
   },
 
   detailText: {
     color: '#0369a1',
-    fontSize: '0.95rem'
+    fontSize: '0.9rem'
   },
 
   // Product Grid
   productGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-    gap: '20px',
-    marginTop: '20px'
+    gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+    gap: '14px',
+    marginTop: '14px',
+    '@media (max-width: 768px)': {
+      gridTemplateColumns: 'repeat(2, minmax(140px, 1fr))',
+      gap: '12px'
+    }
   },
 
   productCard: {
-    border: '2px solid #e5e7eb',
-    borderRadius: '15px',
+    border: '1px solid #e5e7eb',
+    borderRadius: '12px',
     padding: '0',
     backgroundColor: '#ffffff',
     transition: 'all 0.3s ease',
@@ -1281,27 +1439,32 @@ const styles = {
     }
   },
 
+  productCardSelected: {
+    borderColor: '#2563eb',
+    boxShadow: '0 0 0 2px rgba(37, 99, 235, 0.15)',
+  },
+
   productImage: {
     backgroundColor: '#f8fafc',
-    padding: '20px',
+    padding: '16px',
     textAlign: 'center',
     borderBottom: '1px solid #e5e7eb'
   },
 
   productIcon: {
-    fontSize: '2.5rem'
+    fontSize: '2.2rem'
   },
 
   productContent: {
-    padding: '20px'
+    padding: '16px'
   },
 
   productHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: '10px',
-    gap: '10px'
+    marginBottom: '8px',
+    gap: '8px'
   },
 
   productName: {
@@ -1314,19 +1477,19 @@ const styles = {
   },
 
   productPrice: {
-    fontSize: '1rem',
+    fontSize: '0.9rem',
     fontWeight: '700',
     color: '#059669',
     backgroundColor: '#d1fae5',
-    padding: '8px 12px',
+    padding: '6px 10px',
     borderRadius: '8px',
     whiteSpace: 'nowrap'
   },
 
   productDesc: {
     color: '#64748b',
-    marginBottom: '15px',
-    fontSize: '0.9rem',
+    marginBottom: '12px',
+    fontSize: '0.85rem',
     lineHeight: '1.5'
   },
 
@@ -1334,49 +1497,108 @@ const styles = {
     backgroundColor: '#10b981',
     color: 'white',
     border: 'none',
-    padding: '12px 20px',
+    padding: '10px 18px',
     borderRadius: '10px',
     cursor: 'pointer',
+    fontSize: '0.9rem',
     fontWeight: '600',
-    fontSize: '0.95rem',
     width: '100%',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '8px',
+    gap: '6px',
     transition: 'all 0.3s ease'
   },
 
   addIcon: {
-    fontSize: '1.2rem'
+    fontSize: '1.1rem'
+  },
+
+  productSelectedBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    backgroundColor: '#dbeafe',
+    color: '#1d4ed8',
+    fontSize: '0.8rem',
+    fontWeight: '600',
+    padding: '4px 8px',
+    borderRadius: '999px',
+    marginBottom: '10px'
+  },
+
+  productCartControls: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: '8px',
+    backgroundColor: '#eff6ff',
+    borderRadius: '10px',
+    padding: '6px'
+  },
+
+  cartControlBtn: {
+    backgroundColor: '#1d4ed8',
+    color: 'white',
+    border: 'none',
+    width: '32px',
+    height: '32px',
+    borderRadius: '8px',
+    fontSize: '1.1rem',
+    fontWeight: '600',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+
+  cartQuantity: {
+    minWidth: '40px',
+    textAlign: 'center',
+    fontSize: '1rem',
+    fontWeight: '600',
+    color: '#1d4ed8'
+  },
+
+  cartRemoveBtn: {
+    backgroundColor: '#ef4444',
+    color: 'white',
+    border: 'none',
+    padding: '8px 12px',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '0.85rem',
+    fontWeight: '600',
+    width: '100%'
   },
 
   // Selected Products
   selectedProductsContainer: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '15px'
+    gap: '12px'
   },
 
   selectedProductCard: {
     display: 'grid',
     gridTemplateColumns: '1fr auto auto auto',
-    gap: '15px',
+    gap: '10px',
     alignItems: 'center',
-    padding: '15px',
-    border: '2px solid #e5e7eb',
-    borderRadius: '12px',
+    padding: '12px',
+    border: '1px solid #e5e7eb',
+    borderRadius: '10px',
     backgroundColor: '#fafafa',
     '@media (max-width: 768px)': {
       gridTemplateColumns: '1fr',
-      gap: '10px'
+      gap: '8px'
     }
   },
 
   selectedProductInfo: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px'
+    gap: '10px'
   },
 
   selectedProductDetails: {
@@ -1384,14 +1606,14 @@ const styles = {
   },
 
   selectedProductName: {
-    fontSize: '1.1rem',
+    fontSize: '1rem',
     fontWeight: '600',
     color: '#1e293b',
-    margin: '0 0 5px 0'
+    margin: '0 0 4px 0'
   },
 
   selectedProductPrice: {
-    fontSize: '0.9rem',
+    fontSize: '0.85rem',
     color: '#64748b',
     margin: '0'
   },
@@ -1399,22 +1621,22 @@ const styles = {
   quantityControls: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px'
+    gap: '6px'
   },
 
   qtyLabel: {
-    fontSize: '0.9rem',
+    fontSize: '0.85rem',
     fontWeight: '600',
     color: '#374151'
   },
 
   qtyInput: {
-    width: '70px',
-    padding: '8px',
+    width: '52px',
+    padding: '5px',
     textAlign: 'center',
-    border: '2px solid #d1d5db',
+    border: '1px solid #d1d5db',
     borderRadius: '8px',
-    fontSize: '1rem',
+    fontSize: '0.9rem',
     fontWeight: '600'
   },
 
@@ -1426,13 +1648,13 @@ const styles = {
   },
 
   amountLabel: {
-    fontSize: '0.8rem',
+    fontSize: '0.75rem',
     color: '#64748b',
     fontWeight: '500'
   },
 
   amountValue: {
-    fontSize: '1.1rem',
+    fontSize: '1rem',
     fontWeight: '700',
     color: '#059669'
   },
@@ -1441,115 +1663,115 @@ const styles = {
     backgroundColor: '#ef4444',
     color: 'white',
     border: 'none',
-    padding: '8px 12px',
+    padding: '6px 10px',
     borderRadius: '8px',
     cursor: 'pointer',
-    fontSize: '1rem',
+    fontSize: '0.9rem',
     transition: 'all 0.3s ease'
   },
 
   // Quotation Details
   quotationDetailsGrid: {
     display: 'grid',
-    gridTemplateColumns: '1.5fr 1fr',
-    gap: '30px',
+    gridTemplateColumns: '1.2fr 1fr',
+    gap: '20px',
     '@media (max-width: 768px)': {
       gridTemplateColumns: '1fr',
-      gap: '20px'
+      gap: '16px'
     }
   },
 
   detailsForm: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '20px'
+    gap: '16px'
   },
 
   formRow: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
-    gap: '20px'
+    gap: '16px'
   },
 
   inputGroup: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px'
+    gap: '6px'
   },
 
   label: {
     fontWeight: '600',
     color: '#374151',
-    fontSize: '1rem'
+    fontSize: '0.9rem'
   },
 
   input: {
-    padding: '12px',
-    border: '2px solid #e5e7eb',
+    padding: '10px',
+    border: '1px solid #e5e7eb',
     borderRadius: '10px',
-    fontSize: '1rem',
+    fontSize: '0.9rem',
     transition: 'all 0.3s ease'
   },
 
   textarea: {
-    padding: '12px',
-    border: '2px solid #e5e7eb',
+    padding: '10px',
+    border: '1px solid #e5e7eb',
     borderRadius: '10px',
-    fontSize: '1rem',
+    fontSize: '0.9rem',
     resize: 'vertical',
     fontFamily: 'inherit',
-    minHeight: '80px'
+    minHeight: '60px'
   },
 
   // Summary Card
   summaryCard: {
     backgroundColor: '#f8fafc',
-    padding: '25px',
-    borderRadius: '15px',
-    border: '2px solid #e2e8f0',
+    padding: '14px',
+    borderRadius: '10px',
+    border: '1px solid #e2e8f0',
     height: 'fit-content',
     position: 'sticky',
-    top: '20px'
+    top: '16px'
   },
 
   summaryHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '20px',
+    marginBottom: '8px',
     flexWrap: 'wrap',
-    gap: '10px'
+    gap: '6px'
   },
 
   summaryTitle: {
     margin: '0',
-    fontSize: '1.3rem',
+    fontSize: '1.2rem',
     color: '#1e293b',
     fontWeight: '600'
   },
 
   quotationId: {
-    fontSize: '0.9rem',
+    fontSize: '0.8rem',
     color: '#64748b',
     fontWeight: '600',
     backgroundColor: '#e2e8f0',
-    padding: '6px 10px',
+    padding: '4px 8px',
     borderRadius: '6px'
   },
 
   summaryContent: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px',
-    marginBottom: '20px'
+    gap: '8px',
+    marginBottom: '12px'
   },
 
   summaryRow: {
     display: 'flex',
     justifyContent: 'space-between',
-    padding: '8px 0',
+    padding: '6px 0',
     borderBottom: '1px solid #e5e7eb',
-    fontSize: '1rem'
+    fontSize: '0.9rem'
   },
 
   summaryAmount: {
@@ -1565,49 +1787,49 @@ const styles = {
   totalRow: {
     display: 'flex',
     justifyContent: 'space-between',
-    padding: '15px 0',
+    padding: '12px 0',
     borderTop: '2px solid #1e293b',
     marginTop: '10px',
-    fontSize: '1.2rem',
+    fontSize: '1rem',
     color: '#1e40af'
   },
 
   totalAmount: {
-    fontSize: '1.4rem',
+    fontSize: '1.1rem',
     color: '#059669'
   },
 
   actionButtons: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px'
+    gap: '10px'
   },
 
   generateBtn: {
     background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
     color: 'white',
     border: 'none',
-    padding: '15px 25px',
-    borderRadius: '12px',
+    padding: '12px 20px',
+    borderRadius: '10px',
     cursor: 'pointer',
-    fontSize: '1.1rem',
+    fontSize: '1rem',
     fontWeight: '600',
     boxShadow: '0 6px 20px rgba(59, 130, 246, 0.4)',
     transition: 'all 0.3s ease',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '8px'
+    gap: '6px'
   },
 
   resetBtn: {
     backgroundColor: '#6b7280',
     color: 'white',
     border: 'none',
-    padding: '12px 25px',
+    padding: '10px 20px',
     borderRadius: '10px',
     cursor: 'pointer',
-    fontSize: '1rem',
+    fontSize: '0.9rem',
     fontWeight: '600',
     transition: 'all 0.3s ease'
   },
@@ -1616,16 +1838,16 @@ const styles = {
   tableView: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '25px'
+    gap: '20px'
   },
 
   tableHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '20px',
+    marginBottom: '16px',
     flexWrap: 'wrap',
-    gap: '15px'
+    gap: '12px'
   },
 
   tableActions: {
@@ -1637,10 +1859,10 @@ const styles = {
     backgroundColor: '#6b7280',
     color: 'white',
     border: 'none',
-    padding: '10px 18px',
+    padding: '8px 14px',
     borderRadius: '8px',
     cursor: 'pointer',
-    fontSize: '0.9rem',
+    fontSize: '0.85rem',
     fontWeight: '600',
     transition: 'all 0.3s ease'
   },
@@ -1652,20 +1874,20 @@ const styles = {
   },
 
   emptyIcon: {
-    fontSize: '4rem',
-    marginBottom: '20px'
+    fontSize: '1.25rem',
+    marginBottom: '4px',
   },
 
   createBtn: {
     background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
     color: 'white',
     border: 'none',
-    padding: '15px 30px',
+    padding: '12px 25px',
     borderRadius: '12px',
     cursor: 'pointer',
-    fontSize: '1.1rem',
+    fontSize: '1rem',
     fontWeight: '600',
-    marginTop: '20px',
+    marginTop: '16px',
     transition: 'all 0.3s ease'
   },
 
@@ -1687,9 +1909,9 @@ const styles = {
     gridTemplateColumns: '1.2fr 2fr 1fr 0.8fr 1.2fr 1.5fr',
     backgroundColor: '#f8fafc',
     borderBottom: '2px solid #e5e7eb',
-    padding: '20px 15px',
+    padding: '16px 12px',
     fontWeight: '600',
-    fontSize: '1rem',
+    fontSize: '0.9rem',
     color: '#374151'
   },
 
@@ -1697,7 +1919,7 @@ const styles = {
     display: 'grid',
     gridTemplateColumns: '1.2fr 2fr 1fr 0.8fr 1.2fr 1.5fr',
     borderBottom: '1px solid #e5e7eb',
-    padding: '20px 15px',
+    padding: '16px 12px',
     transition: 'background-color 0.2s',
     alignItems: 'center',
     ':hover': {
@@ -1720,8 +1942,8 @@ const styles = {
   statusBadge: {
     backgroundColor: '#10b981',
     color: 'white',
-    padding: '2px 8px',
-    borderRadius: '12px',
+    padding: '4px 8px',
+    borderRadius: '10px',
     fontSize: '0.75rem',
     fontWeight: '600',
     textTransform: 'capitalize',
@@ -1731,11 +1953,11 @@ const styles = {
   customerCell: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px'
+    gap: '10px'
   },
 
   dateCell: {
-    fontSize: '0.95rem',
+    fontSize: '0.85rem',
     color: '#64748b'
   },
 
@@ -1747,9 +1969,9 @@ const styles = {
   itemsBadge: {
     backgroundColor: '#e2e8f0',
     color: '#64748b',
-    padding: '4px 12px',
+    padding: '4px 10px',
     borderRadius: '15px',
-    fontSize: '0.85rem',
+    fontSize: '0.8rem',
     fontWeight: '600'
   },
 
@@ -1759,59 +1981,65 @@ const styles = {
 
   totalAmountDisplay: {
     color: '#059669',
-    fontSize: '1.2rem'
+    fontSize: '1.1rem'
   },
 
   actionBtns: {
     display: 'flex',
-    gap: '8px',
-    justifyContent: 'flex-end',
-    flexWrap: 'wrap'
+    gap: '6px',
+    justifyContent: 'space-between',
+    alignItems: 'center'
   },
 
   actionBtnPDF: {
     backgroundColor: '#ef4444',
     color: 'white',
-    padding: '8px 12px',
+    padding: '6px 10px',
     borderRadius: '8px',
     textDecoration: 'none',
-    fontSize: '1rem',
+    fontSize: '0.9rem',
     fontWeight: '600',
     transition: 'all 0.3s ease',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    flex: '1',
+    minWidth: '0'
   },
 
   actionBtnWhatsApp: {
     backgroundColor: '#25d366',
     color: 'white',
     border: 'none',
-    padding: '8px 12px',
+    padding: '6px 10px',
     borderRadius: '8px',
     cursor: 'pointer',
-    fontSize: '1rem',
+    fontSize: '0.9rem',
     fontWeight: '600',
-    transition: 'all 0.3s ease'
+    transition: 'all 0.3s ease',
+    flex: '1',
+    minWidth: '0'
   },
 
   viewBtn: {
     backgroundColor: '#3b82f6',
     color: 'white',
     border: 'none',
-    padding: '8px 12px',
+    padding: '6px 10px',
     borderRadius: '8px',
     cursor: 'pointer',
-    fontSize: '1rem',
+    fontSize: '0.9rem',
     fontWeight: '600',
-    transition: 'all 0.3s ease'
+    transition: 'all 0.3s ease',
+    flex: '1',
+    minWidth: '0'
   },
 
   // Mobile Cards (Hidden by default, shown on mobile)
   mobileCardsContainer: {
     display: 'none',
     flexDirection: 'column',
-    gap: '15px',
+    gap: '12px',
     '@media (max-width: 768px)': {
       display: 'flex'
     }
@@ -1820,7 +2048,7 @@ const styles = {
   mobileQuotationCard: {
     backgroundColor: 'white',
     borderRadius: '12px',
-    padding: '20px',
+    padding: '16px',
     boxShadow: '0 4px 15px rgba(0,0,0,0.08)',
     border: '1px solid #e5e7eb'
   },
@@ -1829,85 +2057,85 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: '15px',
-    gap: '10px'
+    marginBottom: '10px',
+    gap: '8px'
   },
 
   mobileQuotationId: {
-    fontSize: '1.1rem',
+    fontSize: '1rem',
     color: '#1e293b',
     display: 'block',
-    marginBottom: '5px'
+    marginBottom: '4px'
   },
 
   mobileStatusBadge: {
     backgroundColor: '#10b981',
     color: 'white',
-    padding: '2px 8px',
+    padding: '4px 8px',
     borderRadius: '10px',
     fontSize: '0.75rem',
     fontWeight: '600'
   },
 
   mobileDate: {
-    fontSize: '0.9rem',
+    fontSize: '0.85rem',
     color: '#64748b',
     fontWeight: '500'
   },
 
   mobileCardContent: {
-    marginBottom: '15px'
+    marginBottom: '10px'
   },
 
   mobileCustomerInfo: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px',
-    marginBottom: '12px'
+    gap: '10px',
+    marginBottom: '10px'
   },
 
   mobileCustomerAvatar: {
-    width: '40px',
-    height: '40px',
+    width: '36px',
+    height: '36px',
     borderRadius: '50%',
     background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
     color: 'white',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '1.2rem',
+    fontSize: '1.1rem',
     fontWeight: '600'
   },
 
   mobileCustomerName: {
-    fontSize: '1.05rem',
+    fontSize: '0.95rem',
     fontWeight: '600',
     color: '#1e293b',
     marginBottom: '2px'
   },
 
   mobileCustomerEmail: {
-    fontSize: '0.85rem',
+    fontSize: '0.8rem',
     color: '#64748b'
   },
 
   mobileCardDetails: {
     display: 'flex',
     justifyContent: 'space-between',
-    gap: '15px'
+    gap: '12px'
   },
 
   mobileDetailItem: {
     display: 'flex',
     alignItems: 'center',
     gap: '5px',
-    fontSize: '0.9rem'
+    fontSize: '0.85rem'
   },
 
   mobileItemsBadge: {
     backgroundColor: '#e2e8f0',
     color: '#64748b',
-    padding: '2px 8px',
+    padding: '4px 8px',
     borderRadius: '10px',
     fontSize: '0.8rem',
     fontWeight: '600'
@@ -1915,30 +2143,29 @@ const styles = {
 
   mobileTotalAmount: {
     color: '#059669',
-    fontSize: '1.1rem'
+    fontSize: '1rem'
   },
 
   mobileCardActions: {
-    display: 'flex',
-    gap: '8px',
-    flexWrap: 'wrap'
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+    gap: '6px'
   },
 
   mobileActionBtn: {
     backgroundColor: '#3b82f6',
     color: 'white',
     border: 'none',
-    padding: '8px 15px',
+    padding: '6px 10px',
     borderRadius: '8px',
-    fontSize: '0.85rem',
+    fontSize: '0.8rem',
     fontWeight: '600',
     cursor: 'pointer',
     textDecoration: 'none',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    flex: '1',
-    minWidth: '80px'
+    width: '100%'
   },
 
   // Popup Styles

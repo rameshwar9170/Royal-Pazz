@@ -99,38 +99,42 @@ const Team = () => {
 
   if (loading) {
     return (
-      <div className="team-container loading-container">
-        <div className="spinner"></div>
-        <p>Loading team members...</p>
-        <style>{responsiveStyles}</style>
+      <div className="team-page">
+        <div className="loading-state">
+          <div className="loader"></div>
+          <p>Loading team members...</p>
+        </div>
+        <style>{styles}</style>
       </div>
     );
   }
 
   return (
-    <div className="team-container">
-      {/* Header Section */}
-      <div className="team-header">
-        <div className="title-section">
-          <h2 className="team-title">
-            <span className="team-icon">👥</span>
-            My Team
-          </h2>
-          <p className="team-subtitle">Manage and view your team members</p>
-        </div>
-        
-        <div className="stats-card">
-          <div className="stat-number">{filteredMembers.length}</div>
-          <div className="stat-label">Total Members</div>
+    <div className="team-page">
+      {/* Header with Total Members */}
+      <div className="page-header">
+        <div className="header-content">
+          <div className="title-section">
+            <h1 className="page-title">
+            
+              My Team
+            </h1>
+            <p className="page-subtitle">Manage and view your team members</p>
+          </div>
+          
+          <div className="total-members-card">
+            <div className="members-count">{filteredMembers.length}</div>
+            <div className="members-label">TOTAL MEMBERS</div>
+          </div>
         </div>
       </div>
 
-      {/* Search Section */}
-      <div className="search-section">
-        <div className="search-wrapper">
+      {/* Search Bar */}
+      <div className="search-container">
+        <div className="search-box">
           <span className="search-icon">🔍</span>
           <input
-            type="search"
+            type="text"
             placeholder="Search by name, email, phone, or role..."
             value={searchQuery}
             onChange={handleSearchChange}
@@ -139,496 +143,716 @@ const Team = () => {
         </div>
       </div>
 
-      {/* Desktop Table View */}
-      <div className="desktop-table-container">
-        <table className="team-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Contact</th>
-              <th>Role</th>
-              <th>Level</th>
-              <th>Joined</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredMembers.length === 0 ? (
-              <tr>
-                <td colSpan="6" className="no-data">
-                  <div className="no-data-content">
-                    <span className="no-data-icon">👥</span>
-                    <p>No team members found</p>
-                    <span>Try adjusting your search criteria</span>
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              filteredMembers.map((member, index) => (
-                <tr key={member.uid || index} className="team-row">
-                  <td>
-                    <div className="member-name">
-                      <strong>{member.name || 'N/A'}</strong>
-                    </div>
-                  </td>
-                  <td>
-                    <div className="contact-info">
-                      <div className="email">📧 {member.email || 'N/A'}</div>
-                      <div className="phone">📞 {member.phone || 'N/A'}</div>
-                    </div>
-                  </td>
-                  <td>
-                    <span className="role-badge">{member.role || 'Member'}</span>
-                  </td>
-                  <td>{member.currentLevel || '-'}</td>
-                  <td>{member.createdAt ? new Date(member.createdAt).toLocaleDateString() : '-'}</td>
-                  <td>
-                    <button
-                      className="view-button"
-                      onClick={() => onRowClick(member)}
-                    >
-                      View Details
-                    </button>
-                  </td>
+      {/* Desktop Table */}
+      <div className="desktop-view">
+        <div className="table-wrapper">
+          <div className="table-scroll-container">
+            <table className="members-table">
+              <thead>
+                <tr>
+                  <th>NAME</th>
+                  <th>CONTACT</th>
+                  {/* <th>ROLE</th> */}
+                  <th>LEVEL</th>
+                  <th>JOINED</th>
+                  <th>ACTION</th>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              </thead>
+              <tbody>
+                {filteredMembers.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" className="empty-state">
+                      <div className="empty-content">
+                        <span className="empty-icon">📭</span>
+                        <p>No team members found</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredMembers.map((member) => (
+                    <tr key={member.uid}>
+                      <td>
+                        <div className="member-name-cell">{member.name || 'N/A'}</div>
+                      </td>
+                      <td>
+                        <div className="contact-cell">
+                          <div className="contact-item">
+                            <span className="icon">📧</span>
+                            {member.email || 'N/A'}
+                          </div>
+                          <div className="contact-item">
+                            <span className="icon">📞</span>
+                            {member.phone || 'N/A'}
+                          </div>
+                        </div>
+                      </td>
+                      {/* <td>
+                        <span className="role-badge">{(member.role || 'Member').toUpperCase()}</span>
+                      </td> */}
+                      <td>
+                        <span className="level-text">{member.currentLevel || '-'}</span>
+                      </td>
+                      <td>
+                        <span className="date-text">
+                          {member.createdAt ? new Date(member.createdAt).toLocaleDateString() : '-'}
+                        </span>
+                      </td>
+                      <td>
+                        <button className="view-btn" onClick={() => onRowClick(member)}>
+                          View Details
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
-      {/* Mobile Card View */}
-      <div className="mobile-cards-container">
+      {/* Mobile Cards - 2 Per Row - Fixed */}
+      <div className="mobile-view">
         {filteredMembers.length === 0 ? (
-          <div className="no-data-card">
-            <span className="no-data-icon">👥</span>
+          <div className="empty-state-mobile">
+            <span className="empty-icon">📭</span>
             <p>No team members found</p>
-            <span>Try adjusting your search criteria</span>
           </div>
         ) : (
-          filteredMembers.map((member, index) => (
-            <div
-              key={member.uid || index}
-              className="member-card"
-              onClick={() => onRowClick(member)}
-            >
-              <div className="card-header">
-                <h3 className="member-name">{member.name || 'N/A'}</h3>
-                <span className="role-badge">{member.role || 'Member'}</span>
-              </div>
-              
-              <div className="card-content">
-                <div className="contact-row">
-                  <span className="contact-item">
+          <div className="mobile-cards-grid">
+            {filteredMembers.map((member) => (
+              <div key={member.uid} className="member-card-mobile" onClick={() => onRowClick(member)}>
+                <div className="card-header-section">
+                  <h3 className="card-name">{member.name || 'N/A'}</h3>
+                  <span className="card-role-badge">{(member.role || 'Member').toUpperCase()}</span>
+                </div>
+                
+                <div className="card-contact-section">
+                  <div className="contact-row">
                     <span className="contact-icon">📧</span>
-                    {member.email || 'N/A'}
-                  </span>
-                </div>
-                <div className="contact-row">
-                  <span className="contact-item">
+                    <span className="contact-value">{member.email || 'N/A'}</span>
+                  </div>
+                  <div className="contact-row">
                     <span className="contact-icon">📞</span>
-                    {member.phone || 'N/A'}
-                  </span>
+                    <span className="contact-value">{member.phone || 'N/A'}</span>
+                  </div>
                 </div>
-                <div className="info-row">
-                  <span className="info-item">
-                    <strong>Level:</strong> {member.currentLevel || '-'}
-                  </span>
-                  <span className="info-item">
-                    <strong>Joined:</strong> {member.createdAt ? new Date(member.createdAt).toLocaleDateString() : '-'}
-                  </span>
+                
+                <div className="card-info-section">
+                  <div className="info-row">
+                    <span className="info-label">Level:</span>
+                    <span className="info-value">{member.currentLevel || '-'}</span>
+                  </div>
+                  <div className="info-row">
+                    <span className="info-label">Joined:</span>
+                    <span className="info-value">
+                      {member.createdAt ? new Date(member.createdAt).toLocaleDateString() : '-'}
+                    </span>
+                  </div>
                 </div>
+                
+                <button className="card-view-button">View Details →</button>
               </div>
-              
-              <div className="card-footer">
-                <button className="view-details-btn">
-                  View Details →
-                </button>
-              </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
 
       {/* Modal */}
       {selectedMember && (
-        <div className="modal-overlay" onClick={closeModal}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
+        <div className="modal-backdrop" onClick={closeModal}>
+          <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Team Member Details</h3>
-              <button className="modal-close" onClick={closeModal}>×</button>
+              <h2 className="modal-title">Team Member Details</h2>
+              <button className="modal-close-btn" onClick={closeModal}>×</button>
             </div>
-            
+
             <div className="modal-body">
-              <div className="member-details">
-                <h4>👤 Personal Information</h4>
-                <div className="detail-grid">
-                  <div className="detail-item">
-                    <label>Name:</label>
-                    <span>{selectedMember.name || 'N/A'}</span>
+              <section className="info-section">
+                <h3 className="section-title">
+                  <span className="section-icon">👤</span>
+                  Personal Information
+                </h3>
+                <div className="info-grid">
+                  <div className="info-field">
+                    <div className="field-label">NAME:</div>
+                    <div className="field-value">{selectedMember.name || 'N/A'}</div>
                   </div>
-                  <div className="detail-item">
-                    <label>Email:</label>
-                    <span>{selectedMember.email || 'N/A'}</span>
+                  <div className="info-field">
+                    <div className="field-label">EMAIL:</div>
+                    <div className="field-value">{selectedMember.email || 'N/A'}</div>
                   </div>
-                  <div className="detail-item">
-                    <label>Phone:</label>
-                    <span>{selectedMember.phone || 'N/A'}</span>
+                  <div className="info-field">
+                    <div className="field-label">PHONE:</div>
+                    <div className="field-value">{selectedMember.phone || 'N/A'}</div>
                   </div>
-                  <div className="detail-item">
-                    <label>Role:</label>
-                    <span>{selectedMember.role || 'Member'}</span>
+                  {/* <div className="info-field">
+                    <div className="field-label">ROLE:</div>
+                    <div className="field-value">{selectedMember.role || 'Member'}</div>
+                  </div> */}
+                  <div className="info-field">
+                    <div className="field-label">LEVEL:</div>
+                    <div className="field-value">{selectedMember.currentLevel || '-'}</div>
                   </div>
-                  <div className="detail-item">
-                    <label>Level:</label>
-                    <span>{selectedMember.currentLevel || '-'}</span>
-                  </div>
-                  <div className="detail-item">
-                    <label>Joined:</label>
-                    <span>{selectedMember.createdAt ? new Date(selectedMember.createdAt).toLocaleDateString() : '-'}</span>
+                  <div className="info-field">
+                    <div className="field-label">JOINED:</div>
+                    <div className="field-value">
+                      {selectedMember.createdAt ? new Date(selectedMember.createdAt).toLocaleDateString() : '-'}
+                    </div>
                   </div>
                 </div>
-              </div>
-              
-              <div className="stats-section">
-                <h4>📊 Performance Stats</h4>
+              </section>
+ <h3 className="section-title">
+                  <span className="section-icon">📊</span>
+                  Performance Stats
+                </h3>
+              <section className="stats-section">
+               
                 {statsLoading ? (
-                  <div className="stats-loading">
-                    <div className="spinner-small"></div>
+                  <div className="stats-loader">
+                    <div className="loader-small"></div>
                     <p>Loading stats...</p>
                   </div>
                 ) : (
-                  <div className="stats-grid">
-                    <div className="stat-card">
-                      <div className="stat-value">₹{memberStats[selectedMember.uid]?.totalSale?.toLocaleString() || '0'}</div>
-                      <div className="stat-label">Total Sales</div>
+                  <div className="stats-cards-grid">
+                    <div className="stat-box">
+                      <div className="stat-amount">₹{memberStats[selectedMember.uid]?.totalSale?.toLocaleString() || '0'}</div>
+                      <div className="stat-name">TOTAL SALES</div>
                     </div>
-                    <div className="stat-card">
-                      <div className="stat-value">{memberStats[selectedMember.uid]?.totalReferred || 0}</div>
-                      <div className="stat-label">Referrals</div>
+                    <div className="stat-box">
+                      <div className="stat-amount">{memberStats[selectedMember.uid]?.totalReferred || 0}</div>
+                      <div className="stat-name">REFERRALS</div>
                     </div>
-                    <div className="stat-card">
-                      <div className="stat-value">{memberStats[selectedMember.uid]?.totalOrders || 0}</div>
-                      <div className="stat-label">Orders</div>
+                    <div className="stat-box stat-box-full">
+                      <div className="stat-amount">{memberStats[selectedMember.uid]?.totalOrders || 0}</div>
+                      <div className="stat-name">ORDERS</div>
                     </div>
                   </div>
                 )}
-              </div>
+              </section>
             </div>
-            
+
             <div className="modal-footer">
-              <button className="close-btn" onClick={closeModal}>Close</button>
+              <button className="close-modal-btn" onClick={closeModal}>Close</button>
             </div>
           </div>
         </div>
       )}
 
-      <style>{responsiveStyles}</style>
+      <style>{styles}</style>
     </div>
   );
 };
 
-const responsiveStyles = `
+const styles = `
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
-/* Base Container */
-.team-container {
-  font-family: 'Inter', sans-serif;
-  padding: 16px;
-  background: #f8fafc;
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  overflow-x: hidden;
+  width: 100%;
+}
+
+.team-page {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f5f5f5;
   min-height: 100vh;
+  padding: 6px;
+  width: 100%;
   max-width: 100%;
   overflow-x: hidden;
 }
 
-.loading-container {
+/* Loading State */
+.loading-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 50vh;
-  color: #64748b;
+  min-height: 60vh;
+  color: #666;
 }
 
-/* Header Section */
-.team-header {
-  background: white;
-  border-radius: 16px;
+.loader {
+  width: 48px;
+  height: 48px;
+  border: 4px solid #e0e0e0;
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 16px;
+}
+
+.loader-small {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #e0e0e0;
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 12px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Header */
+.page-header {
+  background: #002B5C;
+  border-radius: 12px;
   padding: 20px;
-  margin-bottom: 20px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  margin-bottom: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.header-content {
   display: flex;
-  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
   gap: 16px;
+  flex-wrap: wrap;
 }
 
 .title-section {
   flex: 1;
+  min-width: 200px;
 }
 
-.team-title {
-  font-size: 1.5rem;
+.page-title {
+  font-size: 24px;
   font-weight: 700;
-  color: #1e293b;
-  margin: 0 0 4px 0;
+  color: #ffffffff;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  margin-bottom: 4px;
 }
 
-.team-icon {
-  font-size: 1.5rem;
-}
 
-.team-subtitle {
-  color: #64748b;
-  font-size: 0.9rem;
+.page-subtitle {
+  font-size: 14px;
+  color: #f0f0f0ff;
   margin: 0;
 }
 
-.stats-card {
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-  padding: 16px;
+.total-members-card {
+  background: #F36F21;
+  padding: 16px 24px;
   border-radius: 12px;
-  color: white;
   text-align: center;
-  width: fit-content;
-  align-self: flex-start;
+  min-width: 140px;
 }
 
-.stat-number {
-  font-size: 2rem;
+.members-count {
+  font-size: 36px;
   font-weight: 700;
-  display: block;
+  color: white;
+  line-height: 1;
+  margin-bottom: 4px;
 }
 
-.stat-label {
-  font-size: 0.75rem;
+.members-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: white;
   opacity: 0.9;
-
-  color: black;
-  text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
-/* Search Section */
-.search-section {
-  margin-bottom: 20px;
+/* Search */
+.search-container {
+  margin-bottom: 16px;
 }
 
-.search-wrapper {
+.search-box {
   position: relative;
-  max-width: 100%;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
 
 .search-icon {
   position: absolute;
-  left: 12px;
+  left: 16px;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 16px;
-  color: #64748b;
-  z-index: 2;
+  font-size: 18px;
+  pointer-events: none;
 }
 
 .search-input {
   width: 100%;
-  padding: 14px 16px 14px 44px;
-  font-size: 16px;
-  border: 2px solid #e2e8f0;
+  padding: 14px 16px 14px 48px;
+  border: 2px solid transparent;
   border-radius: 12px;
+  font-size: 15px;
+  font-family: inherit;
   outline: none;
-  background: white;
-  box-sizing: border-box;
+  transition: all 0.2s;
 }
 
 .search-input:focus {
   border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
 }
 
-/* Desktop Table - Hidden on Mobile */
-.desktop-table-container {
+/* Desktop Table */
+.desktop-view {
   display: none;
 }
 
-/* Mobile Cards - Visible by Default */
-.mobile-cards-container {
-  display: block;
-}
-
-.member-card {
+.table-wrapper {
   background: white;
   border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.table-scroll-container {
+  max-height: calc(100vh - 280px);
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
+.table-scroll-container::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.table-scroll-container::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.table-scroll-container::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+.table-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+.members-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.members-table thead {
+  background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.members-table th {
   padding: 16px;
-  margin-bottom: 16px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e2e8f0;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.member-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 12px;
-  gap: 12px;
-}
-
-.member-name {
-  font-size: 1.1rem;
+  text-align: left;
+  font-size: 12px;
   font-weight: 600;
-  color: #1e293b;
-  margin: 0;
-  flex: 1;
-  word-break: break-word;
-}
-
-.role-badge {
-  background: #6366f1;
   color: white;
-  padding: 4px 8px;
-  border-radius: 20px;
-  font-size: 0.75rem;
-  font-weight: 600;
   text-transform: uppercase;
+  letter-spacing: 0.5px;
   white-space: nowrap;
 }
 
-.card-content {
-  margin-bottom: 12px;
+.members-table tbody tr {
+  border-bottom: 1px solid #e5e7eb;
+  transition: all 0.2s;
 }
 
-.contact-row {
-  margin-bottom: 8px;
+.members-table tbody tr:hover {
+  background: #f9fafb;
+}
+
+.members-table td {
+  padding: 16px;
+  font-size: 14px;
+  color: #374151;
+}
+
+.member-name-cell {
+  font-weight: 600;
+  color: #1a1a1a;
+  white-space: nowrap;
+}
+
+.contact-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 200px;
 }
 
 .contact-item {
   display: flex;
   align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.contact-item .icon {
+  font-size: 14px;
+}
+
+.role-badge {
+  display: inline-block;
+  background: #6366f1;
+  color: white;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.level-text {
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.date-text {
+  color: #666;
+  white-space: nowrap;
+}
+
+.view-btn {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: white;
+  border: none;
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.view-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+}
+
+.empty-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: #9ca3af;
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.empty-content p {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+/* Mobile Cards - 2 Per Row - FIXED */
+.mobile-view {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+}
+
+.mobile-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  width: 100%;
+}
+
+.member-card-mobile {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.member-card-mobile:active {
+  transform: scale(0.98);
+}
+
+.card-header-section {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
-  font-size: 0.875rem;
-  color: #475569;
+}
+
+.card-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a1a;
+  line-height: 1.3;
+  margin: 0;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+
+.card-role-badge {
+  background: #6366f1;
+  color: white;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  align-self: flex-start;
+  text-transform: uppercase;
+}
+
+.card-contact-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.contact-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
 }
 
 .contact-icon {
   font-size: 14px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.contact-value {
+  font-size: 12px;
+  color: #666;
+  line-height: 1.4;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  flex: 1;
+  min-width: 0;
+}
+
+.card-info-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid #e5e7eb;
 }
 
 .info-row {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
-  margin-top: 12px;
-  flex-wrap: wrap;
-}
-
-.info-item {
-  font-size: 0.875rem;
-  color: #64748b;
-}
-
-.info-item strong {
-  color: #374151;
-}
-
-.card-footer {
-  text-align: right;
-}
-
-.view-details-btn {
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.view-details-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
-}
-
-/* No Data States */
-.no-data-card {
-  background: white;
-  border-radius: 12px;
-  padding: 40px 20px;
-  text-align: center;
-  color: #64748b;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.no-data-content {
-  display: flex;
-  flex-direction: column;
   align-items: center;
   gap: 8px;
 }
 
-.no-data-icon {
-  font-size: 3rem;
-  opacity: 0.5;
-  margin-bottom: 8px;
-}
-
-.no-data-content p {
-  font-size: 1.1rem;
+.info-label {
   font-weight: 600;
-  margin: 0;
+  color: #374151;
+  font-size: 11px;
+  flex-shrink: 0;
 }
 
-.no-data-content span {
-  font-size: 0.875rem;
-  opacity: 0.8;
+.info-value {
+  color: #666;
+  font-size: 11px;
+  text-align: right;
 }
 
-/* Modal Styles */
-.modal-overlay {
+.card-view-button {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: white;
+  border: none;
+  padding: 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  margin-top: auto;
+}
+
+.empty-state-mobile {
+  background: white;
+  border-radius: 12px;
+  padding: 60px 20px;
+  text-align: center;
+  color: #9ca3af;
+  grid-column: 1 / -1;
+}
+
+.empty-state-mobile .empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.empty-state-mobile p {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+/* Modal */
+.modal-backdrop {
   position: fixed;
   top: 0;
   left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0, 0, 0, 0.8);
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
-  z-index: 1000;
-  padding: 16px;
-  box-sizing: border-box;
+  z-index: 9999;
+  padding: 0;
+  animation: fadeIn 0.2s;
 }
 
-.modal-content {
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-dialog {
   background: white;
+  border-radius: 16px 16px 0 0;
   width: 100%;
-  max-width: 500px;
-  max-height: 90vh;
-  border-radius: 16px;
-  overflow: hidden;
+  max-width: 100%;
+  max-height: 85vh;
   display: flex;
   flex-direction: column;
-  animation: modalSlideIn 0.3s ease-out;
+  animation: slideUp 0.3s ease-out;
 }
 
-@keyframes modalSlideIn {
+@keyframes slideUp {
   from {
-    opacity: 0;
-    transform: translateY(-20px) scale(0.95);
+    transform: translateY(100%);
   }
   to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateY(0);
   }
 }
 
@@ -637,282 +861,214 @@ const responsiveStyles = `
   justify-content: space-between;
   align-items: center;
   padding: 20px;
-  border-bottom: 1px solid #e2e8f0;
-  background: #f8fafc;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
 }
 
-.modal-header h3 {
-  font-size: 1.25rem;
+.modal-title {
+  font-size: 20px;
   font-weight: 700;
-  color: #1e293b;
+  color: #1a1a1a;
   margin: 0;
 }
 
-.modal-close {
-  width: 32px;
-  height: 32px;
+.modal-close-btn {
+  width: 36px;
+  height: 36px;
   border: none;
-  background: #f1f5f9;
+  background: #ea5d44ff;
   border-radius: 8px;
-  font-size: 20px;
-  color: #64748b;
+  font-size: 24px;
+  color: #666;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
 }
 
-.modal-close:hover {
-  background: #e2e8f0;
-  color: #1e293b;
+.modal-close-btn:hover {
+  background: #b40303ff;
+  color: #1a1a1a;
 }
 
 .modal-body {
   flex: 1;
   overflow-y: auto;
   padding: 20px;
+  -webkit-overflow-scrolling: touch;
 }
 
-.member-details,
+.modal-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.modal-body::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.modal-body::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.info-section,
 .stats-section {
   margin-bottom: 24px;
 }
 
-.member-details h4,
-.stats-section h4 {
-  font-size: 1.1rem;
+.section-title {
+  font-size: 16px;
   font-weight: 600;
   color: #374151;
-  margin-bottom: 16px;
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-bottom: 16px;
 }
 
-.detail-grid {
+.section-icon {
+  font-size: 18px;
+}
+
+.info-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 12px;
+  gap: 16px;
 }
 
-.detail-item {
+.info-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
-.detail-item label {
-  font-size: 0.75rem;
+.field-label {
+  font-size: 11px;
   font-weight: 600;
-  color: #64748b;
+  color: #9ca3af;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
-.detail-item span {
-  font-size: 1rem;
-  color: #1e293b;
+.field-value {
+  font-size: 15px;
+  color: #1a1a1a;
   font-weight: 500;
   word-break: break-word;
 }
 
-.stats-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
-}
-
-.stat-card {
-  background: #f8fafc;
-  padding: 16px;
-  border-radius: 8px;
-  text-align: center;
-  border: 1px solid #e2e8f0;
-}
-
-.stat-card .stat-value {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #1e293b;
-  margin-bottom: 4px;
-}
-
-.stat-card .stat-label {
-  font-size: 0.875rem;
-  color: #475569;
-  font-weight: 500;
-}
-
-.stats-loading {
+.stats-loader {
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: 40px 20px;
-  color: #64748b;
+  color: #666;
+}
+
+.stats-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.stat-box {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+}
+
+.stat-box-full {
+  grid-column: 1 / -1;
+}
+
+.stat-amount {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 6px;
+}
+
+.stat-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .modal-footer {
   padding: 16px 20px;
-  border-top: 1px solid #e2e8f0;
-  background: #f8fafc;
+  border-top: 1px solid #e5e7eb;
+  flex-shrink: 0;
 }
 
-.close-btn {
+.close-modal-btn {
+  width: 100%;
   background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
   color: white;
   border: none;
-  padding: 12px 24px;
-  border-radius: 8px;
+  padding: 14px;
+  border-radius: 10px;
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
-  width: 100%;
 }
 
-/* Loading Spinners */
-.spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid #f3f4f6;
-  border-top: 4px solid #6366f1;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 16px;
-}
-
-.spinner-small {
-  width: 24px;
-  height: 24px;
-  border: 3px solid #f3f4f6;
-  border-top: 3px solid #6366f1;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 8px;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-/* Tablet Styles (768px and up) */
+/* Tablet & Desktop */
 @media (min-width: 768px) {
-  .team-container {
-    padding: 24px;
-    max-width: 1200px;
-    margin: 0 auto;
+  .team-page {
+    padding: 12px;
   }
-  
-  .team-header {
-    flex-direction: row;
-    justify-content: space-between;
+
+  .page-header {
+    padding: 12px;
+  }
+
+  .modal-backdrop {
     align-items: center;
+    padding: 6px;
   }
-  
-  .stats-card {
-    align-self: center;
+
+  .modal-dialog {
+    border-radius: 16px;
+    max-width: 600px;
+    max-height: 90vh;
   }
-  
-  .detail-grid {
+
+  .info-grid {
     grid-template-columns: 1fr 1fr;
   }
-  
-  .stats-grid {
+
+  .stats-cards-grid {
     grid-template-columns: repeat(3, 1fr);
   }
-  
-  .modal-content {
-    max-width: 600px;
+
+  .stat-box-full {
+    grid-column: auto;
+  }
+
+  .mobile-cards-grid {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 
-/* Desktop Styles (1024px and up) */
 @media (min-width: 1024px) {
-  .team-container {
-    padding: 32px;
+  .team-page {
+    padding: 12px;
+    max-width: 1400px;
+    margin: 0 auto;
   }
-  
-  /* Show table, hide cards on desktop */
-  .desktop-table-container {
+
+  .desktop-view {
     display: block;
-    background: white;
-    border-radius: 16px;
-    overflow: hidden;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-    border: 1px solid #e2e8f0;
   }
-  
-  .mobile-cards-container {
+
+  .mobile-view {
     display: none;
-  }
-  
-  .team-table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-  
-  .team-table th,
-  .team-table td {
-    padding: 16px;
-    text-align: left;
-    border-bottom: 1px solid #e2e8f0;
-  }
-  
-  .team-table th {
-    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
-    color: white;
-    font-weight: 600;
-    font-size: 14px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-  }
-  
-  .team-row {
-    transition: all 0.3s ease;
-  }
-  
-  .team-row:hover {
-    background: #f8fafc;
-    transform: translateY(-1px);
-  }
-  
-  .contact-info {
-    min-width: 200px;
-  }
-  
-  .email, .phone {
-    font-size: 13px;
-    color: #475569;
-    margin-bottom: 2px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  
-  .view-button {
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-    color: black;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 8px;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.3s ease;
-  }
-  
-  .view-button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
-  }
-  
-  .no-data {
-    text-align: center;
-    padding: 60px 24px;
-    border: none;
   }
 }
 `;

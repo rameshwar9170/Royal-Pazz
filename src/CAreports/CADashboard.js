@@ -79,7 +79,7 @@ const CADashboard = () => {
       <div className="stats-grid">
         <StatCard title="Total Sales" value={`₹${stats.totalSales.toLocaleString('en-IN')}`} icon="💰" loading={loading} />
         <StatCard title="Total Orders" value={stats.totalOrders.toLocaleString('en-IN')} icon="📦" loading={loading} />
-        <StatCard title="Total Users" value={stats.totalUsers.toLocaleString('en-IN')} icon="👥" loading={loading} />
+        {/* <StatCard title="Total Users" value={stats.totalUsers.toLocaleString('en-IN')} icon="👥" loading={loading} /> */}
         <StatCard title="Total Commission" value={`₹${stats.totalCommissions.toLocaleString('en-IN')}`} icon="🏆" loading={loading} />
         <StatCard title="Total Withdrawals" value={`₹${stats.totalWithdrawals.toLocaleString('en-IN')}`} icon="💸" loading={loading} />
       </div>

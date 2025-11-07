@@ -519,10 +519,10 @@ const SubAdminLogin = () => {
             </form>
           </div>
 
-          {/* Simple Footer - Only Copyright and Terms */}
-          {/* <div className="simple-footer">
+          {/* Simple Footer - Only Copyright and Terms
+          <div className="simple-footer">
             <div className="copyright-text">
-              © {new Date().getFullYear()} ONDO. All rights reserved.
+              © {new Date().getFullYear()} ONDO . All rights reserved.
             </div>
             <span 
               className="terms-link"

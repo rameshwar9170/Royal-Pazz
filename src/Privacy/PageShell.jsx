@@ -1,5 +1,6 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
+import img from '../img/logo.jpg'
 
 const PageShell = ({ title, children }) => {
   const location = useLocation();
@@ -51,16 +52,40 @@ const PageShell = ({ title, children }) => {
           padding: 1rem 2rem;
         }
         
-        .logo {
-          font-size: 1.5rem;
-          font-weight: 700;
-          color: #059669;
+        .logo-link {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
           text-decoration: none;
-          letter-spacing: -0.025em;
+          transition: transform 0.2s ease;
         }
         
-        .logo:hover {
-          color: #047857;
+        .logo-link:hover {
+          transform: translateY(-1px);
+        }
+        
+        .logo-image {
+          height: 45px;
+          width: auto;
+          object-fit: contain;
+        }
+        
+        .logo-text {
+          font-size: 1.25rem;
+          font-weight: 700;
+          color: #059669;
+          letter-spacing: -0.025em;
+          display: none;
+        }
+        
+        @media (min-width: 640px) {
+          .logo-image {
+            height: 50px;
+          }
+          
+          .logo-text {
+            display: block;
+          }
         }
         
         .header-nav {
@@ -330,7 +355,14 @@ const PageShell = ({ title, children }) => {
       <div className="page-container">
         <header className="header">
           <div className="header-content">
-            <Link to="/" className="logo"> ONDO</Link>
+            <Link to="/" className="logo-link">
+              <img 
+                src={img} 
+                alt="ONDO  Logo" 
+                className="logo-image"
+              />
+              <span className="logo-text">ONDO </span>
+            </Link>
             <nav className="header-nav">
               {navItems.map((item) => (
                 <Link
@@ -389,7 +421,7 @@ const PageShell = ({ title, children }) => {
           <div className="footer-content">
             <div className="footer-inner">
               <div className="footer-copyright">
-                © {new Date().getFullYear()} ONDOAll rights reserved.
+                © {new Date().getFullYear()} ONDO . All rights reserved.
               </div>
               <div className="footer-links">
                 <Link to="/policies/terms" className="footer-link">Terms</Link>

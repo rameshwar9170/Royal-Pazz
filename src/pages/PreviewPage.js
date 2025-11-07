@@ -91,7 +91,7 @@ export default function PreviewPage() {
                             });
                         });
                     }
-                    
+
                     setUserData(data);
                 } else {
                     setError('No profile data found for this user');
@@ -470,9 +470,9 @@ export default function PreviewPage() {
                                         {/* Debug: Always show image section for debugging */}
                                         <div className="preview-product__image">
                                             {product.imageUrl ? (
-                                                <img 
-                                                    src={product.imageUrl} 
-                                                    alt={product.title} 
+                                                <img
+                                                    src={product.imageUrl}
+                                                    alt={product.title}
                                                     loading="lazy"
                                                     onError={(e) => {
                                                         console.error('Failed to load product image:', product.imageUrl);
@@ -527,9 +527,9 @@ export default function PreviewPage() {
                                         <div key={index} className="preview-product-card">
                                             <div className="preview-product-card__image">
                                                 {product.imageUrl ? (
-                                                    <img 
-                                                        src={product.imageUrl} 
-                                                        alt={product.title} 
+                                                    <img
+                                                        src={product.imageUrl}
+                                                        alt={product.title}
                                                         loading="lazy"
                                                         onError={(e) => {
                                                             console.error('Failed to load product card image:', product.imageUrl);

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ref, onValue, update } from 'firebase/database';
 import { db } from '../../firebase/config';
 import { FiPackage, FiSearch, FiUser, FiPhone, FiMapPin, FiEye, FiX, FiSave, FiLoader } from 'react-icons/fi';
@@ -14,17 +14,72 @@ const Dispatch = () => {
     const [loading, setLoading] = useState(true);
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [activeStatusFilter, setActiveStatusFilter] = useState('all');
-    const [timeFilter, setTimeFilter] = useState('month');
+    const [timeFilter, setTimeFilter] = useState('all');
     const [currentPage, setCurrentPage] = useState(1);
 
     const allowedStatuses = useMemo(() => new Set(['confirmed', 'inprocess', 'accepted', 'completed']), []);
+
+    const resolveOrderDate = useCallback((order) => {
+        if (!order) return null;
+        const candidates = [
+            order.orderDate,
+            order.date,
+            order.createdAt,
+            order.created_at,
+            order.timestamp,
+        ];
+
+        for (const raw of candidates) {
+            if (!raw) continue;
+            if (raw instanceof Date && !Number.isNaN(raw.getTime())) return raw;
+
+            if (typeof raw === 'number') {
+                const normalized = raw < 1e12 ? raw * 1000 : raw;
+                const date = new Date(normalized);
+                if (!Number.isNaN(date.getTime())) return date;
+            }
+
+            if (typeof raw === 'string') {
+                const trimmed = raw.trim();
+                if (!trimmed) continue;
+
+                const numeric = Number(trimmed);
+                if (!Number.isNaN(numeric)) {
+                    const normalized = trimmed.length === 10 ? numeric * 1000 : numeric;
+                    const date = new Date(normalized);
+                    if (!Number.isNaN(date.getTime())) return date;
+                }
+
+                const isoDate = new Date(trimmed);
+                if (!Number.isNaN(isoDate.getTime())) return isoDate;
+
+                const pattern = trimmed.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+                if (pattern) {
+                    const [, day, month, year] = pattern;
+                    const fullYear = year.length === 2 ? `20${year}` : year;
+                    const isoCandidate = `${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                    const altDate = new Date(isoCandidate);
+                    if (!Number.isNaN(altDate.getTime())) return altDate;
+                }
+            }
+        }
+
+        return null;
+    }, []);
 
     useEffect(() => {
         setLoading(true);
         const ordersUnsub = onValue(ref(db, 'HTAMS/orders'), (snap) => {
             const data = snap.val() || {};
             const allOrders = Object.entries(data).map(([id, o]) => ({ id, ...o }));
-            const visibleOrders = allOrders.filter(o => allowedStatuses.has(o.status?.toLowerCase()));
+            console.log('📦 Total orders in database:', allOrders.length);
+            console.log('📊 Order statuses:', allOrders.map(o => o.status));
+            // Only show orders that have been confirmed (or beyond: inprocess, accepted, completed)
+            const visibleOrders = allOrders.filter(o => {
+                const status = o.status?.toLowerCase();
+                return status && allowedStatuses.has(status);
+            });
+            console.log('✅ Visible orders after status filter:', visibleOrders.length);
             setOrders(visibleOrders);
             setLoading(false);
         });
@@ -41,10 +96,9 @@ const Dispatch = () => {
         const now = new Date();
         if (timeFilter === 'all') return orders;
         return orders.filter(o => {
-            if (!o.orderDate) return false;
-            const orderDate = new Date(o.orderDate);
-            if (isNaN(orderDate)) return false;
-            
+            const orderDate = resolveOrderDate(o);
+            if (!orderDate) return false;
+
             if (timeFilter === 'month') return orderDate.getMonth() === now.getMonth() && orderDate.getFullYear() === now.getFullYear();
             if (timeFilter === 'year') return orderDate.getFullYear() === now.getFullYear();
             if (timeFilter === 'last15days') {
@@ -53,7 +107,7 @@ const Dispatch = () => {
             }
             return true;
         });
-    }, [orders, timeFilter]);
+    }, [orders, timeFilter, resolveOrderDate]);
 
     const filteredAndSortedOrders = useMemo(() => {
         const statusOrder = { 'confirmed': 1, 'inprocess': 2, 'accepted': 3, 'completed': 4 };
@@ -70,12 +124,14 @@ const Dispatch = () => {
                 const orderA = statusOrder[a.status?.toLowerCase()] || 5;
                 const orderB = statusOrder[b.status?.toLowerCase()] || 5;
                 if (orderA !== orderB) return orderA - orderB;
-                const dateA = a.orderDate ? new Date(a.orderDate) : 0;
-                const dateB = b.orderDate ? new Date(b.orderDate) : 0;
-                if (isNaN(dateA) || isNaN(dateB)) return 0;
-                return dateB - dateA;
+                const dateA = resolveOrderDate(a);
+                const dateB = resolveOrderDate(b);
+                if (dateA && dateB) return dateB - dateA;
+                if (dateA) return -1;
+                if (dateB) return 1;
+                return 0;
             });
-    }, [timeFilteredOrders, search, activeStatusFilter]);
+    }, [timeFilteredOrders, search, activeStatusFilter, resolveOrderDate]);
     
     const paginatedOrders = useMemo(() => {
         const startIndex = (currentPage - 1) * PAGE_SIZE;
@@ -85,11 +141,10 @@ const Dispatch = () => {
     const totalPages = Math.ceil(filteredAndSortedOrders.length / PAGE_SIZE);
 
     const summaryCounts = useMemo(() => {
-        const counts = { all: timeFilteredOrders.length, confirmed: 0, inprocess: 0, accepted: 0, completed: 0, pending: 0 };
+        const counts = { all: timeFilteredOrders.length, confirmed: 0, inprocess: 0, accepted: 0, completed: 0 };
         timeFilteredOrders.forEach(o => {
             const status = o.status?.toLowerCase();
             if (status in counts) counts[status]++;
-            if (status === 'confirmed' && !!o.assignedTechnicianId) counts.pending++;
         });
         return counts;
     }, [timeFilteredOrders]);
@@ -166,13 +221,19 @@ const Dispatch = () => {
 
     return (
         <div className="dispatch-page">
-            <header className="page-header"><h1><FiPackage /> Dispatch Management</h1></header>
+            <header className="page-header"><h1> Dispatch Management</h1></header>
 
             <section className="summary-and-filters">
                  <div className="summary-cards">
-                    {['all', 'confirmed', 'pending', 'inprocess', 'accepted', 'completed'].map(status => (
-                        <button key={status} onClick={() => { setActiveStatusFilter(status); setCurrentPage(1); }} className={`summary-card ${status} ${activeStatusFilter === status ? 'active' : ''}`}>
-                            <span>{summaryCounts[status]}</span> {status.charAt(0).toUpperCase() + status.slice(1)}
+                    {[
+                        { key: 'all', label: 'All' },
+                        { key: 'confirmed', label: 'Confirmed' },
+                        { key: 'inprocess', label: 'In Process' },
+                        { key: 'accepted', label: 'Accepted' },
+                        { key: 'completed', label: 'Completed' }
+                    ].map(({ key, label }) => (
+                        <button key={key} onClick={() => { setActiveStatusFilter(key); setCurrentPage(1); }} className={`summary-card ${key} ${activeStatusFilter === key ? 'active' : ''}`}>
+                            <span>{summaryCounts[key]}</span> {label}
                         </button>
                     ))}
                 </div>
@@ -181,10 +242,10 @@ const Dispatch = () => {
                         <FiSearch className="search-icon" /><input type="text" placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="search-input" />
                     </div>
                     <select value={timeFilter} onChange={(e) => { setTimeFilter(e.target.value); setCurrentPage(1); }} className="time-filter-select">
+                        <option value="all">All Time</option>
                         <option value="month">This Month</option>
                         <option value="year">This Year</option>
                         <option value="last15days">Last 15 Days</option>
-                        <option value="all">All Time</option>
                     </select>
                 </div>
             </section>
@@ -263,64 +324,68 @@ const Dispatch = () => {
             )}
             
             <style jsx>{`
-                .dispatch-page { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f1f5f9; padding: 1.5rem; min-height: 100vh; }
-                .loading-state, .no-data-cell { text-align: center; padding: 2rem; color: #64748b; }
+                .dispatch-page { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #e8eef3; padding: 0; min-height: 100vh; }
+                .loading-state, .no-data-cell { text-align: center; padding: 2rem; color: white; }
                 .loader-icon { animation: spin 1s linear infinite; font-size: 2rem; margin-right: 1rem; }
                 @keyframes spin { to { transform: rotate(360deg); } }
                 
-                .page-header h1 { display: flex; align-items: center; gap: 0.75rem; font-size: 1.75rem; font-weight: 700; color: #1e293b; }
+                .page-header { background: #002B5C; padding: 1.25rem 1.5rem; margin: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+                .page-header h1 { display: flex; align-items: center; gap: 0.75rem; font-size: 1.5rem; font-weight: 700; color: white; margin: 0; }
                 
-                .summary-and-filters { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1.5rem; margin-bottom: 1.5rem; }
-                .summary-cards { display: flex; gap: 1rem; flex-wrap: wrap; }
-                .summary-card { background: white; padding: 0.75rem 1rem; border-radius: 0.75rem; font-weight: 600; display: flex; flex-direction: column; align-items: center; border: 2px solid transparent; cursor: pointer; transition: all 0.2s; }
-                .summary-card span { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.25rem; }
-                .summary-card.active { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-                .summary-card.all { color: #374151; } .summary-card.active.all { border-color: #374151; }
-                .summary-card.confirmed { color: #4338ca; } .summary-card.active.confirmed { border-color: #4338ca; }
-                .summary-card.pending { color: #ca8a04; } .summary-card.active.pending { border-color: #ca8a04; }
-                .summary-card.inprocess { color: #c2410c; } .summary-card.active.inprocess { border-color: #c2410c; }
-                .summary-card.accepted { color: #b45309; } .summary-card.active.accepted { border-color: #b45309; }
-                .summary-card.completed { color: #166534; } .summary-card.active.completed { border-color: #166534; }
+                .summary-and-filters { background: #002B5C; padding: 1rem 1.5rem; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 0; }
+                .summary-cards { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+                .summary-card { background: #F36F21; color: white; padding: 0.6rem 1rem; border-radius: 0.5rem; font-weight: 600; display: flex; flex-direction: column; align-items: center; border: 2px solid transparent; cursor: pointer; transition: all 0.2s; min-width: 80px; }
+                .summary-card span { font-size: 1.25rem; font-weight: 700; margin-bottom: 0.15rem; }
+                .summary-card.active { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(243, 111, 33, 0.4); border-color: white; }
                 
-                .filter-controls { display: flex; gap: 1rem; align-items: center; }
+                .filter-controls { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
                 .search-wrapper { position: relative; }
                 .search-icon { position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); color: #94a3b8; }
-                .search-input, .time-filter-select { padding: 0.65rem 1rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 1rem; }
-                .search-input { padding-left: 2.5rem; }
+                .search-input, .time-filter-select { padding: 0.5rem 0.75rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.9rem; background: white; }
+                .search-input { padding-left: 2.5rem; width: 200px; }
                 
-                .table-wrapper { background-color: white; border-radius: 0.75rem; overflow-x: auto; }
+                .table-wrapper { background-color: white; border-radius: 0; overflow-x: auto; margin: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
                 .orders-table { width: 100%; border-collapse: collapse; min-width: 1100px; }
-                .orders-table th, .orders-table td { padding: 1rem; text-align: left; border-bottom: 1px solid #e2e8f0; }
-                .orders-table th { background-color: #f8fafc; font-size: 0.75rem; font-weight: 600; color: #475569; }
+                .orders-table th, .orders-table td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #e2e8f0; }
+                .orders-table th { background-color: #002B5C; font-size: 0.75rem; font-weight: 600; color: white; text-transform: uppercase; letter-spacing: 0.5px; }
                 .cell-primary, .cell-secondary { display: flex; align-items: center; gap: 0.5rem; }
-                .cell-primary { font-weight: 600; }
-                .cell-secondary { color: #64748b; font-size: 0.875rem; }
+                .cell-primary { font-weight: 600; color: #1e293b; }
+                .cell-secondary { color: #64748b; font-size: 0.85rem; }
+                .amount-cell { color: #F36F21; font-weight: 700; }
                 .completed-row { background-color: #f0fdf4; }
-                .control-input { width: 100%; min-width: 150px; padding: 0.5rem; border-radius: 0.375rem; border: 1px solid #cbd5e1; }
+                .control-input { width: 100%; min-width: 150px; padding: 0.45rem; border-radius: 0.375rem; border: 1px solid #cbd5e1; font-size: 0.85rem; }
                 .control-input:disabled { background-color: #e5e7eb; cursor: not-allowed; }
                 .actions-cell { display: flex; gap: 0.5rem; }
-                .action-btn { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border-radius: 0.375rem; border: none; font-weight: 600; cursor: pointer; }
-                .view-btn { background-color: #eef2ff; color: #4338ca; }
-                .save-btn { background-color: #10b981; color: white; }
-                .save-btn:disabled { background-color: #a7f3d0; cursor: not-allowed; }
+                .action-btn { display: flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.85rem; border-radius: 0.375rem; border: none; font-weight: 600; cursor: pointer; font-size: 0.85rem; }
+                .view-btn { background-color: #002B5C; color: white; }
+                .view-btn:hover { background-color: #003875; }
+                .save-btn { background-color: #F36F21; color: white; }
+                .save-btn:hover { background-color: #d96419; }
+                .save-btn:disabled { background-color: #fbb88a; cursor: not-allowed; }
                 
-                .pagination-controls { display: flex; justify-content: center; align-items: center; gap: 1rem; margin-top: 1.5rem; }
-                .pagination-controls button { padding: 0.5rem 1rem; border: 1px solid #cbd5e1; background: white; border-radius: 0.5rem; cursor: pointer; }
-                .pagination-controls button:disabled { opacity: 0.5; cursor: not-allowed; }
+                .pagination-controls { display: flex; justify-content: center; align-items: center; gap: 1rem; margin: 1.5rem; }
+                .pagination-controls button { padding: 0.5rem 1rem; border: 1px solid #002B5C; background: white; color: #002B5C; border-radius: 0.375rem; cursor: pointer; font-weight: 600; }
+                .pagination-controls button:hover:not(:disabled) { background: #002B5C; color: white; }
+                .pagination-controls button:disabled { opacity: 0.4; cursor: not-allowed; }
+                .pagination-controls span { color: #002B5C; font-weight: 600; }
                 
-                .modal-overlay { position: fixed; inset: 0; background-color: rgba(17, 24, 39, 0.6); display: flex; justify-content: center; align-items: center; z-index: 1000; }
-                .modal-content { background: white; padding: 2rem; border-radius: 0.75rem; max-width: 600px; width: 100%; position: relative; }
-                .modal-close-btn { position: absolute; top: 1rem; right: 1rem; background: #f3f4f6; border: none; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; }
-                .modal-title { margin-top: 0; margin-bottom: 1.5rem; }
-                .modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
+                .modal-overlay { position: fixed; inset: 0; background-color: rgba(0, 43, 92, 0.7); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+                .modal-content { background: white; padding: 0; border-radius: 0.5rem; max-width: 600px; width: 90%; position: relative; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+                .modal-close-btn { position: absolute; top: 1rem; right: 1rem; background: #F36F21; color: white; border: none; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 10; }
+                .modal-close-btn:hover { background: #d96419; }
+                .modal-title { margin: 0; padding: 1.25rem 1.5rem; background: #002B5C; color: white; font-size: 1.25rem; font-weight: 700; border-radius: 0.5rem 0.5rem 0 0; }
+                .modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; padding: 1.5rem; }
+                .detail-item { display: flex; flex-direction: column; gap: 0.25rem; }
+                .detail-item strong { color: #002B5C; font-weight: 600; font-size: 0.85rem; }
                 .detail-item.full-width { grid-column: 1 / -1; }
-                .status-tag { padding: 0.2rem 0.6rem; border-radius: 99px; font-size: 0.8rem; font-weight: 600; text-transform: capitalize; }
-                .status-tag.confirmed { background-color: #e0e7ff; color: #4338ca; }
-                .status-tag.inprocess { background-color: #ffedd5; color: #c2410c; }
-                .status-tag.accepted { background-color: #fef3c7; color: #b45309; }
-                .status-tag.completed { background-color: #dcfce7; color: #166534; }
-                .product-list-title { margin-bottom: 0.5rem; font-weight: 600; }
-                .product-list { list-style-position: inside; padding: 0; margin: 0; }
+                .status-tag { padding: 0.35rem 0.75rem; border-radius: 99px; font-size: 0.85rem; font-weight: 600; text-transform: capitalize; display: inline-block; }
+                .status-tag.confirmed { background-color: #002B5C; color: white; }
+                .status-tag.inprocess { background-color: #F36F21; color: white; }
+                .status-tag.accepted { background-color: #fbbf24; color: #1e293b; }
+                .status-tag.completed { background-color: #10b981; color: white; }
+                .product-list-title { margin: 0 0 0.75rem 0; padding: 0 1.5rem; font-weight: 700; color: #002B5C; font-size: 1rem; }
+                .product-list { list-style-position: inside; padding: 0 1.5rem 1.5rem 1.5rem; margin: 0; }
+                .product-list li { padding: 0.5rem; background: #f8fafc; margin-bottom: 0.5rem; border-radius: 0.375rem; border-left: 3px solid #F36F21; }
             `}</style>
         </div>
     );

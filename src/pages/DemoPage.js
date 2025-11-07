@@ -11,14 +11,14 @@ import {
 } from 'react-icons/fa';
 import "../styles/DemoPage.css";
 
-// FIX: 'price' has been renamed to 'mrp' for consistency.
+// Fixed: 'price' has been renamed to 'mrp' for consistency
 const initialProduct = {
     selectedCompanyProduct: '',
     companyProductData: null,
     title: '',
     description: '',
     imageUrl: '',
-    mrp: '',
+    mrp: 0, // Changed from price to mrp
     about: '',
 };
 
@@ -83,18 +83,18 @@ const DemoPage = () => {
                         existing.products = [existing.product];
                         delete existing.product;
                     }
-                    
+
                     if (existing.products) {
                         existing.products = existing.products.map(product => ({
                             ...initialProduct,
                             ...product
                         }));
                     }
-                    
+
                     setFormData((prev) => deepMerge(initialForm, existing));
                     setIsDataSaved(true);
                 }
-                
+
                 await loadCompanyProducts();
             } catch (e) {
                 console.error('Failed to load existing data:', e);
@@ -112,11 +112,11 @@ const DemoPage = () => {
 
         if (formData.owner.name && formData.owner.name.trim()) completed.add('personal');
 
-        // FIX: Validation now checks for 'mrp' instead of 'price'.
+        // Fixed: Validation now checks for 'mrp' instead of 'price'
         if (formData.products.length > 0 && formData.products.every(p =>
-            (p.selectedCompanyProduct && p.selectedCompanyProduct.trim()) && 
-            (p.title && p.title.trim()) && 
-            (p.mrp && p.mrp.toString().trim()) && 
+            (p.selectedCompanyProduct && p.selectedCompanyProduct.trim()) &&
+            (p.title && p.title.trim()) &&
+            (p.mrp && p.mrp > 0) &&
             (p.description && p.description.trim())
         )) completed.add('products');
 
@@ -139,12 +139,15 @@ const DemoPage = () => {
             const snapshot = await get(productsRef);
             if (snapshot.exists()) {
                 const productsData = snapshot.val();
+                console.log('Raw products data from Firebase:', productsData);
                 const productsArray = Object.keys(productsData).map(key => ({
                     id: key,
                     ...productsData[key]
                 }));
+                console.log('Processed products array:', productsArray);
                 setCompanyProducts(productsArray);
             } else {
+                console.log('No products found in Firebase');
                 setCompanyProducts([]);
             }
         } catch (error) {
@@ -162,14 +165,24 @@ const DemoPage = () => {
 
     const handleProductChange = (index, field, value) => {
         const newProducts = [...formData.products];
-        
+
         if (!newProducts[index]) {
             newProducts[index] = { ...initialProduct };
         }
-        
+
         if (field === 'selectedCompanyProduct') {
             const selectedProduct = companyProducts.find(p => p.id === value);
-            // FIX: Automatically populates 'mrp' from the selected company product.
+            console.log('Selected Product:', selectedProduct);
+            console.log('Product Price:', selectedProduct?.price);
+            console.log('Product MRP:', selectedProduct?.mrp);
+            
+            // Fixed: Automatically populates 'mrp' from the selected company product
+            const rawPrice = selectedProduct ? (selectedProduct.mrp || selectedProduct.price) : null;
+            const productPrice = rawPrice ? parseFloat(rawPrice) : 0;
+            console.log('Raw Price:', rawPrice);
+            console.log('Final Price (converted):', productPrice);
+            console.log('Price type:', typeof productPrice);
+            
             newProducts[index] = {
                 ...initialProduct,
                 selectedCompanyProduct: value,
@@ -177,13 +190,18 @@ const DemoPage = () => {
                 title: selectedProduct ? selectedProduct.name || selectedProduct.title || '' : '',
                 imageUrl: selectedProduct ? (selectedProduct.imageUrls?.[0] || '') : '',
                 description: selectedProduct ? (selectedProduct.description || '') : '',
-                mrp: selectedProduct ? (selectedProduct.mrp || '') : '',
+                mrp: productPrice, // Fixed: Now uses mrp field consistently
             };
         } else if (field !== 'imageUrl') {
             newProducts[index] = { ...newProducts[index], [field]: value };
         }
-        
-        setFormData(prev => ({ ...prev, products: newProducts }));
+
+        setFormData(prev => {
+            const newFormData = { ...prev, products: newProducts };
+            console.log('Updated form data:', newFormData);
+            console.log('Updated product at index', index, ':', newProducts[index]);
+            return newFormData;
+        });
     };
 
     const addProduct = () => {
@@ -205,7 +223,7 @@ const DemoPage = () => {
         }));
         showToast('success', 'Product removed successfully');
     };
-    
+
     const handlePreview = () => {
         if (!isDataSaved) {
             showToast('error', 'Please save your data first to preview your site');
@@ -233,11 +251,11 @@ const DemoPage = () => {
             return false;
         }
 
-        // FIX: Validation now checks 'mrp'.
+        // Fixed: Validation now checks 'mrp'
         const hasInvalidProduct = formData.products.some(p =>
-            !(p.selectedCompanyProduct && p.selectedCompanyProduct.trim()) || 
-            !(p.title && p.title.trim()) || 
-            !(p.mrp && p.mrp.toString().trim()) || 
+            !(p.selectedCompanyProduct && p.selectedCompanyProduct.trim()) ||
+            !(p.title && p.title.trim()) ||
+            !(p.mrp && p.mrp > 0) ||
             !(p.description && p.description.trim())
         );
         if (hasInvalidProduct) {
@@ -481,7 +499,11 @@ const DemoPage = () => {
                                             <label>Select Company Product *</label>
                                             <select
                                                 value={product.selectedCompanyProduct}
-                                                onChange={(e) => handleProductChange(index, 'selectedCompanyProduct', e.target.value)}
+                                                onChange={(e) => {
+                                                    console.log('Dropdown changed to:', e.target.value);
+                                                    console.log('Available company products:', companyProducts);
+                                                    handleProductChange(index, 'selectedCompanyProduct', e.target.value);
+                                                }}
                                                 required
                                                 className="demo-product-select"
                                             >
@@ -517,18 +539,18 @@ const DemoPage = () => {
                                                     required
                                                 />
                                             </div>
-                                            {/* FIX: Input field now correctly uses 'mrp' and is read-only */}
+                                            {/* Fixed: Input field now correctly uses 'mrp' and displays properly */}
                                             <div className="demo-input-group">
                                                 <label>Product Price (MRP) *</label>
                                                 <input
                                                     type="number"
                                                     placeholder="0"
-                                                    value={product.mrp}
+                                                    value={product.mrp || 0}
                                                     readOnly
                                                     className="demo-readonly-input"
                                                     required
                                                 />
-                                                 <small className="demo-field-hint">Price is set from company product MRP.</small>
+                                                <small className="demo-field-hint">Price is set from company product MRP.</small>
                                             </div>
                                         </div>
 
@@ -547,9 +569,9 @@ const DemoPage = () => {
                                             <small className="demo-field-hint">Image automatically loaded from selected company product</small>
                                             {product.imageUrl && (
                                                 <div className="demo-image-preview">
-                                                    <img 
-                                                        src={product.imageUrl} 
-                                                        alt="Product preview" 
+                                                    <img
+                                                        src={product.imageUrl}
+                                                        alt="Product preview"
                                                         className="demo-product-image-preview"
                                                         onError={(e) => {
                                                             e.target.style.display = 'none';

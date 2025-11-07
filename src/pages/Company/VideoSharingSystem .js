@@ -1,14 +1,13 @@
 import React, { useState, useEffect, createContext, useContext, useRef } from 'react';
 import { ref as dbRef, push, onValue, update, remove } from 'firebase/database';
-import { database } from '../../firebase/config'; // Ensure this path is correct
-import { FaPlay, FaPlus, FaTrash, FaEdit, FaEye, FaYoutube, FaCalendarAlt, FaUser, FaClock } from 'react-icons/fa';
+import { database } from '../../firebase/config'; 
+import { 
+    FaPlay, FaPlus, FaTrash, FaYoutube, FaUser
+} from 'react-icons/fa';
 
-// --- CONTEXT AND PROVIDER (Corrected Structure) ---
-
-// Create context for managing video players
+// ====================== CONTEXT ======================
 const VideoPlayerContext = createContext(null);
 
-// Hook to use the video player context
 export const useVideoPlayer = () => {
     const context = useContext(VideoPlayerContext);
     if (!context) {
@@ -17,7 +16,6 @@ export const useVideoPlayer = () => {
     return context;
 };
 
-// Provider component to manage all video players
 export const VideoPlayerProvider = ({ children }) => {
     const [currentPlayingVideo, setCurrentPlayingVideo] = useState(null);
     const videoPlayersRef = useRef({});
@@ -31,14 +29,13 @@ export const VideoPlayerProvider = ({ children }) => {
     };
 
     const playVideo = (videoId) => {
-        // Stop the previously playing video
+        // Stop previously playing video
         if (currentPlayingVideo && currentPlayingVideo !== videoId) {
             const previousPlayer = videoPlayersRef.current[currentPlayingVideo];
             if (previousPlayer && previousPlayer.stopPlayer) {
                 previousPlayer.stopPlayer();
             }
         }
-        // Set the new video as the one playing
         setCurrentPlayingVideo(videoId);
     };
     
@@ -57,26 +54,17 @@ export const VideoPlayerProvider = ({ children }) => {
     );
 };
 
-
-// --- VIDEO CARD COMPONENT ---
-
+// ====================== VIDEO CARD ======================
 const VideoCard = ({ video, isAdmin, onDelete, onPlay }) => {
     const [showPlayer, setShowPlayer] = useState(false);
     const { currentPlayingVideo, playVideo, stopVideo, registerPlayer, unregisterPlayer } = useVideoPlayer();
 
-    // Effect to register and unregister player controls
     useEffect(() => {
-        const playerControls = {
-            stopPlayer: () => setShowPlayer(false)
-        };
+        const playerControls = { stopPlayer: () => setShowPlayer(false) };
         registerPlayer(video.id, playerControls);
-
-        return () => {
-            unregisterPlayer(video.id);
-        };
+        return () => unregisterPlayer(video.id);
     }, [video.id, registerPlayer, unregisterPlayer]);
 
-    // Effect to close this player if another one starts
     useEffect(() => {
         if (currentPlayingVideo !== video.id && showPlayer) {
             setShowPlayer(false);
@@ -86,7 +74,7 @@ const VideoCard = ({ video, isAdmin, onDelete, onPlay }) => {
     const handlePlay = () => {
         playVideo(video.id);
         setShowPlayer(true);
-        onPlay(video.id); // To increment views
+        onPlay(video.id); // increment views
     };
 
     const handleStop = () => {
@@ -94,23 +82,29 @@ const VideoCard = ({ video, isAdmin, onDelete, onPlay }) => {
         setShowPlayer(false);
     };
 
-    // Placeholder for other state logic from your file
-    const watchProgress = 0; // Replace with your state logic if needed
+    const watchProgress = 0; // hook in progress tracking later if needed
 
     return (
         <div className="video-card">
             {!showPlayer ? (
                 <div className="video-thumbnail" onClick={handlePlay}>
-                    <img src={video.thumbnail} alt={video.title} onError={(e) => { e.target.src = `https://img.youtube.com/vi/${video.videoId}/hqdefault.jpg`; }} />
-                    <div className="play-overlay">
-                        <FaPlay className="play-icon" />
-                    </div>
+                    <img 
+                        src={video.thumbnail} 
+                        alt={video.title} 
+                        onError={(e) => { 
+                            e.target.src = `https://img.youtube.com/vi/${video.videoId}/hqdefault.jpg`; 
+                        }} 
+                    />
+                    <div className="play-overlay"><FaPlay className="play-icon" /></div>
                     {watchProgress > 0 && (
-                         <div className="thumbnail-progress">
+                        <div className="thumbnail-progress">
                             <div className="thumbnail-progress-bar">
-                                <div className="thumbnail-progress-fill" style={{ width: `${watchProgress}%` }}></div>
+                                <div 
+                                    className="thumbnail-progress-fill" 
+                                    style={{ width: `${watchProgress}%` }} 
+                                />
                             </div>
-                         </div>
+                        </div>
                     )}
                 </div>
             ) : (
@@ -128,9 +122,9 @@ const VideoCard = ({ video, isAdmin, onDelete, onPlay }) => {
                 </div>
             )}
             <div className="video-info">
-                 <h3 className="video-title">{video.title}</h3>
-                 <p className="video-description">{video.description}</p>
-                 <div className="video-footer">
+                <h3 className="video-title">{video.title}</h3>
+                <p className="video-description">{video.description}</p>
+                <div className="video-footer">
                     <div className="shared-by">
                         <FaUser /> <span>Shared by {video.sharedByName}</span>
                     </div>
@@ -141,15 +135,13 @@ const VideoCard = ({ video, isAdmin, onDelete, onPlay }) => {
                             </button>
                         </div>
                     )}
-                 </div>
+                </div>
             </div>
         </div>
     );
 };
 
-
-// --- MAIN VIDEO SHARING COMPONENT ---
-
+// ====================== MAIN COMPONENT ======================
 const VideoSharingSystem = () => {
     const [videos, setVideos] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -168,7 +160,7 @@ const VideoSharingSystem = () => {
     }, []);
 
     const loadVideos = () => {
-        const videosRef = dbRef(database, 'HTAMStrainingVideos');
+        const videosRef = dbRef(database, 'HTAMS/trainingVideos'); // ✅ Correct path
         onValue(videosRef, (snapshot) => {
             const data = snapshot.val();
             if (data) {
@@ -200,7 +192,6 @@ const VideoSharingSystem = () => {
         
         setLoading(true);
         const videoData = {
-            // ... your video data object
             title: newVideo.title,
             description: newVideo.description,
             youtubeUrl: newVideo.youtubeUrl,
@@ -208,14 +199,14 @@ const VideoSharingSystem = () => {
             thumbnail: getYouTubeThumbnail(videoId),
             embedUrl: getYouTubeEmbedUrl(videoId),
             category: newVideo.category,
-            sharedBy: user.uid,
-            sharedByName: user.name || 'Admin',
+            sharedBy: user?.uid || 'system',
+            sharedByName: user?.name || 'Admin',
             createdAt: new Date().toISOString(),
             views: 0
         };
         
         try {
-            await push(dbRef(database, 'HTAMStrainingVideos'), videoData);
+            await push(dbRef(database, 'HTAMS/trainingVideos'), videoData); // ✅ Correct path
             alert('Video shared successfully!');
             setShowAddForm(false);
             setNewVideo({ title: '', description: '', youtubeUrl: '', category: 'General' });
@@ -229,14 +220,14 @@ const VideoSharingSystem = () => {
 
     const deleteVideo = async (videoId) => {
         if (!window.confirm('Are you sure you want to delete this video?')) return;
-        await remove(dbRef(database, `HTAMStrainingVideos/${videoId}`));
+        await remove(dbRef(database, `HTAMS/trainingVideos/${videoId}`)); // ✅ Correct path
         alert('Video deleted.');
     };
 
     const incrementViews = async (videoId) => {
         const video = videos.find(v => v.id === videoId);
         if (video) {
-            await update(dbRef(database, `HTAMStrainingVideos/${videoId}`), {
+            await update(dbRef(database, `HTAMS/trainingVideos/${videoId}`), { // ✅ Correct path
                 views: (video.views || 0) + 1
             });
         }
@@ -245,78 +236,111 @@ const VideoSharingSystem = () => {
     const categories = ['General', 'Training', 'Product Demo', 'Company News', 'Tutorial', 'Webinar'];
 
     return (
-        <div className="video-sharing-container">
-            <div className="header">
-                <h1><FaYoutube className="youtube-icon" /> Shared Training Videos</h1>
-                <p>Watch training videos and tutorials shared by our team</p>
-                {isAdmin && (
-                    <button className="add-video-btn" onClick={() => setShowAddForm(!showAddForm)}>
-                        <FaPlus /> {showAddForm ? 'Close Form' : 'Share New Video'}
-                    </button>
-                )}
-            </div>
-
-            {isAdmin && showAddForm && (
-                <div className="add-video-form">
-                    <h3>Share New Video</h3>
-                     <div className="form-grid">
-                        <div className="form-group"><label>Video Title</label><input type="text" value={newVideo.title} onChange={(e) => handleInputChange('title', e.target.value)} /></div>
-                        <div className="form-group"><label>Category</label><select value={newVideo.category} onChange={(e) => handleInputChange('category', e.target.value)}>{categories.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-                        <div className="form-group full-width"><label>YouTube URL</label><input type="url" value={newVideo.youtubeUrl} onChange={(e) => handleInputChange('youtubeUrl', e.target.value)} /></div>
-                        <div className="form-group full-width"><label>Description</label><textarea value={newVideo.description} onChange={(e) => handleInputChange('description', e.target.value)} rows="3"></textarea></div>
-                     </div>
-                     <div className="form-actions">
-                        <button className="cancel-btn" onClick={() => setShowAddForm(false)}>Cancel</button>
-                        <button className="share-btn" onClick={shareVideo} disabled={loading}>{loading ? 'Sharing...' : 'Share Video'}</button>
-                     </div>
+        <VideoPlayerProvider>
+            <div className="video-sharing-container">
+                <div className="header">
+                    <h1><FaYoutube className="youtube-icon" /> Shared Training Videos</h1>
+                    <p>Watch training videos and tutorials shared by our team</p>
+                    {isAdmin && (
+                        <button className="add-video-btn" onClick={() => setShowAddForm(!showAddForm)}>
+                            <FaPlus /> {showAddForm ? 'Close Form' : 'Share New Video'}
+                        </button>
+                    )}
                 </div>
-            )}
 
-            <div className="videos-grid">
-                {videos.length > 0 ? (
-                    videos.map(video => (
-                        <VideoCard
-                            key={video.id}
-                            video={video}
-                            isAdmin={isAdmin}
-                            onDelete={deleteVideo}
-                            onPlay={incrementViews}
-                        />
-                    ))
-                ) : (
-                    <div className="no-videos">
-                        <FaYoutube className="no-videos-icon" />
-                        <p>No videos have been shared yet.</p>
+                {isAdmin && showAddForm && (
+                    <div className="add-video-form">
+                        <h3>Share New Video</h3>
+                        <div className="form-grid">
+                            <div className="form-group">
+                                <label>Video Title</label>
+                                <input 
+                                    type="text" 
+                                    value={newVideo.title} 
+                                    onChange={(e) => handleInputChange('title', e.target.value)} 
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label>Category</label>
+                                <select 
+                                    value={newVideo.category} 
+                                    onChange={(e) => handleInputChange('category', e.target.value)}
+                                >
+                                    {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                            </div>
+                            <div className="form-group full-width">
+                                <label>YouTube URL</label>
+                                <input 
+                                    type="url" 
+                                    value={newVideo.youtubeUrl} 
+                                    onChange={(e) => handleInputChange('youtubeUrl', e.target.value)} 
+                                />
+                            </div>
+                            <div className="form-group full-width">
+                                <label>Description</label>
+                                <textarea 
+                                    value={newVideo.description} 
+                                    onChange={(e) => handleInputChange('description', e.target.value)} 
+                                    rows="3"
+                                />
+                            </div>
+                        </div>
+                        <div className="form-actions">
+                            <button className="cancel-btn" onClick={() => setShowAddForm(false)}>Cancel</button>
+                            <button className="share-btn" onClick={shareVideo} disabled={loading}>
+                                {loading ? 'Sharing...' : 'Share Video'}
+                            </button>
+                        </div>
                     </div>
                 )}
+
+                <div className="videos-grid">
+                    {videos.length > 0 ? (
+                        videos.map(video => (
+                            <VideoCard
+                                key={video.id}
+                                video={video}
+                                isAdmin={isAdmin}
+                                onDelete={deleteVideo}
+                                onPlay={incrementViews}
+                            />
+                        ))
+                    ) : (
+                        <div className="no-videos">
+                            <FaYoutube className="no-videos-icon" />
+                            <p>No videos have been shared yet.</p>
+                        </div>
+                    )}
+                </div>
+
+                {/* ===== Styles ===== */}
+                <style jsx>{`
+                    .video-sharing-container { background-color: #ffffffff; color: #010407ff; min-height: 100vh; padding: 20px; }
+                    .header { text-align: center; margin-bottom: 30px; }
+                    .youtube-icon { color: #ff0000; }
+                    .add-video-btn { background: linear-gradient(135deg, #ff0000, #cc0000); color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; }
+                    .add-video-form { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 24px; margin-bottom: 30px; }
+                    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+                    .form-group.full-width { grid-column: 1 / -1; }
+                    .videos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 24px; }
+                    .no-videos { text-align: center; grid-column: 1 / -1; }
+                    .video-card { background: #1e293b; border-radius: 12px; overflow: hidden; border: 1px solid #334155; }
+                    .video-thumbnail { position: relative; cursor: pointer; }
+                    .video-thumbnail img { width: 100%; height: 200px; object-fit: cover; }
+                    .play-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+                    .video-player { }
+                    .iframe-container { position: relative; padding-top: 56.25%; height: 0; }
+                    .iframe-container iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+                    .video-info { padding: 16px; }
+                    .video-title { font-size: 1.1rem; margin-bottom: 8px; }
+                    .video-description { font-size: 14px; color: #94a3b8; }
+                    .video-footer { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; border-top: 1px solid #475569; margin-top: 12px; }
+                    .shared-by { font-size: 12px; color: #94a3b8; }
+                    .delete-btn { background: #7f1d1d; color: #fca5a5; border: none; border-radius: 6px; cursor: pointer; }
+                `}</style>
             </div>
-            
-            <style jsx>{`
-                /* Paste all your <style jsx> content here */
-                .video-sharing-container { background-color: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 20px; }
-                .header { text-align: center; margin-bottom: 30px; }
-                .youtube-icon { color: #ff0000; }
-                .add-video-btn { background: linear-gradient(135deg, #ff0000, #cc0000); color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; }
-                .add-video-form { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 24px; margin-bottom: 30px; }
-                .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-                .form-group.full-width { grid-column: 1 / -1; }
-                .videos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 24px; }
-                .no-videos { text-align: center; grid-column: 1 / -1; }
-                .video-card { background: #1e293b; border-radius: 12px; overflow: hidden; border: 1px solid #334155; }
-                .video-thumbnail { position: relative; cursor: pointer; }
-                .video-thumbnail img { width: 100%; height: 200px; object-fit: cover; }
-                .play-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); /* ... */ }
-                .video-player { /* ... */ }
-                .iframe-container { position: relative; padding-top: 56.25%; height: 0; }
-                .iframe-container iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-                .video-info { padding: 16px; }
-                .video-title { font-size: 1.1rem; margin-bottom: 8px; }
-                .video-description { font-size: 14px; color: #94a3b8; }
-                .video-footer { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; border-top: 1px solid #475569; margin-top: 12px; }
-                .shared-by { font-size: 12px; color: #94a3b8; }
-                .delete-btn { background: #7f1d1d; color: #fca5a5; border: none; border-radius: 6px; cursor: pointer; }
-            `}</style>
-        </div>
+        </VideoPlayerProvider>
     );
 };
 

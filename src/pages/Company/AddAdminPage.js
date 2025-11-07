@@ -23,7 +23,7 @@ import {
   FiSearch
 } from 'react-icons/fi';
 
-const MODULES = ['orders', 'customers', 'total-trainings', 'employees', 'sales-dashboard', 'products', 'users','levels'];
+const MODULES = ['orders', 'customers', 'total-trainings', 'employees', 'sales-dashboard', 'products', 'users','levels','document-verification','withdraw-requests'];
 
 const makeDefaultPermissions = () =>
   MODULES.reduce((acc, mod) => ({ ...acc, [mod]: { read: false, write: false, delete: false, add: false } }), {});

@@ -9,7 +9,7 @@
 
 /* Sidebar Styles */
 .dashboard-sidebar {
-  background: linear-gradient(180deg, #1a202c 0%, #2d3748 100%);
+  background: var(--mobile-bg-primary);
   color: #fff;
   width: min(260px, 25vw);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -58,6 +58,7 @@
 .dashboard-title {
   font-size: 1.6rem;
   font-weight: 700;
+  color: #ffffff;
   background: linear-gradient(45deg, #667eea, #764ba2);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -100,14 +101,14 @@
 }
 
 .dashboard-link.active {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--mobile-bg-two);
   color: #fff;
   box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
   transform: translateY(-2px);
 }
 
 .dashboard-link:hover {
-  background: linear-gradient(45deg, #667eea, #764ba2);
+  background: var(--mobile-bg-two);
   color: #fff;
   transform: translateX(4px);
 }

@@ -10,6 +10,7 @@ import {
   Bar,
   XAxis,
   YAxis,
+  CartesianGrid,
   Tooltip,
   ResponsiveContainer,
   PieChart,
@@ -18,10 +19,11 @@ import {
   Legend,
   LineChart,
   Line,
+  Area,
+  AreaChart
 } from 'recharts';
 import '../../styles/CompanyDashboard.css';
 
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
 const CompanyDashboard = () => {
   const navigate = useNavigate();
@@ -49,7 +51,6 @@ const CompanyDashboard = () => {
     paymentOnline: 0,
     paymentCard: 0,
   });
-  const [orderTrends, setOrderTrends] = useState([]);
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
@@ -470,29 +471,40 @@ const CompanyDashboard = () => {
 
   
    const cards = [
-    { name: 'Customers', value: stats.customers, color: '#3b82f6', icon: '👥' },
-    { name: 'Orders', value: stats.orders, color: '#10b981', icon: '📦' },
-    { name: 'Employees', value: stats.employees, color: '#f59e0b', icon: '👨‍💼' },
-    { name: 'Trainers', value: stats.trainers, color: '#8b5cf6', icon: '🎓' },
-    { name: 'Products', value: stats.products, color: '#ef4444', icon: '🛍️' },
-    { name: 'Services', value: stats.services, color: '#06b6d4', icon: '⚙️' },
-    { name: 'Trainings', value: stats.trainings, color: '#84cc16', icon: '📚' },
-    { name: 'Joined Trainings', value: stats.joinedTrainings, color: '#ec4899', icon: '🎯' },
+    { name: 'Customers', value: stats.customers, color: '#2563eb' },
+    { name: 'Orders', value: stats.orders, color: '#059669' },
+    { name: 'Employees', value: stats.employees, color: '#dc2626' },
+    { name: 'Trainers', value: stats.trainers, color: '#7c3aed' },
+    { name: 'Products', value: stats.products, color: '#ea580c' },
+    { name: 'Services', value: stats.services, color: '#0891b2' },
+    { name: 'Trainings', value: stats.trainings, color: '#65a30d' },
+    { name: 'Joined Trainings', value: stats.joinedTrainings, color: '#c2410c' },
   ];
 
+  // Chart data
   const chartData = [
-    { name: 'Pending', value: stats.pending },
-    { name: 'Confirmed', value: stats.confirmed },
-    { name: 'In-Progress', value: stats.inProgress },
-    { name: 'Completed', value: stats.completed },
-    { name: 'Cancelled', value: stats.cancelled },
+    { name: 'Pending', value: stats.pending || 0 },
+    { name: 'Confirmed', value: stats.confirmed || 0 },
+    { name: 'Completed', value: stats.completed || 0 },
+    { name: 'Cancelled', value: stats.cancelled || 0 },
   ];
 
-  const paymentData = [
-    { name: 'Cash', value: stats.paymentCash },
-    { name: 'Online', value: stats.paymentOnline },
-    { name: 'Card', value: stats.paymentCard },
+  const revenueData = [
+    { month: 'Jan', revenue: 45000 },
+    { month: 'Feb', revenue: 52000 },
+    { month: 'Mar', revenue: 48000 },
+    { month: 'Apr', revenue: 61000 },
+    { month: 'May', revenue: 55000 },
+    { month: 'Jun', revenue: 67000 },
   ];
+
+  const metricsData = [
+    { category: 'Customers', current: stats.customers || 0, target: 50 },
+    { category: 'Orders', current: stats.orders || 0, target: 100 },
+    { category: 'Products', current: stats.products || 0, target: 25 },
+    { category: 'Services', current: stats.services || 0, target: 15 },
+  ];
+
 
  const renderRowDetailModal = () => {
     if (!selectedRow) return null;
@@ -795,140 +807,170 @@ const CompanyDashboard = () => {
             </div>
           </div> */}
 
-          {/* Stats Cards Grid */}
-          <div className="metrics-grid">
-            {cards.map((card) => (
-              <div
-                key={card.name}
-                className="metric-card"
-                onClick={() => handleCardClick(card.name)}
-                style={{ '--card-color': card.color }}
-              >
-                <div className="card-icon" style={{ background: card.color }}>
-                  {card.icon}
+          {/* Enhanced Stats Cards Grid */}
+          <div className="stats-overview">
+            <div className="stats-header">
+              <h2 className="stats-title">📊 Business Overview</h2>
+              <p className="stats-subtitle">Real-time business metrics and analytics</p>
+            </div>
+            
+            <div className="metrics-grid">
+              {cards.map((card, index) => (
+                <div
+                  key={card.name}
+                  className="metric-card"
+                  onClick={() => handleCardClick(card.name)}
+                  style={{ 
+                    '--card-color': card.color,
+                    '--animation-delay': `${index * 0.1}s`
+                  }}
+                >
+                  <div className="card-header">
+                    <div className="card-trend">
+                      <span className="trend-indicator positive">↗</span>
+                    </div>
+                  </div>
+                  
+                  <div className="card-content">
+                    <div className="card-value">{card.value.toLocaleString()}</div>
+                    <div className="card-label">{card.name}</div>
+                    <div className="card-progress">
+                      <div className="progress-bar" style={{ backgroundColor: card.color, width: '75%' }}></div>
+                    </div>
+                  </div>
+                  
+                  <div className="card-footer">
+                    <span className="view-details">View Details</span>
+                    <div className="card-arrow">→</div>
+                  </div>
                 </div>
-                <div className="card-content">
-                  <div className="card-value">{card.value.toLocaleString()}</div>
-                  <div className="card-label">{card.name}</div>
-                </div>
-                <div className="card-arrow">→</div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
 
-          {/* Charts Section */}
-          <div className="charts-grid">
+          {/* Professional Charts Section */}
+          <div className="charts-section">
+            <div className="charts-grid">
+              
+              {/* Order Status Overview */}
+              <div className="chart-card">
+                <div className="chart-header">
+                  <h3 className="chart-title">Order Status Distribution</h3>
+                  <p className="chart-subtitle">Current order status breakdown</p>
+                </div>
+                <div className="chart-content">
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <XAxis 
+                        dataKey="name" 
+                        tick={{ fill: '#64748b', fontSize: 12 }}
+                        axisLine={{ stroke: '#e2e8f0' }}
+                      />
+                      <YAxis 
+                        tick={{ fill: '#64748b', fontSize: 12 }}
+                        axisLine={{ stroke: '#e2e8f0' }}
+                      />
+                      <Tooltip 
+                        contentStyle={{
+                          backgroundColor: '#ffffff',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                        }}
+                      />
+                      <Bar 
+                        dataKey="value" 
+                        fill="#3b82f6" 
+                        radius={[4, 4, 0, 0]}
+                        name="Orders"
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
 
-            {/* Order Status Chart */}
-            <div className="chart-container">
-              <div className="chart-header">
-                <h3>📊 Order Status Overview</h3>
-                <p>Distribution of order statuses</p>
+              {/* Revenue Trends */}
+              <div className="chart-card">
+                <div className="chart-header">
+                  <h3 className="chart-title">Revenue Trends</h3>
+                  <p className="chart-subtitle">Monthly performance overview</p>
+                </div>
+                <div className="chart-content">
+                  <ResponsiveContainer width="100%" height={280}>
+                    <AreaChart data={revenueData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                      <defs>
+                        <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#059669" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#059669" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <XAxis 
+                        dataKey="month" 
+                        tick={{ fill: '#64748b', fontSize: 12 }}
+                        axisLine={{ stroke: '#e2e8f0' }}
+                      />
+                      <YAxis 
+                        tick={{ fill: '#64748b', fontSize: 12 }}
+                        axisLine={{ stroke: '#e2e8f0' }}
+                      />
+                      <Tooltip 
+                        contentStyle={{
+                          backgroundColor: '#ffffff',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                        }}
+                        formatter={(value) => [`₹${value.toLocaleString()}`, 'Revenue']}
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="revenue" 
+                        stroke="#059669" 
+                        strokeWidth={3}
+                        fillOpacity={1} 
+                        fill="url(#colorRevenue)" 
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
-              <div className="chart-content">
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={chartData}>
-                    <XAxis
-                      dataKey="name"
-                      tick={{ fill: '#94a3b8', fontSize: 12 }}
-                      axisLine={{ stroke: '#334155' }}
-                    />
-                    <YAxis
-                      allowDecimals={false}
-                      tick={{ fill: '#94a3b8', fontSize: 12 }}
-                      axisLine={{ stroke: '#334155' }}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#1e293b',
-                        border: '1px solid #334155',
-                        borderRadius: '8px',
-                        color: '#e2e8f0'
-                      }}
-                    />
-                    <Bar
-                      dataKey="value"
-                      fill="#3b82f6"
-                      radius={[4, 4, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
 
-            {/* Payment Methods Chart */}
-            <div className="chart-container">
-              <div className="chart-header">
-                <h3>💳 Payment Methods</h3>
-                <p>Payment distribution analysis</p>
+              {/* Business Metrics Overview */}
+              <div className="chart-card full-width">
+                <div className="chart-header">
+                  <h3 className="chart-title">Business Metrics Comparison</h3>
+                  <p className="chart-subtitle">Key performance indicators</p>
+                </div>
+                <div className="chart-content">
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={metricsData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <XAxis 
+                        dataKey="category" 
+                        tick={{ fill: '#64748b', fontSize: 12 }}
+                        axisLine={{ stroke: '#e2e8f0' }}
+                      />
+                      <YAxis 
+                        tick={{ fill: '#64748b', fontSize: 12 }}
+                        axisLine={{ stroke: '#e2e8f0' }}
+                      />
+                      <Tooltip 
+                        contentStyle={{
+                          backgroundColor: '#ffffff',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                        }}
+                      />
+                      <Bar dataKey="current" fill="#3b82f6" name="Current" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="target" fill="#e2e8f0" name="Target" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
-              <div className="chart-content">
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={paymentData}
-                      dataKey="value"
-                      nameKey="name"
-                      outerRadius={100}
-                      label
-                    >
-                      {paymentData.map((entry, index) => (
-                        <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Legend
-                      wrapperStyle={{ color: '#94a3b8' }}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#1e293b',
-                        border: '1px solid #334155',
-                        borderRadius: '8px',
-                        color: '#e2e8f0'
-                      }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
 
-            {/* Order Trends Chart */}
-            <div className="chart-container full-width">
-              <div className="chart-header">
-                <h3>📈 Order Trends</h3>
-                <p>Orders over time analysis</p>
-              </div>
-              <div className="chart-content">
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={orderTrends}>
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fill: '#94a3b8', fontSize: 12 }}
-                      axisLine={{ stroke: '#334155' }}
-                    />
-                    <YAxis
-                      allowDecimals={false}
-                      tick={{ fill: '#94a3b8', fontSize: 12 }}
-                      axisLine={{ stroke: '#334155' }}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#1e293b',
-                        border: '1px solid #334155',
-                        borderRadius: '8px',
-                        color: '#e2e8f0'
-                      }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="orders"
-                      stroke="#10b981"
-                      strokeWidth={3}
-                      dot={{ fill: '#10b981', strokeWidth: 2, r: 4 }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
             </div>
           </div>
 
@@ -1030,62 +1072,216 @@ const styles = `
   //   // color: var(--white);
   // }
 
-  /* Metrics Cards */
+  /* Stats Overview Section */
+  .stats-overview {
+    margin-bottom: 2rem;
+  }
+  
+  .stats-header {
+    text-align: center;
+    margin-bottom: 1.5rem;
+  }
+  
+  .stats-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0 0 0.375rem 0;
+  }
+  
+  .stats-subtitle {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    margin: 0;
+  }
+
+  /* Enhanced Metrics Cards - Compact Design */
   .metrics-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.875rem;
+    margin-bottom: 1.5rem;
+  }
+  
+  .metric-card {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    border-radius: 12px;
+    padding: 0.75rem;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 1px solid #e2e8f0;
+    position: relative;
+    overflow: hidden;
+    animation: slideInUp 0.6s ease-out var(--animation-delay, 0s) both;
+    min-height: 100px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  }
+  
+  @keyframes slideInUp {
+    from {
+      opacity: 0;
+      transform: translateY(30px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  .metric-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--card-color), var(--card-color)aa);
+  }
+  
+  .metric-card:hover {
+    transform: translateY(-4px) scale(1.01);
+    box-shadow: 0 8px 16px rgba(0,0,0,0.1), 0 4px 8px rgba(0,0,0,0.06);
+    border-color: var(--card-color);
+  }
+  
+  .card-header {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    margin-bottom: 0.5rem;
+  }
+  
+  .card-trend {
+    display: flex;
+    align-items: center;
+  }
+  
+  .trend-indicator {
+    font-size: 1rem;
+    font-weight: 600;
+  }
+  
+  .trend-indicator.positive {
+    color: #059669;
+  }
+  
+  .card-content {
+    margin-bottom: 0.5rem;
+  }
+  
+  .card-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1;
+    margin-bottom: 0.125rem;
+  }
+  
+  .card-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 0.375rem;
+  }
+  
+  .card-progress {
+    width: 100%;
+    height: 3px;
+    background-color: #f1f5f9;
+    border-radius: 1.5px;
+    overflow: hidden;
+  }
+  
+  .progress-bar {
+    height: 100%;
+    border-radius: 1.5px;
+    transition: width 0.8s ease-out;
+    opacity: 0.8;
+  }
+  
+  .card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid #f1f5f9;
+  }
+  
+  .view-details {
+    font-size: 0.65rem;
+    color: var(--card-color);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  
+  .card-arrow {
+    font-size: 1rem;
+    color: var(--card-color);
+    transition: transform 0.3s ease;
+    font-weight: 600;
+  }
+  
+  .metric-card:hover .card-arrow {
+    transform: translateX(4px);
+  }
+
+  /* Charts Section */
+  .charts-section {
+    margin-top: 2rem;
+  }
+
+  .charts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
     gap: 1.5rem;
     margin-bottom: 2rem;
   }
-  .metric-card {
-    display: flex;
-    align-items: center;
-    background-color: var(--bg-card);
-    padding: 1.5rem;
-    border-radius: var(--border-radius);
-    box-shadow: var(--box-shadow);
-    cursor: pointer;
-    transition: transform var(--transition-speed), box-shadow var(--transition-speed);
-    border-left: 5px solid var(--card-color, var(--primary-color));
-  }
-  .metric-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
-  }
-  .card-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    font-size: 1.5rem;
-    margin-right: 1rem;
-  }
-  .card-content { flex-grow: 1; }
-  .card-value { font-size: 2rem; font-weight: 700; color: var(--text-primary); }
-  .card-label { font-size: 1rem; color: var(--text-muted); }
-  .card-arrow { font-size: 1.5rem; color: var(--text-muted); transition: transform var(--transition-speed); }
-  .metric-card:hover .card-arrow { transform: translateX(5px); }
 
-  /* Charts */
-  .charts-grid {
-    display: grid;
-    /* Use a smaller min value for better mobile support */
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    gap: 1.5rem;
-  }
-  .chart-container {
-    background-color: var(--bg-card);
+  .chart-card {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    border-radius: 12px;
     padding: 1.5rem;
-    border-radius: var(--border-radius);
-    box-shadow: var(--box-shadow);
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+    transition: all 0.3s ease;
   }
-  .chart-container.full-width { grid-column: 1 / -1; }
-  .chart-header { margin-bottom: 1.5rem; }
-  .chart-header h3 { margin: 0; font-size: 1.25rem; color: var(--text-primary); }
-  .chart-header p { margin: 0.25rem 0 0; color: var(--text-muted); }
+
+  .chart-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
+  }
+
+  .chart-card.full-width {
+    grid-column: 1 / -1;
+  }
+
+  .chart-header {
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid #f1f5f9;
+    padding-bottom: 1rem;
+  }
+
+  .chart-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #1e293b;
+    margin: 0 0 0.25rem 0;
+  }
+
+  .chart-subtitle {
+    font-size: 0.875rem;
+    color: #64748b;
+    margin: 0;
+  }
+
+  .chart-content {
+    position: relative;
+  }
+
 
   /* Modal Styles */
   .modal-overlay {
@@ -1218,9 +1414,26 @@ const styles = `
     .dashboard-title {
       font-size: 1.75rem;
     }
+    .stats-title {
+      font-size: 1.5rem;
+    }
+    .metrics-grid {
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 0.75rem;
+    }
     .charts-grid {
-      /* Stack charts vertically on smaller screens */
       grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+    .chart-card {
+      padding: 1rem;
+    }
+    .metric-card {
+      padding: 0.625rem;
+      min-height: 90px;
+    }
+    .card-value {
+      font-size: 1.25rem;
     }
     .modal-header {
         padding: 1rem;
@@ -1235,11 +1448,38 @@ const styles = `
     .dashboard-main {
       padding: 1rem;
     }
+    .stats-title {
+      font-size: 1.25rem;
+    }
+    .metrics-grid {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.625rem;
+    }
+    .charts-grid {
+      grid-template-columns: 1fr;
+      gap: 0.75rem;
+    }
+    .chart-card {
+      padding: 0.75rem;
+    }
+    .chart-title {
+      font-size: 1rem;
+    }
+    .chart-subtitle {
+      font-size: 0.8rem;
+    }
+    .metric-card {
+      padding: 0.5rem;
+      min-height: 85px;
+    }
     .card-value {
-      font-size: 1.75rem;
+      font-size: 1.125rem;
     }
     .card-label {
-      font-size: 0.875rem;
+      font-size: 0.65rem;
+    }
+    .view-details {
+      font-size: 0.6rem;
     }
     .modal-header {
       /* Stack title and actions in the modal header */

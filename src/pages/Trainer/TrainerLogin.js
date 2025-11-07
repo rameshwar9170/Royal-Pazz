@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { ref, get, update } from "firebase/database";
 import { auth, db } from "../../firebase/config";
+import { FaEye, FaEyeSlash } from 'react-icons/fa';
+
 
 const TrainerLogin = () => {
   const [email, setEmail] = useState("");
@@ -11,14 +13,63 @@ const TrainerLogin = () => {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
   const isMounted = useRef(true);
   const isProcessingRef = useRef(false);
+  const lastClickTime = useRef(0);
   
-  useEffect(() => () => { 
-    isMounted.current = false; 
-  }, []);
+  useEffect(() => {
+    // Check existing session without flash
+    const checkExistingSession = async () => {
+      const existingTrainer = localStorage.getItem('htamsTrainer');
+      if (existingTrainer) {
+        try {
+          const trainerData = JSON.parse(existingTrainer);
+          if (trainerData && trainerData.trainerId) {
+            console.log('Existing session found, redirecting...');
+            setIsNavigating(true);
+            setProgress(100);
+            setTimeout(() => {
+              navigate('/trainer-dashboard', { replace: true });
+            }, 100);
+            return;
+          }
+        } catch (err) {
+          console.error('Invalid stored trainer data, clearing localStorage');
+          localStorage.removeItem('htamsTrainer');
+        }
+      }
+    };
+
+    checkExistingSession();
+    
+    return () => { 
+      isMounted.current = false; 
+    };
+  }, [navigate]);
+
+  // Smooth progress animation
+  useEffect(() => {
+    if (loading || isNavigating) {
+      let currentProgress = 0;
+      const interval = setInterval(() => {
+        currentProgress += Math.random() * 15;
+        if (currentProgress >= 90) {
+          currentProgress = 90;
+          clearInterval(interval);
+        }
+        setProgress(currentProgress);
+      }, 200);
+
+      return () => clearInterval(interval);
+    } else {
+      setProgress(0);
+    }
+  }, [loading, isNavigating]);
 
   const handleEmailChange = (e) => {
     setEmail(e.target.value.trim());
@@ -104,7 +155,16 @@ const TrainerLogin = () => {
   const handleLogin = async (e) => {
     e.preventDefault();
     
-    if (loading || isProcessingRef.current) {
+    // Prevent double submission
+    const currentTime = Date.now();
+    if (currentTime - lastClickTime.current < 1000) {
+      console.log('Double click prevented');
+      return;
+    }
+    lastClickTime.current = currentTime;
+    
+    if (loading || isProcessingRef.current || isNavigating) {
+      console.log('Login already in progress');
       return;
     }
 
@@ -112,16 +172,17 @@ const TrainerLogin = () => {
       return;
     }
 
+    console.log('Starting login process...');
     isProcessingRef.current = true;
     setLoading(true);
     setError("");
     setMessage("");
+    setProgress(10);
 
     try {
-      // Batch operations to reduce database calls
-      const [trainersSnapshot] = await Promise.all([
-        get(ref(db, "HTAMS/company/trainers"))
-      ]);
+      setProgress(30);
+      console.log('Fetching trainers data...');
+      const trainersSnapshot = await get(ref(db, "HTAMS/company/trainers"));
 
       if (!trainersSnapshot.exists()) {
         throw new Error("No trainers found in database.");
@@ -130,13 +191,13 @@ const TrainerLogin = () => {
       let trainerId = null;
       let trainerData = null;
 
-      // More efficient lookup
+      setProgress(50);
       trainersSnapshot.forEach((child) => {
         const data = child.val();
         if (data.email?.toLowerCase() === email.trim().toLowerCase()) {
           trainerId = child.key;
           trainerData = data;
-          return true; // Exit early when found
+          return true;
         }
       });
 
@@ -144,62 +205,83 @@ const TrainerLogin = () => {
         throw new Error("Trainer email not registered.");
       }
 
-      // First-time login logic
-      if (trainerData.firstTime === undefined || trainerData.firstTime === true) {
+      if (trainerData.active === false) {
+        throw new Error('Your account is deactivated. Please contact the administrator.');
+      }
+
+      console.log('Trainer found:', trainerId);
+      setProgress(70);
+
+      // First-time login
+      if (trainerData.firstTime === true || trainerData.firstTime === undefined) {
         if (trainerData.phone !== password.trim()) {
-          throw new Error("Invalid phone number for first-time login. Please use your registered phone number.");
+          throw new Error("Invalid phone number for first-time login. Please use your registered phone number as password.");
         }
 
+        console.log('First-time login detected, preparing navigation...');
+        
         localStorage.setItem('firstLoginTrainer', JSON.stringify({ 
           trainerId: trainerId, 
           email: email.trim(),
           trainerData: trainerData
         }));
         
-        navigate('/trainer-set-password');
+        setProgress(100);
+        setIsNavigating(true);
+        setTimeout(() => {
+          navigate('/trainer-set-password', { replace: true });
+        }, 300);
         return;
       }
 
-      // Parallel execution for Firebase auth and data preparation
-      const [userCredential] = await Promise.all([
-        signInWithEmailAndPassword(auth, email.trim(), password.trim())
-      ]);
-      
-      const user = userCredential.user;
-
-      if (trainerData.active === false) {
-        await auth.signOut();
-        throw new Error('Your account is deactivated. Please contact the administrator.');
-      }
-
-      // Prepare user data and update login timestamp in parallel
-      const userData = { 
-        uid: user.uid, 
-        trainerId: trainerId,
-        ...trainerData,
-        role: 'trainer'
-      };
-      
-      // Execute storage operations and database update in parallel
-      await Promise.all([
-        // Store trainer data in localStorage (synchronous but wrapped for consistency)
-        Promise.resolve(localStorage.setItem('ONDOTrainer', JSON.stringify(userData))),
-        Promise.resolve(localStorage.removeItem('firstLoginTrainer')),
-        // Update last login timestamp
+      // Regular login
+      if (trainerData.uid) {
+        console.log('Regular login with Firebase Auth...');
+        setProgress(80);
+        
+        const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password.trim());
+        
+        console.log('Firebase authentication successful');
+        setProgress(90);
+        
+        const userData = { 
+          uid: userCredential.user.uid,
+          trainerId: trainerId,
+          ...trainerData,
+          role: 'trainer',
+          loginTime: new Date().toISOString()
+        };
+        
+        localStorage.setItem('htamsTrainer', JSON.stringify(userData));
+        
+        console.log('Trainer data stored, preparing navigation...');
+        
+        // Update last login (don't wait)
         update(ref(db, `HTAMS/company/trainers/${trainerId}`), {
           lastLoginAt: new Date().toISOString(),
-        })
-      ]);
+        }).catch(err => console.error('Failed to update last login:', err));
 
-      // Immediate navigation without timeout
-      navigate("/trainer-dashboard", { replace: true });
+        console.log('Navigating to dashboard...');
+        setProgress(100);
+        setIsNavigating(true);
+        
+        setTimeout(() => {
+          navigate("/trainer-dashboard", { replace: true });
+        }, 300);
+        
+      } else {
+        throw new Error("Please complete your password setup first. Use your phone number as password for first-time login.");
+      }
 
     } catch (err) {
+      console.error('Login error:', err);
+      
       let errorMessage = '';
       if (err.code) {
         switch (err.code) {
           case 'auth/user-not-found':
           case 'auth/wrong-password':
+          case 'auth/invalid-credential':
             errorMessage = 'Invalid email or password.';
             break;
           case 'auth/too-many-requests':
@@ -225,8 +307,10 @@ const TrainerLogin = () => {
       }
       
       setError(errorMessage);
+      setProgress(0);
     } finally {
-      if (isMounted.current) {
+      if (isMounted.current && !isNavigating) {
+        console.log('Login process completed');
         setLoading(false);
         isProcessingRef.current = false;
       }
@@ -234,15 +318,84 @@ const TrainerLogin = () => {
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !loading) {
+    if (e.key === 'Enter' && !loading && !isNavigating) {
       handleLogin(e);
     }
   };
+
+  // Show loading overlay during navigation - NO BLINK
+  if (isNavigating) {
+    return (
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        color: 'white',
+        flexDirection: 'column',
+        gap: '1.5rem',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        zIndex: 9999
+      }}>
+        <div style={{
+          width: '60px',
+          height: '60px',
+          border: '5px solid rgba(255,255,255,0.3)',
+          borderTop: '5px solid white',
+          borderRadius: '50%',
+          animation: 'spin 0.8s linear infinite'
+        }}></div>
+        <p style={{ 
+          fontSize: '1.2rem', 
+          fontWeight: '600',
+          textAlign: 'center',
+          margin: 0
+        }}>
+          Logging in...
+        </p>
+        <div style={{
+          width: '200px',
+          height: '4px',
+          background: 'rgba(255,255,255,0.2)',
+          borderRadius: '2px',
+          overflow: 'hidden'
+        }}>
+          <div style={{
+            width: `${progress}%`,
+            height: '100%',
+            background: 'white',
+            transition: 'width 0.3s ease',
+            borderRadius: '2px'
+          }}></div>
+        </div>
+        <style>{`
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
 
   return (
     <>
       <style>
         {`
+          * {
+            box-sizing: border-box;
+          }
+          
+          body {
+            margin: 0;
+            overflow-x: hidden;
+          }
+          
           .trainer-login-wrapper {
             display: flex;
             align-items: center;
@@ -253,6 +406,27 @@ const TrainerLogin = () => {
             padding: 20px;
             flex-direction: column;
             gap: 20px;
+            position: relative;
+            width: 100%;
+          }
+
+          /* Progress Bar at Top */
+          .login-progress-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.2);
+            z-index: 10000;
+            overflow: hidden;
+          }
+
+          .login-progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #10b981, #3b82f6, #8b5cf6);
+            transition: width 0.3s ease;
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
           }
 
           .trainer-login-container {
@@ -272,6 +446,8 @@ const TrainerLogin = () => {
             width: 100%;
             box-sizing: border-box;
             position: relative;
+            transform: none;
+            transition: none;
           }
 
           .trainer-login-title {
@@ -329,7 +505,7 @@ const TrainerLogin = () => {
             border: 2px solid #e5e7eb;
             border-radius: 10px;
             font-size: 1rem;
-            transition: border-color 0.2s, box-shadow 0.2s;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
             background-color: #f9fafb;
           }
 
@@ -351,7 +527,7 @@ const TrainerLogin = () => {
             font-size: 0.9rem;
             margin-top: 8px;
             text-decoration: none;
-            transition: color 0.2s ease;
+            transition: color 0.15s ease;
             user-select: none;
             display: block;
           }
@@ -376,20 +552,39 @@ const TrainerLogin = () => {
             font-size: 1.1rem;
             font-weight: 600;
             cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
+            transition: opacity 0.15s ease, transform 0.15s ease;
             margin-bottom: 20px;
             position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
           }
 
           .trainer-login-button:hover:not(:disabled) {
-            transform: translateY(-2px);
+            transform: translateY(-1px);
             box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
           }
 
           .trainer-login-button:disabled {
-            opacity: 0.6;
+            opacity: 0.7;
             cursor: not-allowed;
             transform: none;
+            pointer-events: none;
+          }
+
+          .button-spinner {
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top: 2px solid white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+          }
+
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
           }
 
           .switch-login {
@@ -403,7 +598,7 @@ const TrainerLogin = () => {
             color: #667eea;
             cursor: pointer;
             font-weight: 600;
-            transition: color 0.2s ease;
+            transition: color 0.15s ease;
             user-select: none;
           }
 
@@ -440,6 +635,16 @@ const TrainerLogin = () => {
         `}
       </style>
 
+      {/* Top Progress Bar */}
+      {(loading || progress > 0) && (
+        <div className="login-progress-bar">
+          <div 
+            className="login-progress-fill" 
+            style={{ width: `${progress}%` }}
+          ></div>
+        </div>
+      )}
+
       <div className="trainer-login-wrapper">
         <div className="trainer-login-container">
           <form onSubmit={handleLogin} className="trainer-login-form">
@@ -458,7 +663,7 @@ const TrainerLogin = () => {
                 value={email}
                 onChange={handleEmailChange}
                 onKeyDown={handleKeyDown}
-                disabled={loading || resetLoading}
+                disabled={loading || resetLoading || isNavigating}
                 required
                 autoComplete="email"
               />
@@ -468,22 +673,50 @@ const TrainerLogin = () => {
               <label htmlFor="password" className="form-label">
                 Password or Phone Number (for first-time login)
               </label>
-              <input
-                type="password"
-                id="password"
-                placeholder="Enter password or phone number"
-                className="trainer-login-input"
-                value={password}
-                onChange={handlePasswordChange}
-                onKeyDown={handleKeyDown}
-                disabled={loading || resetLoading}
-                required
-                autoComplete="current-password"
-              />
+              <div style={{ position: 'relative', width: '100%' }}>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  id="password"
+                  placeholder="Enter password or phone number"
+                  className="trainer-login-input"
+                  value={password}
+                  onChange={handlePasswordChange}
+                  onKeyDown={handleKeyDown}
+                  disabled={loading || resetLoading || isNavigating}
+                  required
+                  autoComplete="current-password"
+                  style={{ paddingRight: '45px' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  disabled={loading || resetLoading || isNavigating}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  style={{
+                    position: 'absolute',
+                    right: '14px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: '#6b7280',
+                    padding: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'color 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.color = '#667eea'}
+                  onMouseLeave={(e) => e.currentTarget.style.color = '#6b7280'}
+                >
+                  {showPassword ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
+                </button>
+              </div>
               
               <p 
-                onClick={(resetLoading || loading) ? undefined : handleForgotPassword} 
-                className={`forgot-password-link ${(resetLoading || loading) ? 'disabled' : ''}`}
+                onClick={(resetLoading || loading || isNavigating) ? undefined : handleForgotPassword} 
+                className={`forgot-password-link ${(resetLoading || loading || isNavigating) ? 'disabled' : ''}`}
               >
                 {resetLoading ? "Sending reset email..." : "Forgot Password?"}
               </p>
@@ -492,16 +725,17 @@ const TrainerLogin = () => {
             <button
               type="submit"
               className="trainer-login-button"
-              disabled={loading || resetLoading}
+              disabled={loading || resetLoading || isNavigating}
             >
-              {loading ? 'Processing...' : 'Login'}
+              {loading && <div className="button-spinner"></div>}
+              {loading ? 'Processing...' : isNavigating ? 'Redirecting...' : 'Login'}
             </button>
 
             <p className="switch-login">
               Want to login as another user?{" "}
               <span
-                onClick={() => !loading && navigate("/login")}
-                className={`switch-login-link ${loading ? 'disabled' : ''}`}
+                onClick={() => !loading && !isNavigating && navigate("/login")}
+                className={`switch-login-link ${(loading || isNavigating) ? 'disabled' : ''}`}
               >
                 Go to Login
               </span>

@@ -17,33 +17,73 @@ import {
 } from 'react-icons/fa';
 
 function TrainerTrainings({ 
-  trainings, 
-  participants, 
-  searchTerm, 
-  setSearchTerm, 
-  filterStatus, 
-  setFilterStatus,
-  expandedTraining,
-  setExpandedTraining,
-  onCompleteTraining,
-  onCancelTraining,
-  onConfirmParticipant,
-  getParticipantCount,
-  getConfirmedCount,
-  isMobile,
-  whatsappLoading,
-  confirmingParticipantId
+  trainings = [], // **FIXED: Default empty array**
+  participants = {}, // **FIXED: Default empty object**
+  searchTerm = '', // **FIXED: Default empty string**
+  setSearchTerm = () => {}, // **FIXED: Default function**
+  filterStatus = 'all', // **FIXED: Default value**
+  setFilterStatus = () => {}, // **FIXED: Default function**
+  expandedTraining = null,
+  setExpandedTraining = () => {}, // **FIXED: Default function**
+  onCompleteTraining = () => {}, // **FIXED: Default function**
+  onCancelTraining = () => {}, // **FIXED: Default function**
+  onConfirmParticipant = () => {}, // **FIXED: Default function**
+  getParticipantCount = (training) => 0, // **FIXED: Default function with return**
+  getConfirmedCount = (training) => 0, // **FIXED: Default function with return**
+  isMobile = false, // **FIXED: Default boolean**
+  whatsappLoading = false, // **FIXED: Default boolean**
+  confirmingParticipantId = null
 }) {
   
-  const filteredTrainings = trainings.filter(training => {
-    const matchesSearch = training.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        training.venue.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        training.products.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesFilter = filterStatus === 'all' || training.status === filterStatus;
-    
-    return matchesSearch && matchesFilter;
-  });
+  // **FIXED: Safe filtering with proper null checks**
+  const filteredTrainings = React.useMemo(() => {
+    if (!Array.isArray(trainings) || trainings.length === 0) {
+      return [];
+    }
+
+    return trainings.filter(training => {
+      // **FIXED: Safe property access with fallbacks**
+      const location = training?.location || '';
+      const venue = training?.venue || '';
+      const products = training?.products || '';
+      const status = training?.status || 'pending';
+
+      const matchesSearch = location.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          venue.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          products.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesFilter = filterStatus === 'all' || status === filterStatus;
+      
+      return matchesSearch && matchesFilter;
+    });
+  }, [trainings, searchTerm, filterStatus]);
+
+  // **FIXED: Safe statistics calculation**
+  const stats = React.useMemo(() => {
+    if (!Array.isArray(trainings)) {
+      return { total: 0, pending: 0, completed: 0, cancelled: 0 };
+    }
+
+    return {
+      total: trainings.length,
+      pending: trainings.filter(t => !t?.status || t.status === 'pending').length,
+      completed: trainings.filter(t => t?.status === 'done').length,
+      cancelled: trainings.filter(t => t?.status === 'cancelled').length
+    };
+  }, [trainings]);
+
+  // **FIXED: Safe participant count functions**
+  const safeGetParticipantCount = (training) => {
+    if (!training?.participants) return 0;
+    return Object.keys(training.participants).length;
+  };
+
+  const safeGetConfirmedCount = (training) => {
+    if (!training?.participants) return 0;
+    return Object.values(training.participants).filter(p => 
+      p?.status === 'confirmed' || p?.confirmedByTrainer
+    ).length;
+  };
 
   return (
     <>
@@ -52,6 +92,7 @@ function TrainerTrainings({
           /* =================== COMPACT TRAININGS STYLES =================== */
           .trainings-container {
             padding: 0;
+            min-height: 200px;
           }
 
           .section-header {
@@ -78,6 +119,7 @@ function TrainerTrainings({
             padding: 0.65rem 0.9rem;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
             transition: all 0.2s ease;
+            min-width: 200px;
           }
 
           .search-box:focus-within, .filter-box:focus-within {
@@ -97,11 +139,10 @@ function TrainerTrainings({
             background: none;
             font-size: 0.85rem;
             color: #334155;
-            min-width: 180px;
+            width: 100%;
           }
 
           .filter-select {
-            min-width: 130px;
             cursor: pointer;
           }
 
@@ -152,6 +193,7 @@ function TrainerTrainings({
             justify-content: space-between;
             align-items: flex-start;
             margin-bottom: 1rem;
+            gap: 1rem;
           }
 
           .training-title {
@@ -161,6 +203,7 @@ function TrainerTrainings({
             display: flex;
             align-items: center;
             gap: 0.5rem;
+            flex: 1;
           }
 
           .location-icon {
@@ -175,6 +218,7 @@ function TrainerTrainings({
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            white-space: nowrap;
           }
 
           .status-badge.pending {
@@ -528,6 +572,7 @@ function TrainerTrainings({
 
             .search-box, .filter-box {
               width: 100%;
+              min-width: auto;
             }
 
             .search-input, .filter-select {
@@ -552,6 +597,12 @@ function TrainerTrainings({
 
             .btn-mobile {
               width: 100%;
+            }
+
+            .card-header {
+              flex-direction: column;
+              align-items: flex-start;
+              gap: 0.5rem;
             }
           }
         `}
@@ -588,13 +639,16 @@ function TrainerTrainings({
 
           <div className="stats">
             <div className="stat-item">
-              Total: {trainings.length}
+              Total: {stats.total}
             </div>
             <div className="stat-item">
-              Pending: {trainings.filter(t => !t.status || t.status === 'pending').length}
+              Pending: {stats.pending}
             </div>
             <div className="stat-item">
-              Completed: {trainings.filter(t => t.status === 'done').length}
+              Completed: {stats.completed}
+            </div>
+            <div className="stat-item">
+              Cancelled: {stats.cancelled}
             </div>
           </div>
         </div>
@@ -605,7 +659,12 @@ function TrainerTrainings({
             <div className="empty-state">
               <FaUsers className="empty-icon" />
               <h3>No trainings found</h3>
-              <p>No trainings match your current search and filter criteria.</p>
+              <p>
+                {trainings.length === 0 
+                  ? "No trainings have been assigned to you yet." 
+                  : "No trainings match your current search and filter criteria."
+                }
+              </p>
             </div>
           ) : isMobile ? (
             /* Mobile Card View */
@@ -615,7 +674,7 @@ function TrainerTrainings({
                   <div className="card-header">
                     <div className="training-title">
                       <FaMapMarkerAlt className="location-icon" />
-                      {training.location}
+                      {training.location || 'Location not set'}
                     </div>
                     <span className={`status-badge ${training.status || 'pending'}`}>
                       {training.status === 'done' ? 'Completed' : 
@@ -626,23 +685,26 @@ function TrainerTrainings({
                   <div className="card-details">
                     <div className="detail-row">
                       <span className="detail-label">Venue:</span>
-                      <span>{training.venue}</span>
+                      <span>{training.venue || 'Not specified'}</span>
                     </div>
                     <div className="detail-row">
                       <FaCalendarAlt className="detail-icon" />
-                      <span>{training.date}</span>
+                      <span>{training.startDate || training.date || 'Date not set'}</span>
                     </div>
                     <div className="detail-row">
                       <FaClock className="detail-icon" />
-                      <span>{training.time}</span>
+                      <span>{training.time || 'Time not set'}</span>
                     </div>
                     <div className="detail-row">
                       <span className="detail-label">Products:</span>
-                      <span className="products-text">{training.products}</span>
+                      <span className="products-text">{training.products || 'No products listed'}</span>
                     </div>
                     <div className="detail-row">
                       <FaUsers className="detail-icon" />
-                      <span>{getParticipantCount(training)} participants ({getConfirmedCount(training)} confirmed)</span>
+                      <span>
+                        {safeGetParticipantCount(training)} participants 
+                        ({safeGetConfirmedCount(training)} confirmed)
+                      </span>
                     </div>
                   </div>
                   
@@ -665,7 +727,7 @@ function TrainerTrainings({
                     )}
                   </div>
 
-                  {/* Participants Section for Mobile */}
+                  {/* **FIXED: Safe participants display** */}
                   {training.participants && Object.keys(training.participants).length > 0 && (
                     <div className="participants-section">
                       <div className="participants-header">
@@ -688,16 +750,16 @@ function TrainerTrainings({
                           {Object.entries(training.participants).map(([participantId, participant]) => (
                             <div key={participantId} className="participant-card">
                               <div className="participant-info">
-                                <div className="participant-name">{participant.name}</div>
+                                <div className="participant-name">{participant?.name || 'No name'}</div>
                                 <div className="participant-details">
-                                  {participant.mobile} • {participant.email}
+                                  {participant?.mobile || participant?.phone || 'No phone'} • {participant?.email || 'No email'}
                                 </div>
                                 <div className="participant-details">
-                                  Status: {participant.status || 'Pending'}
+                                  Status: {participant?.status || 'Pending'}
                                 </div>
                               </div>
                               <div className="participant-actions">
-                                {!participant.confirmedByTrainer && (
+                                {!participant?.confirmedByTrainer && (
                                   <button 
                                     className={`btn btn-success btn-xs ${
                                       whatsappLoading && confirmingParticipantId === participantId ? 'whatsapp-loading' : ''
@@ -752,9 +814,9 @@ function TrainerTrainings({
                         <div className="training-details">
                           <div className="training-title">
                             <FaMapMarkerAlt className="location-icon" />
-                            <strong>{training.location}</strong>
+                            <strong>{training.location || 'Location not set'}</strong>
                           </div>
-                          <div className="training-venue">{training.venue}</div>
+                          <div className="training-venue">{training.venue || 'Venue not specified'}</div>
                           <div className="training-id">ID: #{training.id}</div>
                         </div>
                       </td>
@@ -762,28 +824,28 @@ function TrainerTrainings({
                         <div className="schedule-info">
                           <div className="schedule-item">
                             <FaCalendarAlt className="schedule-icon" />
-                            {training.date}
+                            {training.startDate || training.date || 'Date not set'}
                           </div>
                           <div className="schedule-item">
                             <FaClock className="schedule-icon" />
-                            {training.time}
+                            {training.time || 'Time not set'}
                           </div>
                         </div>
                       </td>
                       <td>
                         <div className="products-info">
-                          <span className="products-text">{training.products}</span>
+                          <span className="products-text">{training.products || 'No products listed'}</span>
                         </div>
                       </td>
                       <td>
                         <div className="participants-summary">
                           <div className="participant-count">
                             <FaUsers className="participants-icon" />
-                            {getParticipantCount(training)} Total
+                            {safeGetParticipantCount(training)} Total
                           </div>
                           <div className="confirmed-count">
                             <FaCheck className="confirmed-icon" />
-                            {getConfirmedCount(training)} Confirmed
+                            {safeGetConfirmedCount(training)} Confirmed
                           </div>
                         </div>
                       </td>

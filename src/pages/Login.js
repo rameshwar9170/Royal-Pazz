@@ -1,10 +1,10 @@
-import React, { useState, useContext, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { ref, get, getDatabase } from 'firebase/database';
+import { auth } from '../firebase/config';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../AuthContext';
-import { auth } from '../firebase/config';
-import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
-import { getDatabase, ref, get } from 'firebase/database';
-import bgImage from '../img/email_image_add.jpg'; // Uncomment usage if you want background
+import { FaEye, FaEyeSlash } from 'react-icons/fa';
 
 const Login = () => {
   // LocalStorage safe retrieval
@@ -21,6 +21,7 @@ const Login = () => {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const navigate = useNavigate();
   const { currentUser } = useContext(AuthContext);
@@ -106,7 +107,7 @@ const Login = () => {
       let userEmail = null;
 
       // Find matching user by email
-      for (const [uid, user] of Object.entries(usersData)) {
+      for (const [, user] of Object.entries(usersData)) {
         if (user.email?.toLowerCase() === email.toLowerCase()) {
           userExists = true;
           userEmail = user.email;
@@ -265,379 +266,390 @@ const Login = () => {
     navigate('/trainer-login');
   };
 
-  // Navigate to terms page
   const handleTermsNavigation = () => {
     navigate('/policies/terms');
   };
 
   return (
     <>
-      <style>{`
-        .login-page-wrapper {
-          position: fixed;
-          top: 0;
-          left: 0;
-          width: 100vw;
-          height: 100vh;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-          padding: 20px;
-          overflow: auto;
-        }
-
-        .login-overlay {
-          position: absolute;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          background-color: rgba(0, 0, 0, 0.1);
-          z-index: 0;
-        }
-
-        .login-content-wrapper {
-          position: relative;
-          z-index: 1;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          width: 100%;
-          max-width: 420px;
-          gap: 15px;
-        }
-
-        .login-container {
-          width: 100%;
-          padding: 22px 20px;
-          border-radius: 16px;
-          background-color: #ffffff;
-          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
-          box-sizing: border-box;
-        }
-
-        .login-title {
-          text-align: center;
-          font-size: clamp(1.75rem, 5vw, 2rem);
-          font-weight: 700;
-          color: #1f2937;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-          margin-bottom: 20px;
-        }
-
-        .login-form {
-          display: flex;
-          flex-direction: column;
-          gap: 20px;
-        }
-
-        .form-group {
-          display: flex;
-          flex-direction: column;
-        }
-
-        .form-label {
-          margin-bottom: 8px;
-          font-size: clamp(0.85rem, 3vw, 0.9rem);
-          font-weight: 600;
-          color: #374151;
-        }
-
-        .form-input {
-          padding: 14px 16px;
-          font-size: clamp(0.95rem, 3vw, 1rem);
-          border: 2px solid #e5e7eb;
-          border-radius: 10px;
-          outline: none;
-          transition: border-color 0.2s, box-shadow 0.2s;
-          background-color: #f9fafb;
-          font-family: inherit;
-          width: 100%;
-          box-sizing: border-box;
-        }
-
-        .form-input:focus {
-          border-color: #667eea;
-          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
-        }
-
-        .form-input:disabled {
-          background-color: #f3f4f6;
-          cursor: not-allowed;
-        }
-
-        .login-button {
-          width: 100%;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: white;
-          padding: 14px;
-          border-radius: 10px;
-          border: none;
-          font-size: clamp(1rem, 3vw, 1.1rem);
-          font-weight: 600;
-          cursor: pointer;
-          transition: transform 0.2s, box-shadow 0.2s;
-          margin-top: 10px;
-        }
-
-        .login-button:hover:not(:disabled) {
-          transform: translateY(-1px);
-          box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-        }
-
-        .login-button:disabled {
-          opacity: 0.7;
-          cursor: not-allowed;
-          transform: none;
-        }
-
-        .error-message {
-          color: #ef4444;
-          font-size: clamp(0.8rem, 3vw, 0.875rem);
-          text-align: center;
-          font-weight: 600;
-          background-color: #fef2f2;
-          padding: 12px;
-          border-radius: 8px;
-          border: 1px solid #fecaca;
-          margin: 0;
-          line-height: 1.4;
-        }
-
-        .success-message {
-          color: #10b981;
-          font-size: clamp(0.8rem, 3vw, 0.875rem);
-          text-align: center;
-          font-weight: 600;
-          background-color: #ecfdf5;
-          padding: 12px;
-          border-radius: 8px;
-          border: 1px solid #a7f3d0;
-          margin: 0;
-          line-height: 1.4;
-        }
-
-        .forgot-password-container {
-          display: flex;
-          justify-content: flex-end;
-          margin-top: 6px;
-        }
-
-        .forgot-password-link {
-          font-size: clamp(0.8rem, 3vw, 0.9rem);
-          text-decoration: none;
-          transition: color 0.2s ease;
-          user-select: none;
-          font-weight: 500;
-        }
-
-        .trainer-section {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 4px;
-          margin-top: 25px;
-          padding: 20px 0;
-          border-top: 1px solid #e5e7eb;
-          flex-wrap: wrap;
-        }
-
-        .trainer-text {
-          font-size: clamp(0.8rem, 3vw, 0.9rem);
-          color: #6b7280;
-          font-weight: 500;
-        }
-
-        .trainer-login-link {
-          font-size: clamp(0.8rem, 3vw, 0.9rem);
-          color: #667eea;
-          font-weight: 600;
-          cursor: pointer;
-          text-decoration: underline;
-          transition: color 0.2s ease;
-          user-select: none;
-        }
-
-        .trainer-login-link:hover {
-          color: #5a67d8;
-        }
-
-        /* Simple Footer Styles */
-        .simple-footer {
-          width: 100%;
-          background-color: rgba(255, 255, 255, 0.95);
-          backdrop-filter: blur(10px);
-          border-radius: 12px;
-          padding: 12px 16px;
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          text-align: center;
-        }
-
-        .copyright-text {
-          font-size: clamp(0.75rem, 2.5vw, 0.8rem);
-          color: #6b7280;
-          margin-bottom: 4px;
-        }
-
-        .terms-link {
-          font-size: clamp(0.75rem, 2.5vw, 0.8rem);
-          color: #667eea;
-          text-decoration: underline;
-          cursor: pointer;
-          font-weight: 500;
-          transition: color 0.2s ease;
-        }
-
-        .terms-link:hover {
-          color: #5a67d8;
-        }
-
-        /* Responsive Design */
-        @media (max-width: 480px) {
-          .login-container {
-            padding: 18px 15px;
-            border-radius: 12px;
+      <style>
+        {`
+          .login-wrapper {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            padding: 20px;
+            flex-direction: column;
+            gap: 20px;
           }
 
-          .login-title {
-            margin-bottom: 15px;
+          .login-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 420px;
+            gap: 20px;
           }
 
           .login-form {
-            gap: 15px;
+            background-color: #ffffff;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+            width: 100%;
+            box-sizing: border-box;
+            position: relative;
           }
 
-          .form-input {
-            padding: 12px 14px;
+          .login-title {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 30px;
+            text-align: center;
+            color: #1f2937;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+          }
+
+          .form-group {
+            margin-bottom: 20px;
+          }
+
+          .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #374151;
+          }
+
+          .login-error {
+            color: #ef4444;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 0.875rem;
+            background-color: #fef2f2;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #fecaca;
+            line-height: 1.4;
+          }
+
+          .login-success {
+            color: #10b981;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 0.875rem;
+            background-color: #ecfdf5;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #a7f3d0;
+            line-height: 1.4;
+          }
+
+          .login-input {
+            box-sizing: border-box;
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            background-color: #f9fafb;
+          }
+
+          .login-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            background-color: #ffffff;
+          }
+
+          .login-input:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+          }
+
+          .password-input-wrapper {
+            position: relative;
+            width: 100%;
+          }
+
+          .password-toggle-btn {
+            position: absolute;
+            right: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #6b7280;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.2s;
+          }
+
+          .password-toggle-btn:hover {
+            color: #667eea;
+          }
+
+          .password-toggle-btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+          }
+
+          .forgot-password-link {
+            color: #667eea;
+            cursor: pointer;
+            font-size: 0.9rem;
+            margin-top: 8px;
+            text-decoration: none;
+            transition: color 0.2s ease;
+            user-select: none;
+            display: block;
+          }
+
+          .forgot-password-link:hover:not(.disabled) {
+            color: #4f46e5;
+            text-decoration: underline;
+          }
+
+          .forgot-password-link.disabled {
+            color: #9ca3af;
+            cursor: not-allowed;
           }
 
           .login-button {
-            padding: 12px;
+            width: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 14px;
+            border-radius: 10px;
+            border: none;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-bottom: 20px;
+            position: relative;
           }
 
+          .login-button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+          }
+
+          .login-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+          }
+
+          .switch-login {
+            font-size: 0.9rem;
+            text-align: center;
+            color: #374151;
+            margin: 0;
+          }
+
+          .switch-login-link {
+            color: #667eea;
+            cursor: pointer;
+            font-weight: 600;
+            transition: color 0.2s ease;
+            user-select: none;
+          }
+
+          .switch-login-link:hover:not(.disabled) {
+            color: #4f46e5;
+            text-decoration: underline;
+          }
+
+          .switch-login-link.disabled {
+            color: #9ca3af;
+            cursor: not-allowed;
+          }
+
+          /* Simple Footer Styles */
           .simple-footer {
-            padding: 10px 12px;
-          }
-        }
-
-        @media (max-width: 350px) {
-          .login-container {
-            padding: 15px 12px;
-          }
-
-          .trainer-section {
+            display: flex;
             flex-direction: column;
-            gap: 8px;
-          }
-        }
-
-        @media (max-height: 700px) and (orientation: landscape) {
-          .login-page-wrapper {
-            padding: 10px;
-            justify-content: flex-start;
-            padding-top: 20px;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 20px;
+            width: 100%;
+            max-width: 420px;
+            text-align: center;
           }
 
-          .login-content-wrapper {
-            gap: 10px;
+          .copyright-text {
+            font-size: 0.875rem;
+            color: rgba(255, 255, 255, 0.9);
+            font-weight: 400;
+            letter-spacing: 0.3px;
           }
-        }
-      `}</style>
 
-      <div className="login-page-wrapper">
-        <div className="login-overlay" />
-        
-        <div className="login-content-wrapper">
-          {/* Main Login Form */}
-          <div className="login-container">
+          .terms-link {
+            color: rgba(255, 255, 255, 0.95);
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            padding: 8px 16px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+          }
+
+          .terms-link:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.4);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+          }
+
+          .terms-link:active {
+            transform: translateY(0);
+          }
+
+          @media (max-width: 480px) {
+            .login-wrapper {
+              padding: 10px;
+            }
+            
+            .login-form {
+              padding: 30px 20px;
+              width: 100%;
+            }
+            
+            .login-title {
+              font-size: 1.7rem;
+            }
+
+            .simple-footer {
+              padding: 16px 10px;
+              gap: 10px;
+            }
+
+            .copyright-text {
+              font-size: 0.8rem;
+            }
+
+            .terms-link {
+              font-size: 0.8rem;
+              padding: 6px 12px;
+            }
+          }
+
+          .login-button:focus,
+          .login-input:focus {
+            outline: 2px solid #3b82f6;
+            outline-offset: 2px;
+          }
+        `}
+      </style>
+
+      <div className="login-wrapper">
+        <div className="login-container">
+          <form onSubmit={handleSubmit} className="login-form">
             <h2 className="login-title">User Login</h2>
             
-            <form onSubmit={handleSubmit} className="login-form">
-              {error && <p className="error-message">{error}</p>}
-              {message && <p className="success-message">{message}</p>}
-              
-              <div className="form-group">
-                <label htmlFor="email" className="form-label">Email or PAN</label>
+            {error && <p className="login-error">{error}</p>}
+            {message && <p className="login-success">{message}</p>}
+            
+            <div className="form-group">
+              <label htmlFor="email" className="form-label">Email or PAN</label>
+              <input
+                type="text"
+                id="email"
+                placeholder="Enter your email or PAN"
+                className="login-input"
+                value={email}
+                onChange={handleEmailChange}
+                disabled={loading || resetLoading}
+                required
+                autoComplete="username"
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="password" className="form-label">
+                Password or Phone Number (for first-time login)
+              </label>
+              <div className="password-input-wrapper">
                 <input
-                  type="text"
-                  id="email"
-                  placeholder="Enter your email or PAN"
-                  value={email}
-                  onChange={handleEmailChange}
-                  className="form-input"
-                  disabled={loading || resetLoading}
-                  autoComplete="username"
-                  required
-                />
-              </div>
-              
-              <div className="form-group">
-                <label htmlFor="password" className="form-label">
-                  Password or Phone Number (for first-time login)
-                </label>
-                <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   id="password"
                   placeholder="Enter password or phone number"
+                  className="login-input"
                   value={password}
                   onChange={handlePasswordChange}
-                  className="form-input"
                   disabled={loading || resetLoading}
-                  autoComplete="current-password"
                   required
+                  autoComplete="current-password"
+                  style={{ paddingRight: '45px' }}
                 />
-                
-                <div className="forgot-password-container">
-                  <span 
-                    onClick={resetLoading || loading ? undefined : handleForgotPassword} 
-                    className="forgot-password-link"
-                    style={{
-                      color: (resetLoading || loading) ? "#9ca3af" : "#4285f4",
-                      cursor: (resetLoading || loading) ? "not-allowed" : "pointer",
-                      pointerEvents: (resetLoading || loading) ? "none" : "auto"
-                    }}
-                  >
-                    {resetLoading ? "Sending reset email..." : "Forgot Password?"}
-                  </span>
-                </div>
+                <button
+                  type="button"
+                  className="password-toggle-btn"
+                  onClick={() => setShowPassword(!showPassword)}
+                  disabled={loading || resetLoading}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
+                </button>
               </div>
               
-              <button type="submit" className="login-button" disabled={loading || resetLoading}>
-                {loading ? 'Processing...' : 'Login'}
-              </button>
-            </form>
-            
-            {/* Trainer Login Section */}
-            <div className="trainer-section">
-              <span className="trainer-text">Are you a trainer? </span>
-              <span 
+              <p 
+                onClick={(resetLoading || loading) ? undefined : handleForgotPassword} 
+                className={`forgot-password-link ${(resetLoading || loading) ? 'disabled' : ''}`}
+              >
+                {resetLoading ? "Sending reset email..." : "Forgot Password?"}
+              </p>
+            </div>
+
+            <button
+              type="submit"
+              className="login-button"
+              disabled={loading || resetLoading}
+            >
+              {loading ? 'Processing...' : 'Login'}
+            </button>
+
+            <p className="switch-login">
+              Are you a trainer?{" "}
+              <span
                 onClick={handleTrainerLogin}
-                className="trainer-login-link"
+                className={`switch-login-link ${loading ? 'disabled' : ''}`}
               >
                 Trainer Login
               </span>
-            </div>
-          </div>
+            </p>
+          </form>
+        </div>
 
-          {/* Simple Footer - Only Copyright and Terms */}
-          {/* <div className="simple-footer">
-            <div className="copyright-text">
-              © {new Date().getFullYear()} HTAMS. All rights reserved.
-            </div>
-            <span 
-              className="terms-link"
-              onClick={handleTermsNavigation}
-            >
-              Terms & Conditions
-            </span>
-          </div> */}
+        {/* Professional Footer Design */}
+        <div className="simple-footer">
+          <div className="copyright-text">
+            © {new Date().getFullYear()} ONDO. All rights reserved.
+          </div>
+          <span 
+            className="terms-link"
+            onClick={handleTermsNavigation}
+          >
+            Terms & Conditions
+          </span>
         </div>
       </div>
     </>

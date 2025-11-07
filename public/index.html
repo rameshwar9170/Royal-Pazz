@@ -9,8 +9,13 @@
       name="description"
       content="Web site created using create-react-app"
     />
+    <!-- Cache busting meta tags -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo.jpg" />
-    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
+
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
@@ -21,5 +26,30 @@
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
+    
+    <!-- Cache busting script -->
+    <script>
+      // Clear browser cache and localStorage on page load
+      if ('caches' in window) {
+        caches.keys().then(function(names) {
+          for (let name of names) {
+            caches.delete(name);
+          }
+        });
+      }
+      
+      // Clear non-essential localStorage data
+      const essentialKeys = ['htamsUser', 'lastLoginType', 'caUser', 'employeeData', 'firstLoginUser', 'firstLoginTrainer', 'htamsTrainer', 'dashboardTheme', 'autoTheme'];
+      const allKeys = Object.keys(localStorage);
+      allKeys.forEach(key => {
+        if (!essentialKeys.includes(key)) {
+          localStorage.removeItem(key);
+        }
+      });
+      
+      // Set cache busting timestamp
+      localStorage.setItem('appCacheBuster', Date.now().toString());
+      console.log('Cache cleared on page load');
+    </script>
   </body>
 </html>

@@ -1,18 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { updatePassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase/config';
-import {
-  signInWithEmailAndPassword,
-  EmailAuthProvider,
-  reauthenticateWithCredential,
-  updatePassword,
-} from 'firebase/auth';
-import { getDatabase, ref, get, update } from 'firebase/database';
+import { getDatabase, ref, update, get } from 'firebase/database';
 
 const SetNewPassword = () => {
   const navigate = useNavigate();
   const savedUser = JSON.parse(localStorage.getItem('firstLoginUser') || '{}');
-
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
@@ -46,26 +40,20 @@ const SetNewPassword = () => {
         return;
       }
 
-      console.log('Signing in with email:', savedUser.email, 'and phone as temporary password');
+      console.log('Attempting sign-in with email:', savedUser.email, 'and phone:', userData.phone);
 
-      // Sign in the user with email + phone (temporary password)
-      await signInWithEmailAndPassword(auth, savedUser.email, userData.phone);
+      // Sign in with email and phone (used as temporary password)
+      const credential = await signInWithEmailAndPassword(auth, savedUser.email, userData.phone);
 
-      const user = auth.currentUser;
-      if (!user) throw new Error('No user is currently signed in');
-
-      // Reauthenticate using temporary password
-      const credential = EmailAuthProvider.credential(user.email, userData.phone);
-      await reauthenticateWithCredential(user, credential);
-
-      // Update password to new one
-      await updatePassword(user, newPassword);
+      // Update password in Firebase Auth
+      await updatePassword(credential.user, newPassword);
       console.log('Password updated successfully for user:', savedUser.uid);
 
-      // Update database to mark firstTime as false
+      // Update database to mark as no longer first-time
       await update(userRef, { firstTime: false });
       console.log('Database updated: firstTime set to false');
 
+      // Clear localStorage and navigate
       localStorage.removeItem('firstLoginUser');
       alert('Password set successfully. Please login again.');
       navigate('/');
@@ -81,6 +69,7 @@ const SetNewPassword = () => {
     }
   };
 
+  // If this component is accessed directly without first-time data
   if (!savedUser?.uid || !savedUser?.email) {
     console.warn('No saved user data in localStorage');
     return <p style={{ textAlign: 'center', marginTop: '2rem' }}>Session expired. Please login again.</p>;
@@ -169,3 +158,4 @@ const styles = {
 };
 
 export default SetNewPassword;
+  

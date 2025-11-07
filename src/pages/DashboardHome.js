@@ -67,7 +67,39 @@ const DashboardHome = () => {
     const [teamCommissionData, setTeamCommissionData] = useState([]);
     const [allUsers, setAllUsers] = useState({});
     const [currentUserId, setCurrentUserId] = useState(null);
-    const [actualTeamCount, setActualTeamCount] = useState(0);
+    const [totalSalesMRP, setTotalSalesMRP] = useState(0);
+
+    // Calculate total sales from orders for current user
+    const calculateTotalSalesMRP = async (userId) => {
+        try {
+            const ordersRef = ref(db, 'HTAMS/orders');
+            const snapshot = await get(ordersRef);
+            
+            if (snapshot.exists()) {
+                const allOrders = snapshot.val();
+                // Filter orders where placedBy matches current user
+                const userOrders = Object.values(allOrders).filter(
+                    order => order.placedBy === userId
+                );
+                
+                // Calculate total from all items' totalPrice
+                const total = userOrders.reduce((sum, order) => {
+                    const orderTotal = order.items?.reduce((itemSum, item) => {
+                        return itemSum + (item.totalPrice || 0);
+                    }, 0) || 0;
+                    return sum + orderTotal;
+                }, 0);
+                
+                setTotalSalesMRP(total);
+                console.log('Total Sales (MRP) calculated:', total, 'for user:', userId);
+            } else {
+                setTotalSalesMRP(0);
+            }
+        } catch (error) {
+            console.error('Error calculating total sales:', error);
+            setTotalSalesMRP(0);
+        }
+    };
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -87,6 +119,9 @@ const DashboardHome = () => {
                     if (allUsersSnapshot.exists()) {
                         setAllUsers(allUsersSnapshot.val());
                     }
+
+                    // Calculate total sales for current user
+                    await calculateTotalSalesMRP(user.uid);
                 } catch (error) {
                     console.error('Error fetching user data:', error);
                 } finally {
@@ -97,28 +132,6 @@ const DashboardHome = () => {
 
         return () => unsubscribe();
     }, []);
-
-    // Fetch team count when currentUserId is available
-    useEffect(() => {
-        const fetchTeamCount = async () => {
-            if (!currentUserId) return;
-            
-            try {
-                const usersRef = ref(db, 'HTAMS/users');
-                const snapshot = await get(usersRef);
-                if (snapshot.exists()) {
-                    const allUsers = Object.values(snapshot.val());
-                    const teamMembers = allUsers.filter(user => user.referredBy === currentUserId);
-                    setActualTeamCount(teamMembers.length);
-                }
-            } catch (error) {
-                console.error('Error fetching team count:', error);
-                setActualTeamCount(0);
-            }
-        };
-
-        fetchTeamCount();
-    }, [currentUserId]);
 
     // Filter team commission data (exclude current user's own commissions)
     const getTeamCommissionData = () => {
@@ -202,22 +215,12 @@ const DashboardHome = () => {
         MyTeam,
         salesHistory,
         currentLevel,
-        createdAt,
-        transactions
+        createdAt
     } = userData;
 
-    // Enhanced data processing
-    const commissionData = Object.values(commissionHistory || {});
-
-    // Calculate total withdrawal from approved transactions
-    const calculateTotalWithdrawal = () => {
-        if (!transactions) return 0;
-        return Object.values(transactions)
-            .filter(transaction => transaction.status === 'approved' && transaction.type === 'withdrawal')
-            .reduce((total, transaction) => total + (transaction.amount || 0), 0);
-    };
-
-    const totalWithdrawal = calculateTotalWithdrawal();
+    // Enhanced data processing - Sort commissions by date (newest first)
+    const commissionData = Object.values(commissionHistory || {})
+        .sort((a, b) => new Date(b.at) - new Date(a.at));
 
     // Get team commission stats
     const teamStats = getTeamCommissionStats();
@@ -277,12 +280,12 @@ const DashboardHome = () => {
     };
 
     const barChartData = {
-        labels: ['Total Sales', 'Commissions', 'My Sales'],
+        labels: ['Total Sales (MRP)', 'Commissions', 'My Earning'],
         datasets: [
             {
                 label: 'Amount (₹)',
                 data: [
-                    analytics?.totalSales || 0,
+                    totalSalesMRP || 0,
                     analytics?.totalCommissionsEarned || 0,
                     parseInt(MySales) || 0,
                 ],
@@ -381,7 +384,9 @@ const DashboardHome = () => {
                         </div>
                         <div className="user-info-premium">
                             <h1 className="welcome-title">Welcome back, {name}!</h1>
-                            <p className="user-subtitle">{currentLevel || Role} • {city}, {state}</p>
+                            <p className="user-subtitle">
+                                {/* {currentLevel || Role} • */}
+                                 {city}, {state}</p>
                             <div className="user-badges">
                                 <span className="badge-item premium-member">
                                     <FaCrown /> Premium Member
@@ -421,8 +426,8 @@ const DashboardHome = () => {
                         </div>
                     </div>
                     <div className="stat-body">
-                        <h3 className="stat-value">₹{analytics?.totalSales?.toLocaleString() || '0'}</h3>
-                        <p className="stat-label">Total Sales</p>
+                        <h3 className="stat-value">₹{totalSalesMRP?.toLocaleString() || '0'}</h3>
+                        <p className="stat-label">Total Sales (MRP)</p>
                         <div className="progress-indicator">
                             <div className="progress-bar-premium" style={{ width: '85%' }}></div>
                         </div>
@@ -583,26 +588,60 @@ const DashboardHome = () => {
                         </div>
                     </div>
                     <div className="activity-list-premium">
-                        {commissionData.map((commission, index) => (
-                            <div key={index} className="activity-item-premium">
-                                <div className="activity-icon-premium">
+                        {commissionData.slice(0, 10).map((commission, index) => (
+                            <div key={index} className="activity-item-premium" style={{
+                                padding: '8px 12px',
+                                margin: '4px 0',
+                                minHeight: 'auto'
+                            }}>
+                                <div className="activity-icon-premium" style={{
+                                    width: '32px',
+                                    height: '32px',
+                                    minWidth: '32px'
+                                }}>
                                     <FaDollarSign />
                                 </div>
-                                <div className="activity-details">
-                                    <div className="activity-main-info">
-                                        <h4 className="activity-title">Commission Earned</h4>
-                                        <span className="activity-amount">₹{commission.amount.toLocaleString()}</span>
+                                <div className="activity-details" style={{
+                                    gap: '2px'
+                                }}>
+                                    <div className="activity-main-info" style={{
+                                        marginBottom: '2px'
+                                    }}>
+                                        <h4 className="activity-title" style={{
+                                            fontSize: '13px',
+                                            margin: '0',
+                                            lineHeight: '1.2'
+                                        }}>Commission Earned</h4>
+                                        <span className="activity-amount" style={{
+                                            fontSize: '14px',
+                                            fontWeight: '600'
+                                        }}>₹{commission.amount.toLocaleString()}</span>
                                     </div>
-                                    <div className="activity-meta-info">
-                                        <span className="product-info">{commission.product?.name || 'Product Sale'}</span>
-                                        <span className="commission-rate">{commission.rateApplied}% rate</span>
+                                    <div className="activity-meta-info" style={{
+                                        marginBottom: '2px'
+                                    }}>
+                                        <span className="product-info" style={{
+                                            fontSize: '11px'
+                                        }}>{commission.product?.name || 'Product Sale'}</span>
+                                        <span className="commission-rate" style={{
+                                            fontSize: '11px'
+                                        }}>{commission.rateApplied}% rate</span>
                                     </div>
-                                    <div className="activity-footer-info">
-                                        <span className="activity-date">
+                                    <div className="activity-footer-info" style={{
+                                        gap: '8px'
+                                    }}>
+                                        <span className="activity-date" style={{
+                                            fontSize: '10px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '3px'
+                                        }}>
                                             <FaCalendarAlt />
                                             {new Date(commission.at).toLocaleDateString()}
                                         </span>
-                                        <span className="sale-value">
+                                        <span className="sale-value" style={{
+                                            fontSize: '10px'
+                                        }}>
                                             Sale: ₹{commission.saleAmount?.toLocaleString()}
                                         </span>
                                     </div>
@@ -633,11 +672,11 @@ const DashboardHome = () => {
                     <div className="insights-grid">
                         <div className="insight-item-premium">
                             <div className="insight-icon-premium success">
-                                <FaWallet />
+                                <FaRocket />
                             </div>
                             <div className="insight-content">
-                                <h4>Total Withdrawal</h4>
-                                <span>₹{totalWithdrawal.toLocaleString()}</span>
+                                <h4>Avg Commission</h4>
+                                <span>₹{avgCommissionPerSale.toFixed(0)}</span>
                             </div>
                         </div>
                         <div className="insight-item-premium">
@@ -645,17 +684,17 @@ const DashboardHome = () => {
                                 <FaUsers />
                             </div>
                             <div className="insight-content">
-                                <h4>Team Members</h4>
-                                <span>{actualTeamCount}</span>
+                                <h4>Team Size</h4>
+                                <span>{MyTeam || 'Building'}</span>
                             </div>
                         </div>
                         <div className="insight-item-premium">
                             <div className="insight-icon-premium warning">
-                                <FaCalendarAlt />
+                                <FaHandshake />
                             </div>
                             <div className="insight-content">
-                                <h4>Joining Date</h4>
-                                <span>{createdAt ? new Date(createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Not Available'}</span>
+                                <h4>Member Since</h4>
+                                <span>{new Date(createdAt).getFullYear()}</span>
                             </div>
                         </div>
                         <div className="insight-item-premium">
@@ -664,7 +703,7 @@ const DashboardHome = () => {
                             </div>
                             <div className="insight-content">
                                 <h4>Location</h4>
-                                <span>{city && state ? `${city}, ${state}` : city || state || 'Not Set'}</span>
+                                <span>{city}</span>
                             </div>
                         </div>
                     </div>

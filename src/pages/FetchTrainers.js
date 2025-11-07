@@ -23,6 +23,7 @@ export default function Dashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   
+  
   const SMS_CONFIG = {
     username: "Experts",
     authkey: "ba9dcdcdfcXX",
@@ -46,6 +47,7 @@ export default function Dashboard() {
     products: '',
     candidates: '',
     trainerId: '',
+    coTrainerId: '',
     expireDate: '',
     accessDuration: '',
     fees: '',
@@ -54,10 +56,44 @@ export default function Dashboard() {
 
   // Copy link state
   const [copiedId, setCopiedId] = useState(null);
+  
+  // Image file state
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
 
   // Navigation function for trainers page
   const handleNavigateToTrainers = () => {
     navigate('/company-dashboard/trainers');
+  };
+
+  // Handle image file selection
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        alert('Please select a valid image file');
+        return;
+      }
+      
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        alert('Image size should be less than 5MB');
+        return;
+      }
+      
+      setSelectedImage(file);
+      
+      // Create preview
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setImagePreview(e.target.result);
+      };
+      reader.readAsDataURL(file);
+      
+      // Update form with file name
+      setForm(prev => ({ ...prev, photo: file.name }));
+    }
   };
 
   useEffect(() => {
@@ -128,12 +164,15 @@ export default function Dashboard() {
       products: '',
       candidates: '',
       trainerId: '',
+      coTrainerId: '',
       expireDate: '',
       accessDuration: '',
       fees: '',
       photo: '',
     });
     setEditingTraining(null);
+    setSelectedImage(null);
+    setImagePreview(null);
   };
 
   const handleChange = (e) => {
@@ -143,28 +182,6 @@ export default function Dashboard() {
 
   // Edit training function
   const handleEditTraining = (training) => {
-    // Check if training can be edited
-    if (!canEditTraining(training)) {
-      alert('⚠️ Cannot edit this training - The registration link has expired!');
-      return;
-    }
-
-    // Additional warning if link expires soon
-    if (training.expireDate) {
-      const now = new Date();
-      const expire = new Date(training.expireDate);
-      const hoursUntilExpiry = (expire.getTime() - now.getTime()) / (1000 * 60 * 60);
-      
-      if (hoursUntilExpiry <= 24 && hoursUntilExpiry > 0) {
-        const confirmEdit = window.confirm(
-          `⚠️ Warning: Registration link expires in ${getTimeUntilExpiry(training)}!\n\n` +
-          'After expiration, participants won\'t be able to register and you won\'t be able to edit this training.\n\n' +
-          'Do you want to continue editing?'
-        );
-        if (!confirmEdit) return;
-      }
-    }
-
     setEditingTraining(training);
     setForm({
       location: training.location || '',
@@ -177,11 +194,14 @@ export default function Dashboard() {
         : training.products || '',
       candidates: training.candidates ? training.candidates.toString() : '',
       trainerId: training.trainerId || '',
+      coTrainerId: training.coTrainerId || '',
       expireDate: training.expireDate || '',
       accessDuration: training.accessDuration ? training.accessDuration.toString() : '',
       fees: training.fees !== undefined ? training.fees.toString() : '',
       photo: training.photo || '',
     });
+    setSelectedImage(null);
+    setImagePreview(null);
     setShowCreateForm(true);
   };
 
@@ -214,8 +234,7 @@ export default function Dashboard() {
     endDate.setHours(0, 0, 0, 0);
     expireDate.setHours(0, 0, 0, 0);
 
-    // For editing existing training, allow past dates if they were already set
-    if (!editingTraining && startDate < today) {
+    if (startDate < today) {
       return { valid: false, message: 'Training start date cannot be before today' };
     }
 
@@ -223,21 +242,8 @@ export default function Dashboard() {
       return { valid: false, message: 'Training end date cannot be before start date' };
     }
 
-    // For editing, allow extending expire date even if original has passed
-    if (!editingTraining && expireDate < today) {
+    if (expireDate < today) {
       return { valid: false, message: 'Link expiration date cannot be before today' };
-    }
-
-    // When editing, allow expire date to be extended beyond today
-    if (editingTraining && expireDate < today) {
-      const confirmExtend = window.confirm(
-        '⚠️ The expiration date you selected is in the past.\n\n' +
-        'This will immediately expire the registration link.\n\n' +
-        'Do you want to set a future date instead?'
-      );
-      if (confirmExtend) {
-        return { valid: false, message: 'Please select a future expiration date' };
-      }
     }
 
     if (expireDate >= startDate) {
@@ -247,8 +253,14 @@ export default function Dashboard() {
     return { valid: true };
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+ const handleSubmit = async (e) => {
+  e.preventDefault();
+  
+  // ADD THIS FIX - Prevent double submission
+  if (e.target.disabled) return;
+  e.target.disabled = true;
+  
+  try {
     const selectedTrainer = trainers.find((t) => t.id === form.trainerId);
     if (!selectedTrainer) {
       alert('Please select a trainer');
@@ -274,6 +286,9 @@ export default function Dashboard() {
       return;
     }
 
+    // Get co-trainer information
+    const selectedCoTrainer = form.coTrainerId ? trainers.find((t) => t.id === form.coTrainerId) : null;
+
     const dataToSave = {
       ...form,
       products: form.products.split(',').map((p) => p.trim()).filter(p => p.length > 0),
@@ -281,86 +296,93 @@ export default function Dashboard() {
       fees: parseFloat(form.fees),
       accessDuration: parseInt(form.accessDuration),
       trainerName: selectedTrainer.name || '',
+      trainerPhone: selectedTrainer.phone || selectedTrainer.mobile || selectedTrainer.contact || '',
+      coTrainerName: selectedCoTrainer ? selectedCoTrainer.name : '',
+      coTrainerPhone: selectedCoTrainer ? (selectedCoTrainer.phone || selectedCoTrainer.mobile || selectedCoTrainer.contact || '') : '',
       photo: form.photo || '',
       status: form.status || 'pending',
     };
 
-    try {
-      if (editingTraining) {
-        // UPDATE EXISTING TRAINING
-        const trainingRef = ref(db, `HTAMS/company/trainings/${editingTraining.id}`);
-        await update(trainingRef, dataToSave);
-        
-        const updatedTrainings = trainings.map(training => 
-          training.id === editingTraining.id 
-            ? { ...training, ...dataToSave }
-            : training
-        ).sort((a, b) => {
-          const dateA = new Date(getStartDate(a) || '1900-01-01').getTime();
-          const dateB = new Date(getStartDate(b) || '1900-01-01').getTime();
-          return dateB - dateA;
-        });
-        
-        setTrainings(updatedTrainings);
-        
-        // Send SMS notifications to participants
-        if (editingTraining.participants) {
-          const participantMobiles = extractParticipantMobiles(editingTraining.participants);
+    if (editingTraining) {
+      // UPDATE EXISTING TRAINING
+      const trainingRef = ref(db, `HTAMS/company/trainings/${editingTraining.id}`);
+      await update(trainingRef, dataToSave);
+      
+      const updatedTrainings = trainings.map(training => 
+        training.id === editingTraining.id 
+          ? { ...training, ...dataToSave }
+          : training
+      ).sort((a, b) => {
+        const dateA = new Date(getStartDate(a) || '1900-01-01').getTime();
+        const dateB = new Date(getStartDate(b) || '1900-01-01').getTime();
+        return dateB - dateA;
+      });
+      
+      setTrainings(updatedTrainings);
+      
+      // Send SMS notifications to participants
+      if (editingTraining.participants) {
+        const participantMobiles = extractParticipantMobiles(editingTraining.participants);
 
-          if (participantMobiles.length > 0) {
-            console.log('Sending SMS to participants:', participantMobiles);
+        if (participantMobiles.length > 0) {
+          console.log('Sending SMS to participants:', participantMobiles);
 
-            const smsResult = await sendTrainingUpdateMessage(
-              { ...editingTraining, ...dataToSave },
-              participantMobiles
-            );
+          const smsResult = await sendTrainingUpdateMessage(
+            { ...editingTraining, ...dataToSave },
+            participantMobiles
+          );
 
-            console.log('SMS Result:', smsResult);
+          console.log('SMS Result:', smsResult);
 
-            if (smsResult.success) {
-              alert(`Training updated successfully! ${smsResult.message}`);
-            } else {
-              alert(`Training updated successfully, but some SMS failed: ${smsResult.message}`);
-            }
+          if (smsResult.success) {
+            alert(`Training updated successfully! ${smsResult.message}`);
           } else {
-            alert('Training updated successfully! (No valid participant mobile numbers)');
+            alert(`Training updated successfully, but some SMS failed: ${smsResult.message}`);
           }
         } else {
-          alert('Training updated successfully! (No participants found)');
+          alert('Training updated successfully! (No valid participant mobile numbers)');
         }
-        
       } else {
-        // CREATE NEW TRAINING
-        const newRef = push(ref(db, 'HTAMS/company/trainings'));
-        const trainingId = newRef.key;
-        const joinLink = `${window.location.origin}/join-training/${trainingId}`;
-        
-        const newTrainingData = { 
-          ...dataToSave, 
-          id: trainingId,
-          status: 'pending', 
-          joinLink, 
-          joinedCount: 0 
-        };
-        
-        const updatedTrainings = [newTrainingData, ...trainings].sort((a, b) => {
-          const dateA = new Date(getStartDate(a) || '1900-01-01').getTime();
-          const dateB = new Date(getStartDate(b) || '1900-01-01').getTime();
-          return dateB - dateA;
-        });
-        
-        setTrainings(updatedTrainings);
-        await set(newRef, newTrainingData);
-        alert('Training created successfully');
+        alert('Training updated successfully! (No participants found)');
       }
       
-      resetForm();
-      setShowCreateForm(false);
+    } else {
+      // CREATE NEW TRAINING
+      const newRef = push(ref(db, 'HTAMS/company/trainings'));
+      const trainingId = newRef.key;
+      const joinLink = `${window.location.origin}/join-training/${trainingId}`;
       
-    } catch (error) {
-      alert('Failed to save training: ' + error.message);
+      const newTrainingData = { 
+        ...dataToSave, 
+        id: trainingId,
+        status: 'pending', 
+        joinLink, 
+        joinedCount: 0 
+      };
+      
+      const updatedTrainings = [newTrainingData, ...trainings].sort((a, b) => {
+        const dateA = new Date(getStartDate(a) || '1900-01-01').getTime();
+        const dateB = new Date(getStartDate(b) || '1900-01-01').getTime();
+        return dateB - dateA;
+      });
+      
+      setTrainings(updatedTrainings);
+      await set(newRef, newTrainingData);
+      alert('Training created successfully');
     }
-  };
+    
+    resetForm();
+    setShowCreateForm(false);
+    
+  } catch (error) {
+    alert('Failed to save training: ' + error.message);
+  } finally {
+    // Re-enable the form
+    e.target.disabled = false;
+  }
+};
+
+
 
   // Stats calculation
   const participantCount = trainings.reduce(
@@ -382,7 +404,7 @@ export default function Dashboard() {
     
     const matchesStatus = filterStatus === 'all' || 
       (filterStatus === 'active' && isActiveTraining(t)) ||
-      // (filterStatus === 'pending' && t.status === 'pending') ||
+      (filterStatus === 'pending' && t.status === 'pending') ||
       (filterStatus === 'completed' && t.status === 'completed');
     
     return matchesSearch && matchesStatus;
@@ -440,32 +462,6 @@ export default function Dashboard() {
     const now = new Date();
     const expire = new Date(training.expireDate);
     return now <= expire;
-  };
-
-  // Function to check if training can be edited (before link expires)
-  const canEditTraining = (training) => {
-    if (!training.expireDate) return true; // No expire date means always editable
-    const now = new Date();
-    const expire = new Date(training.expireDate);
-    return now <= expire; // Can edit if link hasn't expired yet
-  };
-
-  // Function to get time remaining until link expires
-  const getTimeUntilExpiry = (training) => {
-    if (!training.expireDate) return null;
-    const now = new Date();
-    const expire = new Date(training.expireDate);
-    const diffMs = expire.getTime() - now.getTime();
-    
-    if (diffMs <= 0) return 'Expired';
-    
-    const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-    
-    if (days > 0) return `${days}d ${hours}h remaining`;
-    if (hours > 0) return `${hours}h ${minutes}m remaining`;
-    return `${minutes}m remaining`;
   };
 
   // Pagination handlers
@@ -559,68 +555,61 @@ export default function Dashboard() {
     setCurrentPage(1);
   }, [searchTerm, filterStatus]);
 
-// Enhanced Responsive Styles with Fixed Card Sizing
+// Professional White Theme Styles
 const styles = {
-  // Root container - fully responsive
+  // Root container - clean white background
   dashPremiumRoot: {
     minHeight: '100vh',
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-    padding: 'clamp(10px, 3vw, 20px)',
+    background: '#f8fafc',
+    fontFamily: "'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+    padding: 'clamp(15px, 3vw, 25px)',
     boxSizing: 'border-box',
   },
   
-  // Header section with improved responsive design
+  // Header section - professional design
   dashPremiumHeader: {
-    background: 'linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.08) 100%)',
-    backdropFilter: 'blur(15px)',
-    border: '1px solid rgba(255,255,255,0.2)',
-    borderRadius: 'clamp(12px, 3vw, 20px)',
-    padding: 'clamp(20px, 4vw, 30px)',
-    marginBottom: 'clamp(20px, 4vw, 30px)',
-    boxShadow: '0 25px 50px rgba(0,0,0,0.15)',
+    background: '#002B5C',
+    border: 'none',
+    borderRadius: '0',
+    padding: '24px',
+    marginBottom: '24px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
     width: '100%',
     boxSizing: 'border-box',
   },
 
   headerTitleSection: {
     textAlign: 'center',
-    marginBottom: 'clamp(25px, 5vw, 35px)',
+    marginBottom: '20px',
   },
 
   dashPremiumPageTitle: {
-    fontSize: 'clamp(1.8rem, 6vw, 2.8rem)',
-    fontWeight: '800',
-    color: '#ffffff',
+    fontSize: 'clamp(1.5rem, 4vw, 2rem)',
+    fontWeight: '700',
+    color: 'white',
     margin: 0,
-    textShadow: '3px 3px 6px rgba(0,0,0,0.4)',
-    lineHeight: '1.1',
-    background: 'linear-gradient(135deg, #ffffff, #f0f0f0)',
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent',
-    backgroundClip: 'text',
+    lineHeight: '1.2',
     wordBreak: 'break-word',
   },
 
   dashPremiumPageSubtitle: {
-    fontSize: 'clamp(0.9rem, 3vw, 1.2rem)',
-    color: 'rgba(255,255,255,0.9)',
-    margin: '12px 0 0 0',
-    fontWeight: '500',
+    fontSize: 'clamp(0.875rem, 3vw, 1rem)',
+    color: 'rgba(255, 255, 255, 0.85)',
+    margin: '8px 0 0 0',
+    fontWeight: '400',
     lineHeight: '1.4',
     wordBreak: 'break-word',
   },
 
-  // Fully responsive controls section
+  // Controls section - clean white design
   controlsSection: {
     display: 'flex',
     flexDirection: 'column',
-    gap: 'clamp(15px, 3vw, 20px)',
-    background: 'rgba(255,255,255,0.1)',
-    borderRadius: 'clamp(12px, 3vw, 16px)',
-    padding: 'clamp(15px, 3vw, 20px)',
-    backdropFilter: 'blur(10px)',
-    border: '1px solid rgba(255,255,255,0.15)',
+    gap: '16px',
+    background: '#f9fafb',
+    borderRadius: '8px',
+    padding: '20px',
+    border: '1px solid #e5e7eb',
     width: '100%',
     boxSizing: 'border-box',
   },
@@ -654,24 +643,24 @@ const styles = {
     top: '50%',
     transform: 'translateY(-50%)',
     fontSize: '1.2rem',
-    color: '#6366f1',
+    color: '#F36F21',
     zIndex: 2,
     pointerEvents: 'none',
   },
 
   searchInput: {
     width: '100%',
-    padding: '14px 16px 14px 50px',
-    border: '2px solid rgba(255,255,255,0.3)',
-    borderRadius: 'clamp(10px, 2vw, 14px)',
-    fontSize: 'clamp(14px, 3vw, 16px)',
-    transition: 'all 0.3s ease',
+    padding: '12px 16px 12px 48px',
+    border: '1px solid #d1d5db',
+    borderRadius: '8px',
+    fontSize: '14px',
+    transition: 'all 0.2s ease',
     boxSizing: 'border-box',
-    background: 'rgba(255,255,255,0.95)',
-    color: '#1e293b',
-    minHeight: '52px',
-    fontWeight: '500',
-    boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
+    background: 'white',
+    color: '#374151',
+    minHeight: '44px',
+    fontWeight: '400',
+    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
   },
 
   clearSearchBtn: {
@@ -681,7 +670,7 @@ const styles = {
     transform: 'translateY(-50%)',
     background: 'transparent',
     border: 'none',
-    color: '#64748b',
+    color: '#6b7280',
     fontSize: '18px',
     cursor: 'pointer',
     padding: '4px',
@@ -704,18 +693,18 @@ const styles = {
 
   filterSelect: {
     width: '100%',
-    padding: '14px 16px',
-    border: '2px solid rgba(255,255,255,0.3)',
-    borderRadius: 'clamp(10px, 2vw, 14px)',
-    fontSize: 'clamp(14px, 3vw, 16px)',
-    background: 'rgba(255,255,255,0.95)',
-    color: '#1e293b',
+    padding: '12px 16px',
+    border: '1px solid #d1d5db',
+    borderRadius: '8px',
+    fontSize: '14px',
+    background: 'white',
+    color: '#374151',
     cursor: 'pointer',
-    transition: 'all 0.3s ease',
+    transition: 'all 0.2s ease',
     boxSizing: 'border-box',
-    minHeight: '52px',
-    fontWeight: '500',
-    boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
+    minHeight: '44px',
+    fontWeight: '400',
+    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
   },
 
   // Enhanced responsive buttons section
@@ -731,39 +720,41 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '10px',
-    padding: '14px 26px',
-    border: 'none',
-    borderRadius: 'clamp(10px, 2vw, 14px)',
-    fontWeight: '700',
-    fontSize: 'clamp(13px, 3vw, 15px)',
+    gap: '8px',
+    padding: '12px 20px',
+    border: '1px solid transparent',
+    borderRadius: '8px',
+    fontWeight: '600',
+    fontSize: '14px',
     cursor: 'pointer',
-    transition: 'all 0.3s ease',
-    boxShadow: '0 8px 25px rgba(0,0,0,0.25)',
-    minWidth: '140px',
-    minHeight: '52px',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
+    minWidth: '120px',
+    minHeight: '44px',
     whiteSpace: 'nowrap',
     position: 'relative',
     overflow: 'hidden',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
+    letterSpacing: '0.025em',
     flex: '1 1 auto',
-    maxWidth: '220px',
+    maxWidth: '200px',
   },
 
   actionBtnPrimary: {
-    background: 'linear-gradient(135deg, #6366f1, #5855eb)',
+    background: '#F36F21',
     color: 'white',
+    borderColor: '#F36F21',
   },
 
   actionBtnDanger: {
-    background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+    background: '#ef4444',
     color: 'white',
+    borderColor: '#ef4444',
   },
 
   actionBtnSuccess: {
-    background: 'linear-gradient(135deg, #10b981, #059669)',
+    background: '#10b981',
     color: 'white',
+    borderColor: '#10b981',
   },
 
   btnIcon: {
@@ -771,20 +762,21 @@ const styles = {
     fontWeight: 'bold',
   },
 
-  // Search results info - responsive
+  // Search results info - clean design
   searchResultsInfo: {
-    background: 'rgba(255,255,255,0.1)',
-    borderRadius: 'clamp(10px, 2vw, 12px)',
-    padding: '15px 20px',
+    background: 'white',
+    borderRadius: '8px',
+    padding: '16px 20px',
     marginBottom: '20px',
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: 'clamp(13px, 3vw, 14px)',
+    color: '#374151',
+    fontSize: '14px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     flexWrap: 'wrap',
-    gap: '10px',
-    border: '1px solid rgba(255,255,255,0.15)',
+    gap: '12px',
+    border: '1px solid #e5e7eb',
+    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
     boxSizing: 'border-box',
   },
 
@@ -796,21 +788,23 @@ const styles = {
   },
 
   resultCount: {
-    background: 'rgba(255,255,255,0.2)',
+    background: '#F36F21',
     padding: '4px 12px',
-    borderRadius: '20px',
+    borderRadius: '16px',
     fontWeight: '600',
     color: 'white',
+    fontSize: '12px',
   },
 
   clearAllBtn: {
-    background: 'rgba(255,255,255,0.2)',
-    border: '1px solid rgba(255,255,255,0.3)',
-    borderRadius: '8px',
-    padding: '6px 12px',
-    color: 'white',
-    fontSize: '12px',
+    background: '#f3f4f6',
+    border: '1px solid #d1d5db',
+    color: '#374151',
+    padding: '8px 16px',
+    borderRadius: '6px',
     cursor: 'pointer',
+    fontSize: '13px',
+    fontWeight: '500',
     transition: 'all 0.2s ease',
     whiteSpace: 'nowrap',
   },
@@ -835,7 +829,7 @@ const styles = {
   formTitle: {
     fontSize: 'clamp(1.3rem, 4vw, 1.8rem)',
     fontWeight: '700',
-    color: '#1e293b',
+    color: '#1f2937',
     margin: 0,
   },
 
@@ -862,18 +856,17 @@ const styles = {
 
   formLabel: {
     fontWeight: '600',
-    color: '#1e293b',
+    color: '#374151',
     fontSize: 'clamp(13px, 3vw, 14px)',
   },
 
   formInput: {
     padding: '12px 16px',
-    border: '2px solid #e2e8f0',
+    border: '2px solid #e5e7eb',
     borderRadius: 'clamp(8px, 2vw, 10px)',
     fontSize: 'clamp(13px, 3vw, 14px)',
     transition: 'all 0.2s ease',
     background: 'white',
-    color: '#1e293b',
     width: '100%',
     boxSizing: 'border-box',
     minHeight: '44px',
@@ -881,19 +874,18 @@ const styles = {
 
   formSelect: {
     padding: '12px 16px',
-    border: '2px solid #e2e8f0',
+    border: '2px solid #e5e7eb',
     borderRadius: 'clamp(8px, 2vw, 10px)',
     fontSize: 'clamp(13px, 3vw, 14px)',
     transition: 'all 0.2s ease',
     background: 'white',
-    color: '#1e293b',
     width: '100%',
     boxSizing: 'border-box',
     minHeight: '44px',
   },
 
   formSubmitBtn: {
-    background: 'linear-gradient(135deg, #6366f1, #5855eb)',
+    background: 'linear-gradient(135deg, #059669, #047857)',
     color: 'white',
     border: 'none',
     padding: '16px 32px',
@@ -904,7 +896,7 @@ const styles = {
     transition: 'all 0.3s ease',
     marginTop: '20px',
     alignSelf: 'center',
-    boxShadow: '0 4px 15px rgba(99, 102, 241, 0.3)',
+    boxShadow: '0 4px 15px rgba(5, 150, 105, 0.3)',
     minHeight: '48px',
     minWidth: '160px',
     maxWidth: '300px',
@@ -923,41 +915,37 @@ const styles = {
 
   statCard: {
     background: 'white',
-    borderRadius: 'clamp(12px, 3vw, 16px)',
-    padding: 'clamp(18px, 4vw, 25px)',
+    borderRadius: '12px',
+    padding: '20px',
     display: 'flex',
     alignItems: 'center',
-    gap: '20px',
-    boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
-    transition: 'all 0.3s ease',
-    border: '1px solid rgba(255,255,255,0.2)',
-    minHeight: '120px',
+    gap: '16px',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06)',
+    transition: 'all 0.2s ease',
+    border: '1px solid #e5e7eb',
+    minHeight: '100px',
     boxSizing: 'border-box',
   },
 
   statCardTotal: {
-    background: 'linear-gradient(135deg, #6366f1, #5855eb)',
-    color: 'white',
+    borderLeft: '4px solid #002B5C',
   },
 
   statCardParticipants: {
-    background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
-    color: 'white',
+    borderLeft: '4px solid #F36F21',
   },
 
   statCardActive: {
-    background: 'linear-gradient(135deg, #10b981, #059669)',
-    color: 'white',
+    borderLeft: '4px solid #10b981',
   },
 
   statCardCompleted: {
-    background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
-    color: 'white',
+    borderLeft: '4px solid #f59e0b',
   },
 
   statIcon: {
-    fontSize: 'clamp(2rem, 6vw, 2.5rem)',
-    opacity: '0.9',
+    fontSize: '2rem',
+    color: '#F36F21',
     flexShrink: 0,
   },
 
@@ -967,17 +955,19 @@ const styles = {
   },
 
   statNumber: {
-    fontSize: 'clamp(1.8rem, 5vw, 2.2rem)',
+    fontSize: '1.875rem',
     fontWeight: '700',
-    marginBottom: '5px',
     lineHeight: '1',
+    marginBottom: '4px',
+    color: '#1f2937',
   },
 
   statLabel: {
-    fontSize: 'clamp(0.9rem, 3vw, 1rem)',
-    opacity: '0.9',
+    fontSize: '0.875rem',
+    color: '#6b7280',
     fontWeight: '500',
-    lineHeight: '1.2',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
   },
 
   // Pagination info - responsive
@@ -1022,22 +1012,22 @@ const styles = {
     height: '100%', // Make wrapper take full height
   },
 
-  // FIXED: Consistent card sizing across all devices
+  // Professional training card design
   trainingCard: {
     background: 'white',
-    borderRadius: 'clamp(12px, 3vw, 16px)',
-    padding: '18px',
+    borderRadius: '12px',
+    padding: '20px',
     cursor: 'pointer',
-    transition: 'all 0.3s ease',
-    boxShadow: '0 8px 25px rgba(0,0,0,0.08)',
-    border: '1px solid rgba(0,0,0,0.06)',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06)',
+    border: '1px solid #e5e7eb',
     width: '100%',
-    minHeight: '320px', // Fixed minimum height for all cards
-    maxHeight: 'none', // Allow natural expansion
+    minHeight: '280px',
+    maxHeight: 'none',
     boxSizing: 'border-box',
     display: 'flex',
     flexDirection: 'column',
-    justifyContent: 'space-between', // Distribute content evenly
+    justifyContent: 'space-between',
     position: 'relative',
   },
 
@@ -1060,17 +1050,16 @@ const styles = {
   },
 
   trainerAvatar: {
-    width: '48px',
-    height: '48px',
+    width: '44px',
+    height: '44px',
     borderRadius: '50%',
-    background: 'linear-gradient(135deg, #6366f1, #5855eb)',
+    background: '#F36F21',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     color: 'white',
-    fontWeight: '700',
-    fontSize: '1.1rem',
-    boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
+    fontWeight: '600',
+    fontSize: '1.125rem',
     flexShrink: 0,
   },
 
@@ -1081,19 +1070,30 @@ const styles = {
   },
 
   trainerName: {
-    fontSize: 'clamp(1rem, 3vw, 1.15rem)',
-    fontWeight: '700',
-    color: '#1e293b',
+    fontSize: '1rem',
+    fontWeight: '600',
+    color: '#1f2937',
     margin: '0 0 4px 0',
-    lineHeight: '1.3',
+    lineHeight: '1.2',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+
+  coTrainerName: {
+    fontSize: '0.8rem',
+    fontWeight: '500',
+    color: '#6b7280',
+    margin: '0 0 4px 0',
+    lineHeight: '1.2',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
 
   trainerLocation: {
-    fontSize: 'clamp(0.8rem, 2.5vw, 0.9rem)',
-    color: '#64748b',
+    fontSize: '0.875rem',
+    color: '#6b7280',
     margin: 0,
     lineHeight: '1.3',
     overflow: 'hidden',
@@ -1109,48 +1109,47 @@ const styles = {
   },
 
   statusBadge: {
-    padding: '6px 12px',
-    borderRadius: '20px',
-    fontSize: 'clamp(10px, 2.5vw, 12px)',
-    fontWeight: '600',
+    padding: '4px 10px',
+    borderRadius: '12px',
+    fontSize: '11px',
+    fontWeight: '500',
     textTransform: 'uppercase',
-    letterSpacing: '0.5px',
+    letterSpacing: '0.025em',
     whiteSpace: 'nowrap',
     lineHeight: '1',
   },
 
   statusBadgeActive: {
-    background: 'linear-gradient(135deg, #10b981, #059669)',
-    color: 'white',
-    boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)',
+    background: '#dcfdf7',
+    color: '#065f46',
+    border: '1px solid #a7f3d0',
   },
 
   statusBadgePending: {
-    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-    color: 'white',
-    boxShadow: '0 2px 8px rgba(245, 158, 11, 0.3)',
+    background: '#fef3c7',
+    color: '#92400e',
+    border: '1px solid #fcd34d',
   },
 
   statusBadgeCompleted: {
-    background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
-    color: 'white',
-    boxShadow: '0 2px 8px rgba(139, 92, 246, 0.3)',
+    background: '#ede9fe',
+    color: '#5b21b6',
+    border: '1px solid #c4b5fd',
   },
 
   editBtn: {
-    width: '34px',
-    height: '34px',
-    border: 'none',
-    borderRadius: '50%',
-    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-    color: 'white',
+    width: '32px',
+    height: '32px',
+    border: '1px solid #d1d5db',
+    borderRadius: '6px',
+    background: 'white',
+    color: '#6b7280',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '13px',
+    fontSize: '12px',
     transition: 'all 0.2s ease',
-    boxShadow: '0 2px 8px rgba(245, 158, 11, 0.3)',
   },
 
   // IMPROVED: Card details with consistent spacing
@@ -1170,7 +1169,7 @@ const styles = {
     padding: '10px 12px',
     background: '#f8fafc',
     borderRadius: '8px',
-    borderLeft: '3px solid #6366f1',
+    borderLeft: '3px solid #4f46e5',
     width: '100%',
     boxSizing: 'border-box',
     minHeight: '40px', // Consistent height for all items
@@ -1180,19 +1179,19 @@ const styles = {
     fontSize: '1rem',
     minWidth: '18px',
     flexShrink: 0,
-    color: '#6366f1',
+    color: '#4f46e5',
   },
 
   detailLabel: {
     fontWeight: '600',
-    color: '#1e293b',
+    color: '#374151',
     minWidth: '72px',
     fontSize: 'clamp(11px, 3vw, 13px)',
     flexShrink: 0,
   },
 
   detailValue: {
-    color: '#64748b',
+    color: '#6b7280',
     fontWeight: '500',
     fontSize: 'clamp(11px, 3vw, 13px)',
     flex: 1,
@@ -1244,11 +1243,11 @@ const styles = {
   },
 
   linkStatusAccessible: {
-    color: '#10b981',
+    color: '#f7f7f7ff',
   },
 
   linkStatusExpired: {
-    color: '#ef4444',
+    color: '#0018cfff',
   },
 
   linkIcon: {
@@ -1256,12 +1255,13 @@ const styles = {
   },
 
   linkText: {
+    color: '#374151',
     fontSize: 'clamp(11px, 3vw, 13px)',
   },
 
   linkExpire: {
     fontSize: 'clamp(10px, 3vw, 11px)',
-    color: '#64748b',
+    color: '#000000ff',
     fontWeight: '500',
   },
 
@@ -1289,7 +1289,7 @@ const styles = {
   },
 
   linkBtnCopy: {
-    background: '#64748b',
+    background: '#6b7280',
     color: 'white',
   },
 
@@ -1299,12 +1299,12 @@ const styles = {
   },
 
   linkBtnOpen: {
-    background: '#6366f1',
+    background: '#059669',
     color: 'white',
   },
 
   linkBtnExpired: {
-    background: '#ef4444',
+    background: '#dc2626',
     color: 'white',
     cursor: 'not-allowed',
   },
@@ -1365,9 +1365,9 @@ const styles = {
   },
 
   pageNumberActive: {
-    background: 'white',
-    color: '#6366f1',
-    borderColor: 'white',
+    background: '#F36F21',
+    color: 'white',
+    borderColor: '#F36F21',
   },
 
   // Loading skeleton with consistent height
@@ -1470,7 +1470,7 @@ const styles = {
     width: '60px',
     height: '60px',
     borderRadius: '50%',
-    background: 'linear-gradient(135deg, #6366f1, #5855eb)',
+    background: '#F36F21',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1488,7 +1488,7 @@ const styles = {
   modalTitle: {
     fontSize: 'clamp(1.2rem, 4vw, 1.5rem)',
     fontWeight: '700',
-    color: '#1e293b',
+    color: '#1f2937',
     margin: '0 0 10px 0',
     lineHeight: '1.2',
     overflow: 'hidden',
@@ -1526,8 +1526,8 @@ const styles = {
     height: '40px',
     border: 'none',
     borderRadius: '50%',
-    background: '#f8fafc',
-    color: '#64748b',
+    background: '#F36F21',
+    color: 'white',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
@@ -1548,10 +1548,10 @@ const styles = {
   sectionTitle: {
     fontSize: 'clamp(1.1rem, 3vw, 1.2rem)',
     fontWeight: '700',
-    color: '#1e293b',
+    color: '#1f2937',
     marginBottom: '20px',
     paddingBottom: '10px',
-    borderBottom: '2px solid #e2e8f0',
+    borderBottom: '2px solid #e5e7eb',
   },
 
   detailGrid: {
@@ -1567,7 +1567,7 @@ const styles = {
     padding: '15px',
     background: '#f8fafc',
     borderRadius: '10px',
-    borderLeft: '4px solid #6366f1',
+    borderLeft: '4px solid #F36F21',
     gap: '10px',
     flexWrap: 'wrap',
     boxSizing: 'border-box',
@@ -1581,14 +1581,14 @@ const styles = {
 
   detailKey: {
     fontWeight: '600',
-    color: '#1e293b',
+    color: '#374151',
     minWidth: '120px',
     fontSize: 'clamp(12px, 3vw, 14px)',
     flexShrink: 0,
   },
 
   detailVal: {
-    color: '#64748b',
+    color: '#6b7280',
     textAlign: 'right',
     flex: 1,
     fontSize: 'clamp(12px, 3vw, 14px)',
@@ -1604,7 +1604,7 @@ const styles = {
   },
 
   productTag: {
-    background: 'linear-gradient(135deg, #6366f1, #5855eb)',
+    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
     color: 'white',
     padding: '4px 12px',
     borderRadius: '20px',
@@ -1628,7 +1628,7 @@ const styles = {
     padding: '15px',
     background: '#f8fafc',
     borderRadius: '12px',
-    border: '1px solid #e2e8f0',
+    border: '1px solid #e5e7eb',
     transition: 'all 0.2s ease',
     width: '100%',
     boxSizing: 'border-box',
@@ -1638,7 +1638,7 @@ const styles = {
     width: '40px',
     height: '40px',
     borderRadius: '50%',
-    background: 'linear-gradient(135deg, #10b981, #059669)',
+    background: '#F36F21',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1655,7 +1655,7 @@ const styles = {
 
   participantName: {
     fontWeight: '600',
-    color: '#1e293b',
+    color: '#1f2937',
     marginBottom: '4px',
     fontSize: 'clamp(13px, 3vw, 14px)',
     overflow: 'hidden',
@@ -1665,7 +1665,7 @@ const styles = {
 
   participantContact: {
     fontSize: 'clamp(11px, 3vw, 12px)',
-    color: '#64748b',
+    color: '#6b7280',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -1691,6 +1691,39 @@ const styles = {
   participantStatusPending: {
     background: '#f59e0b',
     color: 'white',
+  },
+
+  // Image preview styles
+  imagePreviewContainer: {
+    marginTop: '12px',
+    padding: '12px',
+    border: '1px solid #e5e7eb',
+    borderRadius: '8px',
+    background: '#f9fafb',
+    textAlign: 'center',
+  },
+
+  imagePreview: {
+    maxWidth: '200px',
+    maxHeight: '150px',
+    width: 'auto',
+    height: 'auto',
+    borderRadius: '6px',
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+    marginBottom: '8px',
+    display: 'block',
+    margin: '0 auto 8px auto',
+  },
+
+  removeImageBtn: {
+    background: '#ef4444',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    padding: '6px 12px',
+    fontSize: '12px',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
   },
 };
 
@@ -1907,7 +1940,7 @@ const additionalCSS = `
                 >
                   <option value="all">🔄 All Status</option>
                   <option value="active">⚡ Active</option>
-                  {/* <option value="pending">⏳ Pending</option> */}
+                  <option value="pending">⏳ Pending</option>
                   <option value="completed">✅ Completed</option>
                 </select>
               </div>
@@ -2176,6 +2209,30 @@ const additionalCSS = `
                 </select>
               </div>
 
+              {/* Co-Trainer */}
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>👨‍🏫 Co-Trainer (Optional)</label>
+                <select
+                  name="coTrainerId"
+                  value={form.coTrainerId}
+                  onChange={handleChange}
+                  style={styles.formSelect}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#4f46e5';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '#e5e7eb';
+                  }}
+                >
+                  <option value="">Select Co-Trainer (Optional)</option>
+                  {trainers.filter(trainer => trainer.id !== form.trainerId).map((trainer) => (
+                    <option key={trainer.id} value={trainer.id}>
+                      {trainer.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               {/* Link Expire Date */}
               <div style={styles.formGroup}>
                 <label style={styles.formLabel}>⏰ Link Expire Date *</label>
@@ -2243,14 +2300,13 @@ const additionalCSS = `
                 />
               </div>
 
-              {/* Photo URL */}
+              {/* Photo Upload */}
               <div style={styles.formGroup}>
-                <label style={styles.formLabel}>🖼️ Photo URL</label>
+                <label style={styles.formLabel}>🖼️ Training Photo (Optional)</label>
                 <input
-                  name="photo"
-                  value={form.photo}
-                  onChange={handleChange}
-                  placeholder="Photo URL (optional)"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageChange}
                   style={styles.formInput}
                   onFocus={(e) => {
                     e.target.style.borderColor = '#4f46e5';
@@ -2261,6 +2317,26 @@ const additionalCSS = `
                     e.target.style.boxShadow = 'none';
                   }}
                 />
+                {imagePreview && (
+                  <div style={styles.imagePreviewContainer}>
+                    <img 
+                      src={imagePreview} 
+                      alt="Training preview" 
+                      style={styles.imagePreview}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedImage(null);
+                        setImagePreview(null);
+                        setForm(prev => ({ ...prev, photo: '' }));
+                      }}
+                      style={styles.removeImageBtn}
+                    >
+                      ✕ Remove
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -2411,6 +2487,11 @@ const additionalCSS = `
                       <h3 style={styles.trainerName}>
                         {t.trainerName || "Unknown Trainer"}
                       </h3>
+                      {t.coTrainerName && (
+                        <p style={styles.coTrainerName}>
+                          👥 Co-Trainer: {t.coTrainerName}
+                        </p>
+                      )}
                       <p style={styles.trainerLocation}>
                         📍 {t.location || 'No location'}
                       </p>
@@ -2429,28 +2510,16 @@ const additionalCSS = `
                     }}>
                       {isActiveTraining(t) ? "⚡ Active" : `📌 ${t.status || 'Pending'}`}
                     </span>
-                    {canEditTraining(t) && (
+                    {isActiveTraining(t) && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           handleEditTraining(t);
                         }}
-                        style={{
-                          ...styles.editBtn,
-                          ...(isLinkAccessible(t) 
-                            ? {} 
-                            : { opacity: 0.6, cursor: 'not-allowed' }
-                          )
-                        }}
-                        title={isLinkAccessible(t) 
-                          ? `Edit Training (${getTimeUntilExpiry(t)})` 
-                          : 'Cannot edit - Link expired'
-                        }
-                        disabled={!isLinkAccessible(t)}
+                        style={styles.editBtn}
+                        title="Update Training"
                         onMouseOver={(e) => {
-                          if (isLinkAccessible(t)) {
-                            e.target.style.transform = 'scale(1.1)';
-                          }
+                          e.target.style.transform = 'scale(1.1)';
                         }}
                         onMouseOut={(e) => {
                           e.target.style.transform = 'scale(1)';
@@ -2458,19 +2527,6 @@ const additionalCSS = `
                       >
                         ✏️
                       </button>
-                    )}
-                    {!canEditTraining(t) && (
-                      <span 
-                        style={{
-                          ...styles.editBtn,
-                          opacity: 0.3,
-                          cursor: 'not-allowed',
-                          backgroundColor: '#ccc'
-                        }}
-                        title="Edit disabled - Link expired"
-                      >
-                        🔒
-                      </span>
                     )}
                   </div>
                 </div>
@@ -2522,52 +2578,44 @@ const additionalCSS = `
                     </div>
                     <div style={styles.linkExpire}>
                       Expires: {formatDate(t.expireDate)}
-                      {canEditTraining(t) && (
-                        <div style={{
-                          fontSize: '0.75rem',
-                          color: isLinkAccessible(t) ? '#10b981' : '#ef4444',
-                          fontWeight: '500',
-                          marginTop: '2px'
-                        }}>
-                          {getTimeUntilExpiry(t)}
-                        </div>
-                      )}
                     </div>
                   </div>
                   
                   <div style={styles.linkActions}>
-                    <button
-                      onClick={() => copyTrainingLink(t.joinLink, t.id)}
-                      style={{
-                        ...styles.linkBtn,
-                        ...(copiedId === t.id ? styles.linkBtnCopied : styles.linkBtnCopy)
-                      }}
-                      title="Copy Training Link"
-                      onMouseOver={(e) => {
-                        e.target.style.transform = 'translateY(-1px)';
-                      }}
-                      onMouseOut={(e) => {
-                        e.target.style.transform = 'translateY(0)';
-                      }}
-                    >
-                      {copiedId === t.id ? '✓ Copied!' : '📋 Copy'}
-                    </button>
-                    
                     {isLinkAccessible(t) ? (
-                      <a
-                        href={t.joinLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{...styles.linkBtn, ...styles.linkBtnOpen}}
-                        onMouseOver={(e) => {
-                          e.target.style.transform = 'translateY(-1px)';
-                        }}
-                        onMouseOut={(e) => {
-                          e.target.style.transform = 'translateY(0)';
-                        }}
-                      >
-                        🔗 Open
-                      </a>
+                      <>
+                        <button
+                          onClick={() => copyTrainingLink(t.joinLink, t.id)}
+                          style={{
+                            ...styles.linkBtn,
+                            ...(copiedId === t.id ? styles.linkBtnCopied : styles.linkBtnCopy)
+                          }}
+                          title="Copy Training Link"
+                          onMouseOver={(e) => {
+                            e.target.style.transform = 'translateY(-1px)';
+                          }}
+                          onMouseOut={(e) => {
+                            e.target.style.transform = 'translateY(0)';
+                          }}
+                        >
+                          {copiedId === t.id ? '✓ Copied!' : '📋 Copy'}
+                        </button>
+                        
+                        <a
+                          href={t.joinLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{...styles.linkBtn, ...styles.linkBtnOpen}}
+                          onMouseOver={(e) => {
+                            e.target.style.transform = 'translateY(-1px)';
+                          }}
+                          onMouseOut={(e) => {
+                            e.target.style.transform = 'translateY(0)';
+                          }}
+                        >
+                          🔗 Open
+                        </a>
+                      </>
                     ) : (
                       <span style={{...styles.linkBtn, ...styles.linkBtnExpired}}>
                         ❌ Expired
@@ -2730,6 +2778,26 @@ const additionalCSS = `
                     <span style={styles.detailVal}>{selected.trainerId || "—"}</span>
                   </div>
                   <div style={styles.detailRow}>
+                    <span style={styles.detailKey}>👨‍🏫 Trainer Name</span>
+                    <span style={styles.detailVal}>{selected.trainerName || "—"}</span>
+                  </div>
+                  <div style={styles.detailRow}>
+                    <span style={styles.detailKey}>📞 Trainer Phone</span>
+                    <span style={styles.detailVal}>{selected.trainerPhone || "—"}</span>
+                  </div>
+                  {selected.coTrainerName && (
+                    <>
+                      <div style={styles.detailRow}>
+                        <span style={styles.detailKey}>👥 Co-Trainer Name</span>
+                        <span style={styles.detailVal}>{selected.coTrainerName}</span>
+                      </div>
+                      <div style={styles.detailRow}>
+                        <span style={styles.detailKey}>📱 Co-Trainer Phone</span>
+                        <span style={styles.detailVal}>{selected.coTrainerPhone || "—"}</span>
+                      </div>
+                    </>
+                  )}
+                  <div style={styles.detailRow}>
                     <span style={styles.detailKey}>📅 Start Date</span>
                     <span style={styles.detailVal}>
                       {formatDate(getStartDate(selected), 'modal start date')}
@@ -2753,6 +2821,11 @@ const additionalCSS = `
                     <span style={styles.detailKey}>🏢 Venue</span>
                     <span style={styles.detailVal}>{selected.venue || "—"}</span>
                   </div>
+                  <div style={styles.detailRow}>
+                    <span style={styles.detailKey}>💰 Training Fees</span>
+                    <span style={styles.detailVal}>₹{selected.fees || selected.Fees || "—"}</span>
+                  </div>
+                  
                   {selected.products && selected.products.length > 0 && (
                     <div style={{...styles.detailRow, ...styles.detailRowFull}}>
                       <span style={styles.detailKey}>📦 Products</span>

@@ -1,6 +1,6 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "Panchagiri Store",
+  "name": "Panchagiri Store - Your Trusted Shopping Partner",
   "icons": [
     {
       "src": "favicon.ico",
@@ -20,6 +20,13 @@
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "theme_color": "#4682B4",
+  "background_color": "#ffffff",
+  "description": "Panchagiri Store - Your trusted shopping partner for quality products",
+  "scope": "/",
+  "serviceworker": {
+    "src": "/serviceworker.js",
+    "scope": "/",
+    "use_cache": false
+  }
 }

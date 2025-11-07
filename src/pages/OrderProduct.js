@@ -89,7 +89,7 @@ const OrderProduct = ({
       {/* Header */}
       <div className="page-header">
         <h2 className="page-title">
-          <span className="title-icon">🛒</span>
+        
           Order Product
         </h2>
         <p className="page-subtitle">Complete your purchase and get instant billing</p>
@@ -191,7 +191,7 @@ const OrderProduct = ({
         <div className="bill-summary">
           <div className="bill-header">
             <h3 className="bill-title">
-              <span className="title-icon">🧾</span>
+              
               Order Summary
             </h3>
             <div className="bill-status">Completed</div>
@@ -263,7 +263,7 @@ const OrderProduct = ({
           text-align: center;
           margin-bottom: 24px;
           padding: 20px;
-          background: white;
+          background: linear-gradient(135deg, rgb(102, 126, 234) 0%, rgb(118, 75, 162) 100%);;
           border-radius: 16px;
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
@@ -271,7 +271,7 @@ const OrderProduct = ({
         .page-title {
           font-size: 1.75rem;
           font-weight: 700;
-          color: #1e293b;
+          color: #fcfdffff;
           margin: 0 0 8px 0;
           display: flex;
           align-items: center;
@@ -284,10 +284,10 @@ const OrderProduct = ({
         }
 
         .page-subtitle {
-          color: #64748b;
+          color: #c0c6cfff;
           font-size: 1rem;
           margin: 0;
-        }
+        } 
 
         /* Product Card */
         .product-card {

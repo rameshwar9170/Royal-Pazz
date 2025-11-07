@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createUserWithEmailAndPassword, updatePassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { ref, update } from 'firebase/database';
 import { auth, db } from '../../firebase/config';
 
@@ -78,16 +78,15 @@ const TrainerSetPassword = () => {
   const handlePasswordChange = (e) => {
     const password = e.target.value;
     setNewPassword(password);
-    setError(''); // Clear error when user types
+    setError('');
     checkPasswordStrength(password);
   };
 
   const handleConfirmPasswordChange = (e) => {
     const confirmPass = e.target.value;
     setConfirmPassword(confirmPass);
-    setError(''); // Clear error when user types
+    setError('');
     
-    // Update password match validation
     setPasswordErrors(prev => ({
       ...prev,
       passwordsMatch: newPassword === confirmPass && confirmPass !== ''
@@ -110,24 +109,41 @@ const TrainerSetPassword = () => {
       return;
     }
 
+    if (!trainerInfo.email || !trainerInfo.trainerId) {
+      setError('Invalid trainer data. Please login again.');
+      setLoading(false);
+      return;
+    }
+
     try {
-      // Create Firebase Auth account with email and new password
+      console.log('Creating Firebase Auth account for trainer...');
+      console.log('Email:', trainerInfo.email);
+      console.log('Trainer ID:', trainerInfo.trainerId);
+      
+      // **UPDATED: Create Firebase Auth account**
       const userCredential = await createUserWithEmailAndPassword(
         auth, 
         trainerInfo.email, 
         newPassword
       );
       
-      // Update trainer record in database
+      const firebaseUid = userCredential.user.uid;
+      console.log('Firebase Auth account created with UID:', firebaseUid);
+      
+      // **UPDATED: Update trainer record with Firebase Auth UID**
       await update(ref(db, `HTAMS/company/trainers/${trainerInfo.trainerId}`), {
+        uid: firebaseUid, // Store Firebase Auth UID
         firstTime: false,
         passwordSetAt: new Date().toISOString(),
         lastLoginAt: new Date().toISOString(),
+        authMethod: 'firebase' // Mark as Firebase Auth enabled
       });
+
+      console.log('Trainer database record updated successfully');
 
       // Store trainer info in localStorage
       localStorage.setItem('htamsTrainer', JSON.stringify({ 
-        uid: userCredential.user.uid, 
+        uid: firebaseUid,
         trainerId: trainerInfo.trainerId,
         ...trainerInfo.trainerData,
         role: 'trainer'
@@ -136,39 +152,29 @@ const TrainerSetPassword = () => {
       // Remove first login data
       localStorage.removeItem('firstLoginTrainer');
 
-      alert('Password set successfully! You can now login with your email and password.');
+      alert('Password set successfully! Redirecting to dashboard...');
       navigate('/trainer-dashboard');
 
     } catch (error) {
       console.error('Error setting password:', error);
+      console.error('Error code:', error.code);
+      console.error('Error message:', error.message);
+      
+      let errorMessage = 'Failed to set password: ';
+      
       if (error.code === 'auth/email-already-in-use') {
-        // If account exists, try to sign in and update password
-        try {
-          await signInWithEmailAndPassword(auth, trainerInfo.email, trainerInfo.trainerData.phone);
-          await updatePassword(auth.currentUser, newPassword);
-          
-          await update(ref(db, `HTAMS/company/trainers/${trainerInfo.trainerId}`), {
-            firstTime: false,
-            passwordSetAt: new Date().toISOString(),
-            lastLoginAt: new Date().toISOString(),
-          });
-
-          localStorage.setItem('htamsTrainer', JSON.stringify({ 
-            uid: auth.currentUser.uid, 
-            trainerId: trainerInfo.trainerId,
-            ...trainerInfo.trainerData,
-            role: 'trainer'
-          }));
-
-          localStorage.removeItem('firstLoginTrainer');
-          alert('Password updated successfully!');
-          navigate('/trainer-dashboard');
-        } catch (updateError) {
-          setError('Failed to update password. Please try again.');
-        }
+        errorMessage += 'Email is already registered with Firebase Auth. Please contact support.';
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage += 'Password is too weak. Please choose a stronger password.';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage += 'Invalid email address format.';
+      } else if (error.code === 'auth/network-request-failed') {
+        errorMessage += 'Network error. Please check your connection and try again.';
       } else {
-        setError('Failed to set password. Please try again.');
+        errorMessage += error.message || 'Please try again.';
       }
+      
+      setError(errorMessage);
       setLoading(false);
     }
   };

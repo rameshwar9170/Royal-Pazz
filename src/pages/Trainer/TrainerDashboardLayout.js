@@ -114,7 +114,7 @@ const TrainerDashboardLayout = () => {
       
       <div className="dashboard-main">
         {/* Optional Header - Uncomment if needed */}
-        <div className="dashboard-header">
+        {/* <div className="dashboard-header">
           <div className="dashboard-header-left">
             <button className="dashboard-mobile-toggle" onClick={toggleSidebar}>
               <FaBars />
@@ -128,7 +128,7 @@ const TrainerDashboardLayout = () => {
               <div className="user-role-badge">Trainer</div>
             </div>
           </div>
-        </div>
+        </div> */}
 
         <div className="dashboard-content">
           <Outlet />
@@ -136,8 +136,134 @@ const TrainerDashboardLayout = () => {
       </div>
 
       <style jsx>{`
+        /* Mobile-First Smooth Sidebar Layout */
+        .dashboard-container {
+          display: flex;
+          min-height: 100vh;
+          background: #f8fafc;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          overflow: hidden;
+        }
 
+        .dashboard-main {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          min-height: 100vh;
+          margin-left: 0;
+          transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          width: 100%;
+          overflow-x: hidden;
+          position: relative;
+        }
 
+        .dashboard-content {
+          flex: 1;
+          padding: 0;
+          background: #f8fafc;
+          min-height: 100vh;
+          overflow-x: hidden;
+          overflow-y: auto;
+        }
+
+        /* Desktop Styles - Sidebar Integration */
+        @media (min-width: 769px) {
+          .dashboard-main {
+            margin-left: ${isSidebarOpen ? '260px' : '70px'};
+            transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          }
+          
+          .dashboard-container {
+            position: relative;
+          }
+        }
+
+        /* Tablet Styles */
+        @media (max-width: 768px) and (min-width: 481px) {
+          .dashboard-container {
+            position: relative;
+            overflow-x: hidden;
+          }
+          
+          .dashboard-main {
+            margin-left: 0;
+            width: 100%;
+            margin-top: 60px;
+          }
+          
+          .dashboard-content {
+            width: 100%;
+            max-width: 100vw;
+            overflow-x: hidden;
+            height: calc(100vh - 60px);
+          }
+        }
+
+        /* Mobile Styles */
+        @media (max-width: 480px) {
+          .dashboard-container {
+            position: relative;
+            overflow-x: hidden;
+          }
+          
+          .dashboard-main {
+            margin-left: 0;
+            width: 100vw;
+            max-width: 100%;
+            margin-top: 60px;
+          }
+          
+          .dashboard-content {
+            width: 100%;
+            max-width: 100vw;
+            overflow-x: hidden;
+            height: calc(100vh - 60px);
+            padding: 0;
+          }
+        }
+
+        /* Smooth Transitions */
+        * {
+          box-sizing: border-box;
+        }
+        
+        html, body {
+          overflow-x: hidden;
+          max-width: 100vw;
+        }
+
+        /* Sidebar Overlay for Mobile */
+        .mobile-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100vw;
+          height: 100vh;
+          background: rgba(0, 0, 0, 0.5);
+          z-index: 999;
+          backdrop-filter: blur(2px);
+          opacity: 0;
+          visibility: hidden;
+          transition: all 0.3s ease;
+        }
+
+        .mobile-overlay.active {
+          opacity: 1;
+          visibility: visible;
+        }
+
+        /* Ensure smooth sidebar animations */
+        .dashboard-sidebar {
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          will-change: transform, width;
+        }
+
+        /* Performance optimizations */
+        .dashboard-main,
+        .dashboard-content {
+          transform: translateZ(0);
+          backface-visibility: hidden;
+        }
       `}</style>
     </div>
   );

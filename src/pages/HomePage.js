@@ -4,26 +4,22 @@ import DashboardHome from './DashboardHome';
 
 const HomePage = () => {
   return (
-    <div style={{
-      backgroundColor: '#f7f9fc',
-      padding: '20px',
-      borderRadius: '8px',
-      boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-      fontFamily: "'Segoe UI', Arial, sans-serif",
-      color: '#2c3e50'
-    }}>
-      <h2 style={{
-        fontSize: '1.6rem',
-        fontWeight: '600',
-        marginBottom: '15px',
-        color: '#1e3a8a'
-      }}>Welcome to Your Dashboard</h2>
-
-      {/* Existing ProgressState component */}
-      <ProgressState />
+    <div className="mobile-home-page">
+      <div className="mobile-welcome-card mobile-card mobile-animate-slide-up">
+        <div className="mobile-card-header">
+          <h2 className="mobile-welcome-title">Welcome to Your Dashboard</h2>
+          <p className="mobile-welcome-subtitle">Manage your business efficiently</p>
+        </div>
+        <div className="mobile-card-body">
+          {/* Existing ProgressState component */}
+          <ProgressState />
+        </div>
+      </div>
 
       {/* Conditionally render DashboardHome */}
-      {<DashboardHome />}
+      <div className="mobile-dashboard-content">
+        {<DashboardHome />}
+      </div>
     </div>
   );
 };
