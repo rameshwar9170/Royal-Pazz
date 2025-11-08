@@ -769,7 +769,9 @@ const [buyNowProduct, setBuyNowProduct] = useState(null);
   // Save customer data for admin tracking
   const saveCustomerData = async (customerData, reason = 'form_filled') => {
     try {
-      const customerKey = `${customerData.phone}_${customerData.email}`;
+      // Sanitize email by replacing invalid Firebase path characters
+      const sanitizedEmail = customerData.email.replace(/[.#$[\]]/g, '_');
+      const customerKey = `${customerData.phone}_${sanitizedEmail}`;
       const customerRef = ref(db, `HTAMS/customer_leads/${customerKey}`);
       
       // Check if customer data already exists to prevent duplicates
@@ -1605,7 +1607,8 @@ const [buyNowProduct, setBuyNowProduct] = useState(null);
 
       console.log('=== API PAYLOAD ===', apiPayload);
 
-      const response = await fetch('https://processsale-p7jbzlocfa-uc.a.run.app/', {
+      // Use processsale endpoint for new orders
+      const response = await fetch('https://processsale-udqmpp6qhq-uc.a.run.app', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
