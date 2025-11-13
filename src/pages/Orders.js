@@ -4,11 +4,19 @@ import { db } from '../firebase/config';
 import { FiSearch, FiX, FiInfo, FiCalendar, FiDollarSign, FiUser, FiPackage, FiNavigation, FiCreditCard, FiCheck } from 'react-icons/fi';
 
 const STATUS_CONFIG = {
-  completed: { color: 'completed', icon: '✓', label: 'Completed' },
-  pending: { color: 'pending', icon: '⏱', label: 'Pending' },
+  pending: { color: 'pending', icon: '⏳', label: 'Pending' },
+  confirmed: { color: 'confirmed', icon: '✓', label: 'Confirmed' },
+  'Dispatched': { color: 'Dispatched', icon: '🚚', label: 'In Progress' },
+  Delivered: { color: 'Delivered', icon: '🏁', label: 'Delivered' },
   paid: { color: 'paid', icon: '💳', label: 'Paid' },
   cancelled: { color: 'cancelled', icon: '✕', label: 'Cancelled' },
-  confirmed: { color: 'confirmed', icon: '✓', label: 'Confirmed' },
+};
+
+const formatStatusLabel = (statusKey) => {
+  if (!statusKey) return 'Pending';
+  const config = STATUS_CONFIG[statusKey];
+  if (config?.label) return config.label;
+  return statusKey.charAt(0).toUpperCase() + statusKey.slice(1);
 };
 
 const CompanyOrdersTable = () => {
@@ -312,14 +320,16 @@ const CompanyOrdersTable = () => {
             </div>
           ) : (
             filteredOrders.map((order) => {
-              const orderStatus = (order.status || 'confirmed').toLowerCase();
+              const orderStatus = (order.status || 'pending').toLowerCase();
+              const statusConfig = STATUS_CONFIG[orderStatus] || STATUS_CONFIG.pending;
+              const statusLabel = formatStatusLabel(orderStatus);
               const canConfirm = ['pending', 'new', 'processing'].includes(orderStatus);
               return (
               <div key={order.id} className="mobile-order-card">
                 <div className="mobile-order-header">
                   <span className="mobile-order-id">#{order.id.slice(0, 10)}</span>
-                  <span className={`mobile-status-badge ${STATUS_CONFIG[order.status?.toLowerCase()]?.color || 'confirmed'}`}>
-                    {STATUS_CONFIG[order.status?.toLowerCase()]?.label || 'Confirmed'}
+                  <span className={`mobile-status-badge ${statusConfig.color}`}>
+                    {statusLabel}
                   </span>
                 </div>
 
@@ -358,7 +368,7 @@ const CompanyOrdersTable = () => {
                   <FiInfo />
                   View Details
                 </button>
-                {canConfirm && (
+                {/* {canConfirm && (
                   <button
                     onClick={() => handleConfirmOrder(order)}
                     className="mobile-confirm-button"
@@ -366,7 +376,7 @@ const CompanyOrdersTable = () => {
                     <FiCheck />
                     Confirm Order
                   </button>
-                )}
+                )} */}
                 {order.invoice?.downloadURL && (
                   <button
                     onClick={() => handleViewInvoice(order)}
@@ -393,9 +403,16 @@ const CompanyOrdersTable = () => {
               </div>
 
               <div className="mobile-modal-status">
-                <span className={`mobile-status-badge large ${STATUS_CONFIG[selectedOrder.status?.toLowerCase()]?.color || 'confirmed'}`}>
-                  {STATUS_CONFIG[selectedOrder.status?.toLowerCase()]?.icon} {STATUS_CONFIG[selectedOrder.status?.toLowerCase()]?.label || 'Confirmed'}
-                </span>
+                {(() => {
+                  const orderStatus = (selectedOrder.status || 'pending').toLowerCase();
+                  const config = STATUS_CONFIG[orderStatus] || STATUS_CONFIG.pending;
+                  const label = formatStatusLabel(orderStatus);
+                  return (
+                    <span className={`mobile-status-badge large ${config.color}`}>
+                      {config.icon || '⏱'} {label}
+                    </span>
+                  );
+                })()}
               </div>
 
               <div className="mobile-modal-body">
@@ -713,7 +730,7 @@ const mobileOrdersStyles = `
     letter-spacing: 0.5px;
   }
 
-  .mobile-status-badge.completed {
+  .mobile-status-badge.Delivered {
     background-color: #10b981;
   }
 

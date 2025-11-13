@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { ref, push, onValue, set, remove } from 'firebase/database';
+import { ref, push, onValue, set, remove, update } from 'firebase/database';
 // Remove Firebase Auth completely
-import { database } from '../../firebase/config'; // Remove auth import
+import { database, storage } from '../../firebase/config'; // Add storage import
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { sendWelcomeMessage, generateUserId, formatDate } from '../../services/whatsappService';
 import { 
   FaPlus, 
@@ -28,6 +29,7 @@ function Employees() {
     mobile: '',
     email: '',
     aadhar: '',
+    pan: '',
     role: '',
     joiningDate: '',
     shift: '',
@@ -35,6 +37,12 @@ function Employees() {
       accountNo: '',
       ifscCode: '',
       bankName: ''
+    },
+    panCard: {
+      file: null,
+      downloadURL: '',
+      fileName: '',
+      uploadedAt: ''
     }
   });
 
@@ -49,6 +57,14 @@ function Employees() {
   const [errors, setErrors] = useState({});
   const [confirmingEmployee, setConfirmingEmployee] = useState(null);
   const [whatsappLoading, setWhatsappLoading] = useState(false);
+  const [uploadingPan, setUploadingPan] = useState(false);
+  const [showPanModal, setShowPanModal] = useState(false);
+  const [selectedPanImage, setSelectedPanImage] = useState(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showMobileAuth, setShowMobileAuth] = useState(false);
+  const [mobileOtp, setMobileOtp] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
   
@@ -63,6 +79,7 @@ function Employees() {
       mobile: '',
       email: '',
       aadhar: '',
+      pan: '',
       role: '',
       joiningDate: '',
       shift: '',
@@ -70,6 +87,12 @@ function Employees() {
         accountNo: '',
         ifscCode: '',
         bankName: ''
+      },
+      panCard: {
+        file: null,
+        downloadURL: '',
+        fileName: '',
+        uploadedAt: ''
       }
     });
     setEditingId(null);
@@ -116,6 +139,14 @@ function Employees() {
         }
         break;
         
+      case 'pan':
+        if (!value) {
+          error = 'PAN number is required';
+        } else if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(value.toUpperCase())) {
+          error = 'Invalid PAN format (e.g., ABCDE1234F)';
+        }
+        break;
+        
       case 'role':
         if (!value) {
           error = 'Role is required';
@@ -126,11 +157,27 @@ function Employees() {
         if (!value) {
           error = 'Joining date is required';
         } else {
-          const selectedDate = new Date(value);
-          const today = new Date();
-          today.setHours(23, 59, 59, 999);
-          if (selectedDate > today) {
-            error = 'Joining date cannot be in the future';
+          // Validate DD/MM/YYYY format
+          const datePattern = /^\d{2}\/\d{2}\/\d{4}$/;
+          if (!datePattern.test(value)) {
+            error = 'Date must be in DD/MM/YYYY format';
+          } else {
+            const parts = value.split('/');
+            const day = parseInt(parts[0]);
+            const month = parseInt(parts[1]);
+            const year = parseInt(parts[2]);
+            
+            // Validate date components
+            if (day < 1 || day > 31 || month < 1 || month > 12 || year < 1900 || year > new Date().getFullYear()) {
+              error = 'Invalid date';
+            } else {
+              const selectedDate = new Date(year, month - 1, day);
+              const today = new Date();
+              today.setHours(23, 59, 59, 999);
+              if (selectedDate > today) {
+                error = 'Joining date cannot be in the future';
+              }
+            }
           }
         }
         break;
@@ -166,6 +213,36 @@ function Employees() {
     return error;
   };
 
+  // Date formatting functions
+  const formatDateToDDMMYYYY = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = String(date.getFullYear());
+    return `${day}/${month}/${year}`;
+  };
+
+  const formatDateFromDDMMYYYY = (ddmmyyyy) => {
+    if (!ddmmyyyy) return '';
+    const parts = ddmmyyyy.split('/');
+    if (parts.length === 3) {
+      const [day, month, year] = parts;
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+    return ddmmyyyy;
+  };
+
+  const convertDateForInput = (ddmmyyyy) => {
+    if (!ddmmyyyy) return '';
+    const parts = ddmmyyyy.split('/');
+    if (parts.length === 3) {
+      const [day, month, year] = parts;
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+    return '';
+  };
+
   // Input formatters
   const formatInput = (name, value) => {
     switch (name) {
@@ -173,6 +250,8 @@ function Employees() {
         return value.replace(/\D/g, '').slice(0, 10);
       case 'aadhar':
         return value.replace(/\D/g, '').slice(0, 12);
+      case 'pan':
+        return value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 10);
       case 'accountNo':
         return value.replace(/\D/g, '').slice(0, 18);
       case 'ifscCode':
@@ -180,6 +259,9 @@ function Employees() {
       case 'name':
       case 'bankName':
         return value.replace(/[^a-zA-Z\s]/g, '').replace(/\s+/g, ' ');
+      case 'joiningDate':
+        // Convert from YYYY-MM-DD to DD/MM/YYYY for display
+        return formatDateToDDMMYYYY(value);
       default:
         return value;
     }
@@ -345,7 +427,7 @@ function Employees() {
       }
     });
 
-    // Check for duplicate mobile and aadhar
+    // Check for duplicate mobile, aadhar, and PAN
     const existingEmployees = Object.entries(employees);
     const mobileExists = existingEmployees.find(([id, emp]) => 
       emp.mobile === form.mobile && (!editingId || id !== editingId)
@@ -359,6 +441,13 @@ function Employees() {
     );
     if (aadharExists) {
       newErrors.aadhar = 'This Aadhar number is already registered';
+    }
+
+    const panExists = existingEmployees.find(([id, emp]) => 
+      emp.pan === form.pan && (!editingId || id !== editingId)
+    );
+    if (panExists) {
+      newErrors.pan = 'This PAN number is already registered';
     }
 
     // Check for duplicate email if provided
@@ -388,12 +477,42 @@ function Employees() {
     try {
       const userId = !editingId ? generateUserId(form) : form.userId || generateUserId(form);
 
+      // Upload PAN card if file is selected
+      let panCardData = form.panCard;
+      if (form.panCard.file) {
+        setUploadingPan(true);
+        try {
+          const panFileName = `panCard_${form.mobile}_${Date.now()}.${form.panCard.file.name.split('.').pop()}`;
+          const panStorageRef = storageRef(storage, `employee_documents/${form.mobile}/${panFileName}`);
+          
+          console.log('Uploading PAN card:', panFileName);
+          const panSnapshot = await uploadBytes(panStorageRef, form.panCard.file);
+          const panDownloadURL = await getDownloadURL(panSnapshot.ref);
+          
+          panCardData = {
+            downloadURL: panDownloadURL,
+            fileName: form.panCard.file.name,
+            uploadedAt: new Date().toISOString(),
+            storagePath: `employee_documents/${form.mobile}/${panFileName}`
+          };
+          
+          console.log('PAN card uploaded successfully:', panDownloadURL);
+        } catch (uploadError) {
+          console.error('PAN card upload failed:', uploadError);
+          alert('Failed to upload PAN card. Please try again.');
+          return;
+        } finally {
+          setUploadingPan(false);
+        }
+      }
+
       // Create employee data without authentication
       const employeeData = {
         name: form.name.trim(),
         mobile: form.mobile,
         email: form.email.trim(),
         aadhar: form.aadhar,
+        pan: form.pan.toUpperCase(),
         role: form.role,
         joiningDate: form.joiningDate,
         shift: form.shift.trim(),
@@ -402,16 +521,19 @@ function Employees() {
           ifscCode: form.salaryAccount.ifscCode.toUpperCase(),
           bankName: form.salaryAccount.bankName.trim(),
         },
+        panCard: panCardData,
         userId: userId,
         confirmed: editingId ? form.confirmed : true,
         registrationDate: editingId ? form.registrationDate : new Date().toISOString(),
         whatsappSent: editingId ? form.whatsappSent : false,
-        // Login credentials for all roles - NO authentication
+        // Login credentials setup
         defaultPassword: form.mobile, // Use mobile as default password
         passwordChanged: false, // Track if user changed password
         lastLoginAt: null,
-        loginEnabled: true, // All employees can login
-        firstTime: false // Set to false since no auth setup needed
+        loginEnabled: true,
+        firstTime: true, // First time login requires password setup
+        mobileVerified: false, // Mobile verification status
+        emailVerified: false // Email verification status
       };
 
       console.log('Saving employee data:', employeeData);
@@ -426,6 +548,26 @@ function Employees() {
         const newEmployeeId = form.mobile;
         const employeeRef = ref(database, `HTAMS/company/Employees/${newEmployeeId}`);
         await set(employeeRef, employeeData);
+
+        // Create technician account in separate node for login system
+        const technicianData = {
+          employeeId: newEmployeeId,
+          name: form.name.trim(),
+          email: form.email.trim(),
+          mobile: form.mobile,
+          role: form.role,
+          defaultPassword: form.mobile,
+          passwordChanged: false,
+          firstTime: true,
+          mobileVerified: false,
+          emailVerified: false,
+          accountStatus: 'active',
+          createdAt: new Date().toISOString(),
+          lastLoginAt: null
+        };
+        
+        const technicianRef = ref(database, `HTAMS/technicians/${newEmployeeId}`);
+        await set(technicianRef, technicianData);
 
         // Send WhatsApp message for new employees
         console.log('Starting WhatsApp process for new employee...');
@@ -582,8 +724,157 @@ function Employees() {
     return value;
   };
 
+  // PAN card file handling
+  const handlePanCardUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Validate file type
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'application/pdf'];
+      if (!allowedTypes.includes(file.type)) {
+        alert('Please upload only image files (JPG, PNG, GIF) or PDF files.');
+        return;
+      }
+      
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        alert('File size should be less than 5MB.');
+        return;
+      }
+      
+      setForm(prev => ({
+        ...prev,
+        panCard: {
+          ...prev.panCard,
+          file: file,
+          fileName: file.name
+        }
+      }));
+    }
+  };
+
+  const removePanCard = () => {
+    setForm(prev => ({
+      ...prev,
+      panCard: {
+        file: null,
+        downloadURL: '',
+        fileName: '',
+        uploadedAt: ''
+      }
+    }));
+  };
+
+  const openPanModal = (imageUrl) => {
+    setSelectedPanImage(imageUrl);
+    setShowPanModal(true);
+  };
+
+  const closePanModal = () => {
+    setShowPanModal(false);
+    setSelectedPanImage(null);
+  };
+
+  // Mobile OTP functions
+  const sendMobileOtp = async (mobile) => {
+    try {
+      // Simulate OTP sending (replace with actual SMS service)
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      console.log('Generated OTP for', mobile, ':', otp);
+      
+      // Store OTP in session storage for verification (in production, use secure backend)
+      sessionStorage.setItem(`otp_${mobile}`, otp);
+      sessionStorage.setItem(`otp_${mobile}_timestamp`, Date.now().toString());
+      
+      setOtpSent(true);
+      alert(`OTP sent to ${mobile}: ${otp} (Demo mode - in production this would be sent via SMS)`);
+      return true;
+    } catch (error) {
+      console.error('Error sending OTP:', error);
+      alert('Failed to send OTP. Please try again.');
+      return false;
+    }
+  };
+
+  const verifyMobileOtp = async (mobile, enteredOtp) => {
+    try {
+      const storedOtp = sessionStorage.getItem(`otp_${mobile}`);
+      const timestamp = sessionStorage.getItem(`otp_${mobile}_timestamp`);
+      
+      if (!storedOtp || !timestamp) {
+        alert('OTP expired or not found. Please request a new OTP.');
+        return false;
+      }
+      
+      // Check if OTP is expired (5 minutes)
+      const otpAge = Date.now() - parseInt(timestamp);
+      if (otpAge > 5 * 60 * 1000) {
+        alert('OTP expired. Please request a new OTP.');
+        sessionStorage.removeItem(`otp_${mobile}`);
+        sessionStorage.removeItem(`otp_${mobile}_timestamp`);
+        return false;
+      }
+      
+      if (storedOtp === enteredOtp) {
+        // Update employee mobile verification status
+        const employeeRef = ref(database, `HTAMS/company/Employees/${mobile}`);
+        await update(employeeRef, { mobileVerified: true });
+        
+        // Update technician account
+        const technicianRef = ref(database, `HTAMS/technicians/${mobile}`);
+        await update(technicianRef, { mobileVerified: true });
+        
+        // Clean up OTP
+        sessionStorage.removeItem(`otp_${mobile}`);
+        sessionStorage.removeItem(`otp_${mobile}_timestamp`);
+        
+        alert('Mobile number verified successfully!');
+        return true;
+      } else {
+        alert('Invalid OTP. Please try again.');
+        return false;
+      }
+    } catch (error) {
+      console.error('Error verifying OTP:', error);
+      alert('Failed to verify OTP. Please try again.');
+      return false;
+    }
+  };
+
+  const handleMobileAuth = async (employeeId) => {
+    setShowMobileAuth(true);
+    setMobileOtp('');
+    setOtpSent(false);
+    
+    // Auto-send OTP
+    const employee = Object.entries(employees).find(([id]) => id === employeeId)?.[1];
+    if (employee && employee.mobile) {
+      await sendMobileOtp(employee.mobile);
+    }
+  };
+
+  const handleOtpVerification = async (employeeId) => {
+    if (!mobileOtp || mobileOtp.length !== 6) {
+      alert('Please enter a valid 6-digit OTP');
+      return;
+    }
+    
+    setVerifyingOtp(true);
+    const employee = Object.entries(employees).find(([id]) => id === employeeId)?.[1];
+    
+    if (employee) {
+      const verified = await verifyMobileOtp(employee.mobile, mobileOtp);
+      if (verified) {
+        setShowMobileAuth(false);
+        // Refresh employee data
+        window.location.reload();
+      }
+    }
+    setVerifyingOtp(false);
+  };
+
   return (
     <div className="employee-management">
+      {/* Page Header */}
       <div className="page-header">
         <div className="header-content">
           <div className="header-left">
@@ -688,8 +979,28 @@ function Employees() {
                   />
                   {errors.aadhar && <span className="error-message">{errors.aadhar}</span>}
                 </div>
+
+                <div className="form-group">
+                  <label htmlFor="pan" className="form-label">
+                    <FaIdCard className="label-icon" />
+                    PAN Number
+                  </label>
+                  <input
+                    id="pan"
+                    type="text"
+                    name="pan"
+                    value={form.pan}
+                    onChange={handleChange}
+                    placeholder="e.g., ABCDE1234F"
+                    required
+                    className={`form-input ${errors.pan ? 'error' : ''}`}
+                  />
+                  {errors.pan && <span className="error-message">{errors.pan}</span>}
+                </div>
               </div>
             </div>
+
+          
 
             <div className="form-section">
               <h3 className="section-title">Job Information</h3>
@@ -723,16 +1034,75 @@ function Employees() {
                     <FaCalendar className="label-icon" />
                     Joining Date
                   </label>
-                  <input
-                    id="joiningDate"
-                    type="date"
-                    name="joiningDate"
-                    value={form.joiningDate}
-                    onChange={handleChange}
-                    required
-                    max={new Date().toISOString().split('T')[0]}
-                    className={`form-input ${errors.joiningDate ? 'error' : ''}`}
-                  />
+                  <div className="date-input-container">
+                    <input
+                      id="joiningDate"
+                      type="text"
+                      name="joiningDate"
+                      value={form.joiningDate}
+                      onChange={(e) => {
+                        let value = e.target.value.replace(/[^0-9/]/g, '');
+                        // Auto-format as user types DD/MM/YYYY
+                        if (value.length >= 2 && value.indexOf('/') === -1) {
+                          value = value.substring(0, 2) + '/' + value.substring(2);
+                        }
+                        if (value.length >= 5 && value.lastIndexOf('/') === 2) {
+                          value = value.substring(0, 5) + '/' + value.substring(5);
+                        }
+                        if (value.length > 10) {
+                          value = value.substring(0, 10);
+                        }
+                        setForm(prev => ({ ...prev, joiningDate: value }));
+                        
+                        // Validate the date
+                        const error = validateField('joiningDate', value);
+                        setErrors(prev => ({ ...prev, joiningDate: error }));
+                      }}
+                      placeholder="DD/MM/YYYY"
+                      maxLength="10"
+                      required
+                      className={`form-input ${errors.joiningDate ? 'error' : ''}`}
+                    />
+                    <button
+                      type="button"
+                      className="calendar-btn"
+                      onClick={() => setShowDatePicker(!showDatePicker)}
+                      title="Open Calendar"
+                    >
+                      📅
+                    </button>
+                    {showDatePicker && (
+                      <div className="date-picker-overlay" onClick={() => setShowDatePicker(false)}>
+                        <div className="date-picker-container" onClick={(e) => e.stopPropagation()}>
+                          <div className="date-picker-header">
+                            <h4>Select Joining Date</h4>
+                            <button 
+                              type="button" 
+                              className="close-picker-btn"
+                              onClick={() => setShowDatePicker(false)}
+                            >
+                              ×
+                            </button>
+                          </div>
+                          <input
+                            type="date"
+                            className="calendar-input"
+                            value={convertDateForInput(form.joiningDate)}
+                            max={new Date().toISOString().split('T')[0]}
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                const formattedDate = formatDateToDDMMYYYY(e.target.value);
+                                setForm(prev => ({ ...prev, joiningDate: formattedDate }));
+                                const error = validateField('joiningDate', formattedDate);
+                                setErrors(prev => ({ ...prev, joiningDate: error }));
+                                setShowDatePicker(false);
+                              }
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   {errors.joiningDate && <span className="error-message">{errors.joiningDate}</span>}
                 </div>
 
@@ -823,9 +1193,9 @@ function Employees() {
               <button 
                 type="submit" 
                 className="primary-btn" 
-                disabled={loading}
+                disabled={loading || uploadingPan}
               >
-                {loading ? 'Saving...' : editingId ? 'Update Employee' : 'Add Employee'}
+                {uploadingPan ? 'Uploading PAN...' : loading ? 'Saving...' : editingId ? 'Update Employee' : 'Add Employee'}
               </button>
             </div>
           </form>
@@ -896,7 +1266,7 @@ function Employees() {
                   <div className="employment-info">
                     <div className="info-item">
                       <FaCalendar className="info-icon" />
-                      <span>{emp.joiningDate ? new Date(emp.joiningDate).toLocaleDateString() : 'N/A'}</span>
+                      <span>{getDisplayValue(emp.joiningDate)}</span>
                     </div>
                     <div className="info-item">
                       <FaClock className="info-icon" />
@@ -937,6 +1307,24 @@ function Employees() {
                       disabled
                     >
                       ✅
+                    </button>
+                  )}
+                  {!emp.mobileVerified && (
+                    <button 
+                      className="action-btn verify-btn" 
+                      onClick={(e) => {e.stopPropagation(); handleMobileAuth(id);}} 
+                      title="Verify Mobile"
+                    >
+                      📱
+                    </button>
+                  )}
+                  {emp.mobileVerified && (
+                    <button 
+                      className="action-btn verified-btn" 
+                      title="Mobile Verified" 
+                      disabled
+                    >
+                      📱✅
                     </button>
                   )}
                   <button 
@@ -984,7 +1372,7 @@ function Employees() {
                         <div className="email">{getDisplayValue(emp.email)}</div>
                       </div>
                     </td>
-                    <td>{emp.joiningDate ? new Date(emp.joiningDate).toLocaleDateString() : 'N/A'}</td>
+                    <td>{getDisplayValue(emp.joiningDate)}</td>
                     <td>{getDisplayValue(emp.shift)}</td>
                     <td>
                       <div className="action-buttons">
@@ -1019,6 +1407,24 @@ function Employees() {
                             disabled
                           >
                             ✅
+                          </button>
+                        )}
+                        {!emp.mobileVerified && (
+                          <button 
+                            className="action-btn verify-btn" 
+                            onClick={(e) => {e.stopPropagation(); handleMobileAuth(id);}} 
+                            title="Verify Mobile"
+                          >
+                            📱
+                          </button>
+                        )}
+                        {emp.mobileVerified && (
+                          <button 
+                            className="action-btn verified-btn" 
+                            title="Mobile Verified" 
+                            disabled
+                          >
+                            📱✅
                           </button>
                         )}
                         <button 
@@ -1089,6 +1495,13 @@ function Employees() {
                       <span className="info-value">{getDisplayValue(selectedEmployee.aadhar)}</span>
                     </div>
                   </div>
+                  <div className="info-item">
+                    <FaIdCard className="info-icon" />
+                    <div>
+                      <span className="info-label">PAN</span>
+                      <span className="info-value">{getDisplayValue(selectedEmployee.pan)}</span>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="info-section">
@@ -1105,7 +1518,7 @@ function Employees() {
                     <div>
                       <span className="info-label">Joining Date</span>
                       <span className="info-value">
-                        {selectedEmployee.joiningDate ? new Date(selectedEmployee.joiningDate).toLocaleDateString() : 'N/A'}
+                        {getDisplayValue(selectedEmployee.joiningDate)}
                       </span>
                     </div>
                   </div>
@@ -1146,14 +1559,153 @@ function Employees() {
                     </div>
                   </div>
                 </div>
+
+                {/* PAN Card Document Section */}
+                <div className="info-section">
+                  <h4>Documents</h4>
+                  <div className="info-item">
+                    <FaIdCard className="info-icon" />
+                    <div>
+                      <span className="info-label">PAN Card</span>
+                      <div className="info-value">
+                        {selectedEmployee.panCard?.downloadURL ? (
+                          <div className="document-actions">
+                            <span className="document-status">✅ Uploaded</span>
+                            <button 
+                              className="view-document-btn"
+                              onClick={() => openPanModal(selectedEmployee.panCard.downloadURL)}
+                            >
+                              👁️ View Document
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="document-status missing">❌ Not Uploaded</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  {selectedEmployee.panCard?.uploadedAt && (
+                    <div className="info-item">
+                      <div>
+                        <span className="info-label">Upload Date</span>
+                        <span className="info-value">
+                          {formatDateToDDMMYYYY(selectedEmployee.panCard.uploadedAt)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
         </div>
       )}
-  
 
+      {/* PAN Card Modal */}
+      {showPanModal && selectedPanImage && (
+        <div className="pan-modal-overlay" onClick={closePanModal}>
+          <div className="pan-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="pan-modal-header">
+              <h3>📄 PAN Card Document</h3>
+              <button className="pan-close-btn" onClick={closePanModal}>×</button>
+            </div>
+            <div className="pan-modal-body">
+              <img 
+                src={selectedPanImage} 
+                alt="PAN Card Document"
+                className="pan-document-image"
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                  e.target.nextSibling.style.display = 'block';
+                }}
+              />
+              <div className="pan-error-message" style={{display: 'none'}}>
+                <h4>❌ Failed to Load Document</h4>
+                <p>The PAN card document could not be displayed.</p>
+              </div>
+            </div>
+            <div className="pan-modal-footer">
+              <a 
+                href={selectedPanImage} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="download-pan-btn"
+              >
+                📥 Download
+              </a>
+              <button className="close-pan-btn" onClick={closePanModal}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
+      {/* Mobile Authentication Modal */}
+      {showMobileAuth && (
+        <div className="mobile-auth-overlay" onClick={() => setShowMobileAuth(false)}>
+          <div className="mobile-auth-content" onClick={(e) => e.stopPropagation()}>
+            <div className="mobile-auth-header">
+              <h3>📱 Mobile Verification</h3>
+              <button className="mobile-auth-close-btn" onClick={() => setShowMobileAuth(false)}>×</button>
+            </div>
+            <div className="mobile-auth-body">
+              <div className="verification-steps">
+                <div className="step-indicator">
+                  <div className="step active">1</div>
+                  <div className="step-line"></div>
+                  <div className="step">2</div>
+                </div>
+                <div className="step-labels">
+                  <span className="step-label active">Send OTP</span>
+                  <span className="step-label">Verify OTP</span>
+                </div>
+              </div>
+              
+              {otpSent ? (
+                <div className="otp-verification">
+                  <h4>Enter Verification Code</h4>
+                  <p>We've sent a 6-digit code to your mobile number</p>
+                  <div className="otp-input-container">
+                    <input
+                      type="text"
+                      value={mobileOtp}
+                      onChange={(e) => setMobileOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="Enter 6-digit OTP"
+                      className="otp-input"
+                      maxLength="6"
+                    />
+                  </div>
+                  <div className="otp-actions">
+                    <button
+                      className="verify-otp-btn"
+                      onClick={() => handleOtpVerification(Object.entries(employees).find(([id, emp]) => showMobileAuth)?.[0])}
+                      disabled={verifyingOtp || mobileOtp.length !== 6}
+                    >
+                      {verifyingOtp ? 'Verifying...' : 'Verify OTP'}
+                    </button>
+                    <button
+                      className="resend-otp-btn"
+                      onClick={() => {
+                        const employee = Object.entries(employees).find(([id, emp]) => showMobileAuth)?.[1];
+                        if (employee) sendMobileOtp(employee.mobile);
+                      }}
+                    >
+                      Resend OTP
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="otp-sending">
+                  <h4>Sending OTP...</h4>
+                  <p>Please wait while we send the verification code</p>
+                  <div className="loading-spinner"></div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add your existing CSS styles here - keeping them the same */}
       <style jsx>{`
@@ -2075,6 +2627,747 @@ function Employees() {
 
           .info-section {
             padding: 0.75rem;
+          }
+        }
+
+        /* PAN Card Upload Styles */
+        .file-upload-container {
+          position: relative;
+        }
+
+        .file-input {
+          position: absolute;
+          opacity: 0;
+          width: 100%;
+          height: 100%;
+          cursor: pointer;
+          z-index: 2;
+        }
+
+        .file-upload-area {
+          border: 2px dashed #d1d5db;
+          border-radius: 8px;
+          padding: 2rem;
+          text-align: center;
+          background-color: #f9fafb;
+          transition: all 0.3s ease;
+          position: relative;
+          min-height: 120px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .file-upload-area:hover {
+          border-color: #3b82f6;
+          background-color: #eff6ff;
+        }
+
+        .upload-placeholder {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 1rem;
+        }
+
+        .upload-icon {
+          font-size: 2rem;
+          color: #6b7280;
+        }
+
+        .upload-text {
+          color: #374151;
+          line-height: 1.5;
+        }
+
+        .upload-text strong {
+          color: #1f2937;
+          font-weight: 600;
+        }
+
+        .upload-text small {
+          color: #6b7280;
+          font-size: 0.875rem;
+        }
+
+        .file-preview {
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+          width: 100%;
+        }
+
+        .file-info,
+        .existing-file {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          background-color: #ffffff;
+          padding: 1rem;
+          border-radius: 6px;
+          border: 1px solid #e5e7eb;
+        }
+
+        .file-name {
+          color: #374151;
+          font-weight: 500;
+          flex: 1;
+          margin-right: 1rem;
+        }
+
+        .remove-file-btn,
+        .view-file-btn {
+          background: none;
+          border: none;
+          cursor: pointer;
+          padding: 0.25rem;
+          border-radius: 4px;
+          transition: all 0.2s ease;
+        }
+
+        .remove-file-btn:hover {
+          background-color: #fef2f2;
+        }
+
+        .view-file-btn {
+          background-color: #3b82f6;
+          color: white;
+          padding: 0.5rem 1rem;
+          border-radius: 6px;
+          font-size: 0.875rem;
+          font-weight: 500;
+        }
+
+        .view-file-btn:hover {
+          background-color: #2563eb;
+        }
+
+        .full-width {
+          grid-column: 1 / -1;
+        }
+
+        /* Document Actions Styles */
+        .document-actions {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          flex-wrap: wrap;
+        }
+
+        .document-status {
+          font-weight: 600;
+          padding: 0.25rem 0.75rem;
+          border-radius: 20px;
+          font-size: 0.875rem;
+          background-color: #dcfce7;
+          color: #166534;
+        }
+
+        .document-status.missing {
+          background-color: #fef2f2;
+          color: #991b1b;
+        }
+
+        .view-document-btn {
+          background-color: #3b82f6;
+          color: white;
+          border: none;
+          padding: 0.5rem 1rem;
+          border-radius: 6px;
+          font-size: 0.875rem;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .view-document-btn:hover {
+          background-color: #2563eb;
+          transform: translateY(-1px);
+        }
+
+        /* Date Input and Calendar Picker Styles */
+        .date-input-container {
+          position: relative;
+          display: flex;
+          align-items: center;
+        }
+
+        .calendar-btn {
+          background: #3b82f6;
+          color: white;
+          border: none;
+          padding: 0.75rem;
+          border-radius: 0 6px 6px 0;
+          cursor: pointer;
+          font-size: 1rem;
+          transition: all 0.2s ease;
+          border-left: 1px solid #e5e7eb;
+          margin-left: -1px;
+        }
+
+        .calendar-btn:hover {
+          background: #2563eb;
+          transform: scale(1.05);
+        }
+
+        .date-input-container .form-input {
+          border-radius: 6px 0 0 6px;
+          flex: 1;
+        }
+
+        .date-picker-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: rgba(0, 0, 0, 0.5);
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          z-index: 1000;
+          backdrop-filter: blur(4px);
+        }
+
+        .date-picker-container {
+          background: white;
+          border-radius: 12px;
+          padding: 1.5rem;
+          box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+          border: 1px solid #e5e7eb;
+          min-width: 300px;
+          animation: slideIn 0.3s ease-out;
+        }
+
+        .date-picker-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 1rem;
+          padding-bottom: 0.75rem;
+          border-bottom: 1px solid #e5e7eb;
+        }
+
+        .date-picker-header h4 {
+          margin: 0;
+          color: #374151;
+          font-size: 1.125rem;
+          font-weight: 600;
+        }
+
+        .close-picker-btn {
+          background: none;
+          border: none;
+          color: #6b7280;
+          font-size: 24px;
+          cursor: pointer;
+          padding: 0.25rem;
+          border-radius: 50%;
+          width: 32px;
+          height: 32px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s ease;
+        }
+
+        .close-picker-btn:hover {
+          background-color: #f3f4f6;
+          color: #374151;
+        }
+
+        .calendar-input {
+          width: 100%;
+          padding: 0.75rem;
+          border: 2px solid #e5e7eb;
+          border-radius: 8px;
+          font-size: 1rem;
+          transition: all 0.2s ease;
+          cursor: pointer;
+        }
+
+        .calendar-input:focus {
+          outline: none;
+          border-color: #3b82f6;
+          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .calendar-input:hover {
+          border-color: #9ca3af;
+        }
+
+        /* PAN Card Modal Styles */
+        .pan-modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: rgba(0, 0, 0, 0.9);
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          z-index: 2000;
+          backdrop-filter: blur(10px);
+          animation: fadeIn 0.3s ease-out;
+        }
+
+        .pan-modal-content {
+          background-color: #ffffff;
+          border-radius: 16px;
+          width: 95%;
+          max-width: 800px;
+          max-height: 95vh;
+          overflow: hidden;
+          box-shadow: 0 25px 75px rgba(0, 0, 0, 0.5);
+          border: 1px solid #e5e7eb;
+          animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+
+        @keyframes slideIn {
+          from { 
+            opacity: 0;
+            transform: scale(0.9) translateY(-20px);
+          }
+          to { 
+            opacity: 1;
+            transform: scale(1) translateY(0);
+          }
+        }
+
+        .pan-modal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 20px 25px;
+          border-bottom: 1px solid #e5e7eb;
+          background-color: #f9fafb;
+        }
+
+        .pan-modal-header h3 {
+          color: #111827;
+          font-size: 20px;
+          font-weight: 600;
+          margin: 0;
+        }
+
+        .pan-close-btn {
+          background: none;
+          border: none;
+          color: #6b7280;
+          font-size: 32px;
+          cursor: pointer;
+          padding: 5px;
+          width: 40px;
+          height: 40px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 50%;
+          transition: all 0.3s ease;
+        }
+
+        .pan-close-btn:hover {
+          background-color: #fef2f2;
+          color: #ef4444;
+          transform: scale(1.1);
+        }
+
+        .pan-modal-body {
+          padding: 20px;
+          text-align: center;
+          background-color: #f9fafb;
+          max-height: 70vh;
+          overflow-y: auto;
+        }
+
+        .pan-document-image {
+          max-width: 100%;
+          max-height: 60vh;
+          width: auto;
+          height: auto;
+          border-radius: 12px;
+          box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+          border: 2px solid #e5e7eb;
+          transition: transform 0.3s ease;
+          cursor: zoom-in;
+        }
+
+        .pan-document-image:hover {
+          transform: scale(1.02);
+        }
+
+        .pan-error-message {
+          background-color: #fef2f2;
+          color: #991b1b;
+          padding: 30px 20px;
+          border-radius: 12px;
+          border: 2px dashed #ef4444;
+          font-size: 14px;
+          line-height: 1.5;
+        }
+
+        .pan-error-message h4 {
+          color: #dc2626;
+          font-size: 18px;
+          margin-bottom: 15px;
+          font-weight: 700;
+        }
+
+        .pan-modal-footer {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 20px 25px;
+          border-top: 1px solid #e5e7eb;
+          background-color: #ffffff;
+          gap: 15px;
+        }
+
+        .download-pan-btn {
+          background: linear-gradient(135deg, #10b981, #34d399);
+          color: #ffffff;
+          text-decoration: none;
+          padding: 12px 20px;
+          border-radius: 8px;
+          font-weight: 600;
+          transition: all 0.3s ease;
+          font-size: 14px;
+        }
+
+        .download-pan-btn:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+        }
+
+        .close-pan-btn {
+          background-color: #e5e7eb;
+          color: #374151;
+          border: none;
+          padding: 12px 20px;
+          border-radius: 8px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          font-size: 14px;
+        }
+
+        .close-pan-btn:hover {
+          background-color: #d1d5db;
+          transform: translateY(-1px);
+        }
+
+        @media (max-width: 768px) {
+          .pan-modal-content {
+            width: 98%;
+            margin: 10px;
+          }
+
+          .pan-modal-header {
+            padding: 15px 20px;
+          }
+
+          .pan-modal-header h3 {
+            font-size: 18px;
+          }
+
+          .pan-modal-body {
+            padding: 15px;
+          }
+
+          .pan-document-image {
+            max-height: 50vh;
+          }
+
+          .pan-modal-footer {
+            flex-direction: column;
+            gap: 10px;
+            padding: 15px 20px;
+          }
+
+          .download-pan-btn,
+          .close-pan-btn {
+            width: 100%;
+            text-align: center;
+          }
+        }
+
+        /* Mobile Authentication Modal Styles */
+        .mobile-auth-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: rgba(0, 0, 0, 0.7);
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          z-index: 2000;
+          backdrop-filter: blur(5px);
+          animation: fadeIn 0.3s ease-out;
+        }
+
+        .mobile-auth-content {
+          background-color: #ffffff;
+          border-radius: 16px;
+          width: 95%;
+          max-width: 450px;
+          box-shadow: 0 25px 75px rgba(0, 0, 0, 0.3);
+          border: 1px solid #e5e7eb;
+          animation: slideIn 0.3s ease-out;
+          overflow: hidden;
+        }
+
+        .mobile-auth-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 20px 25px;
+          border-bottom: 1px solid #e5e7eb;
+          background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+          color: white;
+        }
+
+        .mobile-auth-header h3 {
+          margin: 0;
+          font-size: 18px;
+          font-weight: 600;
+        }
+
+        .mobile-auth-close-btn {
+          background: none;
+          border: none;
+          color: white;
+          font-size: 24px;
+          cursor: pointer;
+          padding: 5px;
+          width: 32px;
+          height: 32px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 50%;
+          transition: all 0.3s ease;
+        }
+
+        .mobile-auth-close-btn:hover {
+          background-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .mobile-auth-body {
+          padding: 25px;
+        }
+
+        .verification-steps {
+          margin-bottom: 25px;
+        }
+
+        .step-indicator {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 10px;
+        }
+
+        .step {
+          width: 30px;
+          height: 30px;
+          border-radius: 50%;
+          background-color: #e5e7eb;
+          color: #6b7280;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: 600;
+          font-size: 14px;
+        }
+
+        .step.active {
+          background-color: #3b82f6;
+          color: white;
+        }
+
+        .step-line {
+          width: 40px;
+          height: 2px;
+          background-color: #e5e7eb;
+          margin: 0 10px;
+        }
+
+        .step-labels {
+          display: flex;
+          justify-content: space-between;
+          padding: 0 15px;
+        }
+
+        .step-label {
+          font-size: 12px;
+          color: #6b7280;
+          font-weight: 500;
+        }
+
+        .step-label.active {
+          color: #3b82f6;
+        }
+
+        .otp-verification {
+          text-align: center;
+        }
+
+        .otp-verification h4 {
+          margin: 0 0 10px 0;
+          color: #111827;
+          font-size: 18px;
+          font-weight: 600;
+        }
+
+        .otp-verification p {
+          margin: 0 0 20px 0;
+          color: #6b7280;
+          font-size: 14px;
+        }
+
+        .otp-input-container {
+          margin-bottom: 20px;
+        }
+
+        .otp-input {
+          width: 100%;
+          padding: 15px;
+          border: 2px solid #e5e7eb;
+          border-radius: 8px;
+          font-size: 18px;
+          text-align: center;
+          letter-spacing: 3px;
+          font-weight: 600;
+          transition: all 0.2s ease;
+        }
+
+        .otp-input:focus {
+          outline: none;
+          border-color: #3b82f6;
+          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .otp-actions {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .verify-otp-btn {
+          background: linear-gradient(135deg, #10b981, #059669);
+          color: white;
+          border: none;
+          padding: 12px 20px;
+          border-radius: 8px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          font-size: 16px;
+        }
+
+        .verify-otp-btn:hover:not(:disabled) {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+        }
+
+        .verify-otp-btn:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        .resend-otp-btn {
+          background: none;
+          border: 1px solid #e5e7eb;
+          color: #6b7280;
+          padding: 10px 20px;
+          border-radius: 8px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          font-size: 14px;
+        }
+
+        .resend-otp-btn:hover {
+          background-color: #f9fafb;
+          border-color: #d1d5db;
+          color: #374151;
+        }
+
+        .otp-sending {
+          text-align: center;
+        }
+
+        .otp-sending h4 {
+          margin: 0 0 10px 0;
+          color: #111827;
+          font-size: 18px;
+          font-weight: 600;
+        }
+
+        .otp-sending p {
+          margin: 0 0 20px 0;
+          color: #6b7280;
+          font-size: 14px;
+        }
+
+        .loading-spinner {
+          width: 40px;
+          height: 40px;
+          border: 4px solid #e5e7eb;
+          border-top: 4px solid #3b82f6;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+          margin: 0 auto;
+        }
+
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+
+        /* Verify Button Styles */
+        .verify-btn {
+          background: linear-gradient(135deg, #f59e0b, #d97706);
+          color: white;
+        }
+
+        .verify-btn:hover {
+          background: linear-gradient(135deg, #d97706, #b45309);
+          transform: translateY(-1px);
+        }
+
+        .verified-btn {
+          background: linear-gradient(135deg, #10b981, #059669);
+          color: white;
+          opacity: 0.8;
+          cursor: not-allowed;
+        }
+
+        @media (max-width: 480px) {
+          .mobile-auth-content {
+            width: 98%;
+            margin: 10px;
+          }
+
+          .mobile-auth-header {
+            padding: 15px 20px;
+          }
+
+          .mobile-auth-body {
+            padding: 20px;
+          }
+
+          .otp-input {
+            font-size: 16px;
+            padding: 12px;
           }
         }
       `}</style>

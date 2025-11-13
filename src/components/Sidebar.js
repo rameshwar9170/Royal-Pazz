@@ -17,7 +17,8 @@
   FaLevelUpAlt,
   FaTruck,
   FaUserPlus,
-  FaUserFriends
+  FaUserFriends,
+  FaMoneyCheck
 } from 'react-icons/fa';
   import { signOut } from 'firebase/auth';
   import { auth } from '../firebase/config';
@@ -52,6 +53,11 @@
       name: 'Orders',
       path: isCompanyDashboard ? '/company-dashboard/orders' : '/dashboard/orders',
       icon: <FaShoppingCart />,
+    },
+    {
+      name: 'Cheque Approval',
+      path: isCompanyDashboard ? '/company-dashboard/cheque-approval' : '/dashboard/cheque-approval',
+      icon: <FaMoneyCheck />,
     },
     {
       name: 'Dispatch',

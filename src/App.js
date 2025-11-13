@@ -55,14 +55,23 @@ import FollowUpCustomers from './pages/Company/FollowUpCustomers';
 import VideoSharingSystem from './pages/Company/VideoSharingSystem ';
 import AdminVideoSharing from './pages/Company/AdminVideoSharing';
 import Dispatch from './pages/Company/Dispatch';
+import ChequeApproval from './pages/Company/ChequeApproval';
 import TrainerProfile from './pages/Trainer/TrainerProfile';
 import TrainerTrainings from './pages/Trainer/TrainerTrainings';
 import TrainerDashboard from './pages/Trainer/TrainerDashboard';
 import TrainerDashboardLayout from './pages/Trainer/TrainerDashboardLayout';
 import TrainerParticipants from './pages/Trainer/TrainerParticipants';
 import QuotationManagement from './pages/Quotation';
-// import SetNewPasswordtechnican from './pages/Employee/SetNewPasswordtechnican';
-// import EmployeePageLayout from './pages/Employee/EmployeePageLayout';
+
+
+import SetNewPasswordtechnican from './pages/Employee/SetNewPasswordtechnican';
+import EmployeePageLayout from './pages/Employee/EmployeePageLayout';
+
+import EmployeeProfile from './pages/Employee/EmployeeProfile';
+import EmployeeTasks from './pages/Employee/EmployeeTasks';
+import EmployeeSchedule from './pages/Employee/EmployeeSchedule';
+import EmployeeDocuments from './pages/Employee/EmployeeDocuments';
+import EmployeeSettings from './pages/Employee/EmployeeSettings';
 
 // --- CA Component Imports ---
 import CALogin from './CAreports/CALogin';
@@ -77,17 +86,15 @@ import useDisablePinchZoom from './utils/useDisablePinchZoom';
 
 // --- Your Existing Route Guards ---
 function EmployeeRoute({ children }) {
-   useDisablePinchZoom();
-  const employeeData = localStorage.getItem('employeeData');
-  if (!employeeData) { return <Navigate to="/employee-login" replace />; }
-  try {
-    const parsedData = JSON.parse(employeeData);
-    if (!parsedData.isLoggedIn) { return <Navigate to="/employee-login" replace />; }
-  } catch (error) {
-    console.error('Error parsing employee data:', error);
-    localStorage.removeItem('employeeData');
-    return <Navigate to="/employee-login" replace />;
+  useDisablePinchZoom();
+  const employeeId = localStorage.getItem('employeeId');
+  const employeeToken = localStorage.getItem('employeeToken');
+  
+  // Check if employee is authenticated
+  if (!employeeId || !employeeToken || employeeToken !== 'authenticated') { 
+    return <Navigate to="/employee-login" replace />; 
   }
+  
   return children;
 }
 
@@ -97,7 +104,7 @@ function PrivateRoute({ children, allowedRoles }) {
   if (!currentUser) {
     const currentPath = window.location.pathname;
     if (currentPath.startsWith("/trainer-dashboard")) { return <Navigate to="/trainer-login" replace />; }
-    if (currentPath.startsWith("/employee-dashboard")) { return <Navigate to="/employee-login" replace />; }
+    // Remove employee-dashboard redirect from here since it's handled by EmployeeRoute
     if (currentPath.startsWith("/subadmin")) { return <Navigate to="/subadmin-login" replace />; }
     return <Navigate to="/login" replace />;
   }
@@ -143,8 +150,17 @@ function App() {
         <Route path="/trainer-set-password" element={<TrainerSetPassword />} />
         <Route path="/join-training/:id" element={<JoinTraining />} />
         <Route path="/employee-login" element={<LoginPageEmployee />} />
-        {/* <Route path="/set-new-password" element={<EmployeeRoute><SetNewPasswordtechnican /></EmployeeRoute>} /> */}
-        {/* <Route path="/employee-dashboard" element={<EmployeeRoute><EmployeePageLayout /></EmployeeRoute>} /> */}
+        
+        <Route path="/set-new-password" element={<SetNewPasswordtechnican />} />
+
+        <Route path="/employee-dashboard" element={<EmployeeRoute><EmployeePageLayout /></EmployeeRoute>}>
+          <Route index element={<EmployeeDashboard />} />
+          <Route path="profile" element={<EmployeeProfile />} />
+          <Route path="tasks" element={<EmployeeTasks />} />
+          <Route path="schedule" element={<EmployeeSchedule />} />
+          <Route path="documents" element={<EmployeeDocuments />} />
+          <Route path="settings" element={<EmployeeSettings />} />
+        </Route>
 
         {/* --- Public CA Login Route --- */}
         <Route path="/ca-login" element={<CALogin />} />
@@ -237,6 +253,7 @@ function App() {
           
             <Route path="video-sharing" element={<AdminVideoSharing />} />
             <Route path="dispatch" element={<Dispatch />} />
+            <Route path="cheque-approval" element={<ChequeApproval />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/dashboard" />} />

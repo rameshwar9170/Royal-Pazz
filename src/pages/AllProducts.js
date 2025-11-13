@@ -24,7 +24,14 @@ const AllProducts = () => {
   const [isNewCustomer, setIsNewCustomer] = useState(true);
   const [customerOrders, setCustomerOrders] = useState([]);
   const [showBuyNowModal, setShowBuyNowModal] = useState(false);
-const [buyNowProduct, setBuyNowProduct] = useState(null);
+  const [buyNowProduct, setBuyNowProduct] = useState(null);
+  const [chequeFile, setChequeFile] = useState(null);
+  const [chequePreview, setChequePreview] = useState('');
+  const [chequeError, setChequeError] = useState('');
+  const [utrNumber, setUtrNumber] = useState('');
+  const [utrFile, setUtrFile] = useState(null);
+  const [utrPreview, setUtrPreview] = useState('');
+  const [utrError, setUtrError] = useState('');
 
  
 
@@ -152,6 +159,22 @@ const [buyNowProduct, setBuyNowProduct] = useState(null);
 
     loadRazorpayScript();
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (chequePreview) {
+        URL.revokeObjectURL(chequePreview);
+      }
+    };
+  }, [chequePreview]);
+
+  useEffect(() => {
+    return () => {
+      if (utrPreview) {
+        URL.revokeObjectURL(utrPreview);
+      }
+    };
+  }, [utrPreview]);
 
   const loadRazorpayScript = () => {
     return new Promise((resolve) => {
@@ -327,16 +350,21 @@ const [buyNowProduct, setBuyNowProduct] = useState(null);
   // Auto-select payment method based on wallet balance and cart total
   useEffect(() => {
     const cartTotal = getCartTotal();
-    if (cartTotal > 0) {
-      if (cartTotal <= walletBalance && walletBalance > 0) {
-        // If wallet has sufficient balance, prefer wallet payment
-        setFormData(prev => ({ ...prev, paymentMethod: 'Wallet' }));
-      } else {
-        // If wallet is insufficient or empty, default to online payment
-        setFormData(prev => ({ ...prev, paymentMethod: 'Online' }));
-      }
+    if (cartTotal <= 0) {
+      return;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    setFormData(prev => {
+      if (prev.paymentMethod === 'Cheque') {
+        return prev;
+      }
+
+      if (cartTotal <= walletBalance && walletBalance > 0) {
+        return prev.paymentMethod === 'Wallet' ? prev : { ...prev, paymentMethod: 'Wallet' };
+      }
+
+      return prev.paymentMethod === 'Online' ? prev : { ...prev, paymentMethod: 'Online' };
+    });
   }, [walletBalance, cart]);
 
   useEffect(() => {
@@ -608,6 +636,14 @@ const [buyNowProduct, setBuyNowProduct] = useState(null);
 
     setFormData(prev => ({ ...prev, [name]: value }));
 
+    if (name === 'paymentMethod' && value !== 'Cheque') {
+      clearChequeData();
+      setChequeError('');
+      clearUtrData();
+      setUtrNumber('');
+      setUtrError('');
+    }
+
     const error = validateField(name, value);
     setValidationErrors(prev => ({
       ...prev,
@@ -756,6 +792,91 @@ const [buyNowProduct, setBuyNowProduct] = useState(null);
       ...prev,
       [e.target.name]: error
     }));
+  };
+
+  const handleChequeFileChange = (event) => {
+    const file = event.target.files?.[0];
+
+    if (chequePreview) {
+      URL.revokeObjectURL(chequePreview);
+    }
+
+    if (!file) {
+      setChequeFile(null);
+      setChequePreview('');
+      setChequeError('');
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      setChequeFile(null);
+      setChequePreview('');
+      setChequeError('Please upload an image file (JPG or PNG).');
+      return;
+    }
+
+    const maxSizeBytes = 5 * 1024 * 1024; // 5 MB
+    if (file.size > maxSizeBytes) {
+      setChequeFile(null);
+      setChequePreview('');
+      setChequeError('File size should be less than 5 MB.');
+      return;
+    }
+
+    setChequeError('');
+    setChequeFile(file);
+    setChequePreview(URL.createObjectURL(file));
+  };
+
+  const clearChequeData = () => {
+    if (chequePreview) {
+      URL.revokeObjectURL(chequePreview);
+    }
+    setChequeFile(null);
+    setChequePreview('');
+    setChequeError('');
+  };
+
+  const handleUtrFileChange = (event) => {
+    const file = event.target.files?.[0];
+
+    if (utrPreview) {
+      URL.revokeObjectURL(utrPreview);
+    }
+
+    if (!file) {
+      setUtrFile(null);
+      setUtrPreview('');
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      setUtrFile(null);
+      setUtrPreview('');
+      setUtrError('Please upload an image file (JPG or PNG).');
+      return;
+    }
+
+    const maxSizeBytes = 5 * 1024 * 1024;
+    if (file.size > maxSizeBytes) {
+      setUtrFile(null);
+      setUtrPreview('');
+      setUtrError('File size should be less than 5 MB.');
+      return;
+    }
+
+    setUtrError('');
+    setUtrFile(file);
+    setUtrPreview(URL.createObjectURL(file));
+  };
+
+  const clearUtrData = () => {
+    if (utrPreview) {
+      URL.revokeObjectURL(utrPreview);
+    }
+    setUtrFile(null);
+    setUtrPreview('');
+    setUtrError('');
   };
 
 
@@ -1102,6 +1223,72 @@ const [buyNowProduct, setBuyNowProduct] = useState(null);
     return true;
   };
 
+  const handleChequePayment = async (orderData, orderId) => {
+    if (!chequeFile) {
+      setChequeError('Please upload a cheque image before submitting the order.');
+      alert('Please upload a cheque image before submitting the order.');
+      return false;
+    }
+
+    try {
+      const fileExtension = chequeFile.name.split('.').pop();
+      const safeExtension = fileExtension ? fileExtension.toLowerCase() : 'jpg';
+      const chequePath = `HTAMS/chequePayments/${orderId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${safeExtension}`;
+      const chequeStorageReference = storageRef(storage, chequePath);
+
+      const uploadResult = await uploadBytes(chequeStorageReference, chequeFile);
+      const chequeImageUrl = await getDownloadURL(uploadResult.ref);
+
+      const chequeDetails = {
+        imageUrl: chequeImageUrl,
+        storagePath: chequePath,
+        uploadedAt: new Date().toISOString(),
+        uploadedBy: user?.uid || 'unknown',
+        status: 'pending_verification',
+      };
+
+      const orderDataWithCheque = {
+        ...orderData,
+        status: 'Pending',
+        paymentDetails: {
+          payment_method: 'Cheque',
+          payment_status: 'awaiting_verification',
+          chequeImageUrl,
+          chequeStoragePath: chequePath,
+          uploadedAt: chequeDetails.uploadedAt,
+        },
+        chequeDetails,
+        commissionStatus: 'awaiting_admin_approval',
+      };
+
+      await set(ref(db, `HTAMS/orders/${orderId}`), {
+        ...orderDataWithCheque,
+        orderId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
+      await saveCustomerData({
+        ...orderDataWithCheque,
+        phone: orderData.customerPhone,
+      }, 'cheque_payment_submitted');
+
+      showNotification(
+        'Cheque uploaded for verification',
+        '🧾 Awaiting Admin Approval',
+        'info'
+      );
+
+      alert('Cheque uploaded successfully. Admin will verify and approve the payment.');
+
+      return true;
+    } catch (error) {
+      console.error('Failed to process cheque payment:', error);
+      alert('Failed to upload cheque. Please try again.');
+      return false;
+    }
+  };
+
   const completeOrder = async (orderData, orderId) => {
     try {
       // Clean the order data to remove any undefined values
@@ -1178,6 +1365,30 @@ const [buyNowProduct, setBuyNowProduct] = useState(null);
       }
     }
 
+    try {
+      const allDistributed = commissionResults.length > 0 && commissionResults.every(r => r.result?.ok);
+      const partialDistributed = commissionResults.some(r => r.result?.ok);
+
+      const distributionStatus = allDistributed
+        ? 'distributed'
+        : partialDistributed
+          ? 'partially_distributed'
+          : 'pending';
+
+      await update(ref(db, `HTAMS/orders/${orderId}`), {
+        status: 'Pending',
+        commissionSummary: {
+          distributed: commissionResults.filter(r => r.result?.ok).length,
+          totalItems: commissionResults.length,
+          lastUpdated: new Date().toISOString(),
+          results: commissionResults,
+          distributionStatus,
+        },
+      });
+    } catch (error) {
+      console.error('Failed to update order status after commission processing:', error);
+    }
+
     await generateMultiProductPdfBill({
       ...orderData,
       orderId: orderId,
@@ -1199,6 +1410,24 @@ const [buyNowProduct, setBuyNowProduct] = useState(null);
     if (!validateAllFields()) {
       alert('Please fix all validation errors before submitting');
       return;
+    }
+
+    if (formData.paymentMethod === 'Cheque') {
+      let hasError = false;
+      if (!chequeFile) {
+        setChequeError('Cheque image is required for cheque payments.');
+        hasError = true;
+      }
+
+      if (!utrNumber.trim()) {
+        setUtrError('Please enter the cheque UTR number.');
+        hasError = true;
+      }
+
+      if (hasError) {
+        alert('Please provide the required cheque details before placing the order.');
+        return;
+      }
     }
 
     setLoading(true);
@@ -1293,6 +1522,24 @@ const [buyNowProduct, setBuyNowProduct] = useState(null);
         const success = await handleWalletPayment(walletOrderData, orderId);
         if (success) {
           alert('Order placed successfully using wallet balance! Invoice is downloading.');
+        }
+      } else if (formData.paymentMethod === 'Cheque') {
+        const chequeOrderData = {
+          ...orderData,
+          status: 'Waiting Confirmation',
+          paymentDetails: {
+            payment_method: 'Cheque',
+            payment_status: 'awaiting_verification',
+            submittedAt: new Date().toISOString(),
+            utrNumber: utrNumber.trim(),
+          }
+        };
+
+        const success = await handleChequePayment(chequeOrderData, orderId);
+        if (success) {
+          showNotification('Order saved for cheque verification', '🧾 Cheque Pending', 'info');
+          alert('Order submitted. Admin will verify the cheque before processing.');
+          resetForm();
         }
       } else if (formData.paymentMethod === 'Online') {
         await handleRazorpayPayment(orderData, orderId);
@@ -2882,6 +3129,7 @@ const [buyNowProduct, setBuyNowProduct] = useState(null);
                           )}
                           <option value="Online">💳 Online Payment (Razorpay)</option>
                           <option value="Cash">💵 Cash Payment</option>
+                          <option value="Cheque">🧾 Cheque Payment</option>
                         </select>
                         {getCartTotal() > walletBalance && walletBalance > 0 && (
                           <div className="wallet-insufficient-notice">
@@ -2900,6 +3148,34 @@ const [buyNowProduct, setBuyNowProduct] = useState(null);
                           </div>
                         )}
                       </div>
+
+                      {formData.paymentMethod === 'Cheque' && (
+                        <div className="form-group full-width cheque-upload-group">
+                          <label>Upload Cheque Image *</label>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleChequeFileChange}
+                            disabled={loading}
+                          />
+                          <small className="field-hint">Please upload a clear photo of the cheque for admin verification (JPG or PNG, max 5 MB).</small>
+                          {chequeError && <span className="error-message">{chequeError}</span>}
+
+                          {chequePreview && (
+                            <div className="cheque-preview">
+                              <img src={chequePreview} alt="Cheque preview" />
+                              <button
+                                type="button"
+                                className="cheque-remove-button"
+                                onClick={clearChequeData}
+                                disabled={loading}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     <div className="form-actions">

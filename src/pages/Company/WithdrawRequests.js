@@ -102,7 +102,9 @@ const WithdrawRequests = () => {
           cancelled: 0,
           totalAmount: 0,
           pendingAmount: 0,
-          approvedAmount: 0
+          approvedAmount: 0,
+          totalTDS: 0,
+          totalNetAmount: 0
         });
       }
       setLoading(false);

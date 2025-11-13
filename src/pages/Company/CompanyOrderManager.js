@@ -16,9 +16,9 @@ const CompanyOrderManager = () => {
   const ordersPerPage = 12;
 
   const pendingCount = orders.filter(order => order.status?.toLowerCase() === 'pending').length;
-  const completedCount = orders.filter(order => order.status?.toLowerCase() === 'completed').length;
+  const DeliveredCount = orders.filter(order => order.status?.toLowerCase() === 'delivered').length;
   const confirmedCount = orders.filter(order => order.status?.toLowerCase() === 'confirmed').length;
-  const inProgressCount = orders.filter(order => order.status?.toLowerCase() === 'in-progress').length;
+  const inProgressCount = orders.filter(order => order.status?.toLowerCase() === 'Dispatched').length;
   const cancelledCount = orders.filter(order => order.status?.toLowerCase() === 'cancelled').length;
 
   // Helper function to format address objects
@@ -82,8 +82,8 @@ const CompanyOrderManager = () => {
 
         // Sort orders
         const sortedOrders = newOrders.sort((a, b) => {
-          if (a.status?.toLowerCase() === 'completed' && b.status?.toLowerCase() !== 'completed') return 1;
-          if (a.status?.toLowerCase() !== 'completed' && b.status?.toLowerCase() === 'completed') return -1;
+          if (a.status?.toLowerCase() === 'Delivered' && b.status?.toLowerCase() !== 'Delivered') return 1;
+          if (a.status?.toLowerCase() !== 'Delivered' && b.status?.toLowerCase() === 'Delivered') return -1;
           return 0;
         });
 
@@ -119,7 +119,7 @@ const CompanyOrderManager = () => {
       [`${newStatus}At`]: new Date().toISOString()
     };
 
-    if (newStatus === 'in-progress') {
+    if (newStatus === 'Dispatched') {
       // const otp = generateOTP();
       const formLink = `https://htams-app.web.app/complete-task/${orderId}`;
       // updates.completionOTP = otp;
@@ -147,12 +147,12 @@ const CompanyOrderManager = () => {
   const filteredOrders = orders.filter(order => {
     const matchesStatus = filterStatus === 'pending'
       ? order.status?.toLowerCase() === 'pending'
-      : filterStatus === 'completed'
-      ? order.status?.toLowerCase() === 'completed'
+      : filterStatus === 'Delivered'
+      ? order.status?.toLowerCase() === 'Delivered'
       : filterStatus === 'confirmed'
       ? order.status?.toLowerCase() === 'confirmed'
-      : filterStatus === 'in-progress'
-      ? order.status?.toLowerCase() === 'in-progress'
+      : filterStatus === 'Dispatched'
+      ? order.status?.toLowerCase() === 'Dispatched'
       : filterStatus === 'cancelled'
       ? order.status?.toLowerCase() === 'cancelled'
       : true;
@@ -191,9 +191,9 @@ const CompanyOrderManager = () => {
         return '#059669';
       case 'confirmed':
         return '#3b82f6';
-      case 'in-progress':
+      case 'Dispatched':
         return '#8b5cf6';
-      case 'completed':
+      case 'Delivered':
         return '#10b981';
       case 'cancelled':
         return '#ef4444';
@@ -210,9 +210,9 @@ const CompanyOrderManager = () => {
         return <FiCreditCard />;
       case 'confirmed':
         return <FiCheck />;
-      case 'in-progress':
+      case 'Dispatched':
         return <FiTruck />;
-      case 'completed':
+      case 'Delivered':
         return <FiPackage />;
       case 'cancelled':
         return <FiX />;
@@ -241,13 +241,13 @@ const CompanyOrderManager = () => {
           <div className="stat-number">{confirmedCount}</div>
           <div className="stat-label">Confirmed</div>
         </div>
-        <div className="stat-card progress" onClick={() => setFilterStatus('in-progress')}>
+        <div className="stat-card progress" onClick={() => setFilterStatus('Dispatched')}>
           <div className="stat-number">{inProgressCount}</div>
           <div className="stat-label">In Progress</div>
         </div>
-        <div className="stat-card completed" onClick={() => setFilterStatus('completed')}>
-          <div className="stat-number">{completedCount}</div>
-          <div className="stat-label">Completed</div>
+        <div className="stat-card Delivered" onClick={() => setFilterStatus('Delivered')}>
+          <div className="stat-number">{DeliveredCount}</div>
+          <div className="stat-label">Delivered</div>
         </div>
         <div className="stat-card cancelled" onClick={() => setFilterStatus('cancelled')}>
           <div className="stat-number">{cancelledCount}</div>
@@ -279,18 +279,18 @@ const CompanyOrderManager = () => {
             Confirmed
           </button>
           <button
-            onClick={() => setFilterStatus('in-progress')}
-            className={`filter-btn ${filterStatus === 'in-progress' ? 'active' : ''}`}
+            onClick={() => setFilterStatus('Dispatched')}
+            className={`filter-btn ${filterStatus === 'Dispatched' ? 'active' : ''}`}
           >
             <FiTruck />
             In Progress
           </button>
           <button
-            onClick={() => setFilterStatus('completed')}
-            className={`filter-btn ${filterStatus === 'completed' ? 'active' : ''}`}
+            onClick={() => setFilterStatus('Delivered')}
+            className={`filter-btn ${filterStatus === 'Delivered' ? 'active' : ''}`}
           >
             <FiPackage />
-            Completed
+            Delivered
           </button>
           <button
             onClick={() => setFilterStatus('cancelled')}
@@ -676,27 +676,27 @@ const CompanyOrderManager = () => {
                 {selectedOrder.status?.toLowerCase() === 'confirmed' && (
                   <button
                     className="action-btn progress-btn"
-                    onClick={() => handleStatusUpdate(selectedOrder.id, 'in-progress')}
+                    onClick={() => handleStatusUpdate(selectedOrder.id, 'Dispatched')}
                   >
                     <FiTruck />
                     Mark In Progress
                   </button>
                 )}
 
-                {selectedOrder.status?.toLowerCase() === 'in-progress' && (
+                {selectedOrder.status?.toLowerCase() === 'Dispatched' && (
                   <button
                     className="action-btn complete-btn"
-                    onClick={() => handleStatusUpdate(selectedOrder.id, 'completed')}
+                    onClick={() => handleStatusUpdate(selectedOrder.id, 'Delivered')}
                   >
                     <FiPackage />
-                    Mark as Completed
+                    Mark as Delivered
                   </button>
                 )}
 
-                {selectedOrder.status?.toLowerCase() === 'completed' && (
-                  <div className="completed-message">
+                {selectedOrder.status?.toLowerCase() === 'Delivered' && (
+                  <div className="Delivered-message">
                     <FiPackage className="success-icon" />
-                    Order Completed Successfully
+                    Order Delivered Successfully
                   </div>
                 )}
 
@@ -1437,7 +1437,7 @@ const CompanyOrderManager = () => {
           transform: none;
         }
 
-        .completed-message {
+        .Delivered-message {
           display: flex;
           align-items: center;
           justify-content: center;

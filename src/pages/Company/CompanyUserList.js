@@ -485,10 +485,30 @@ const CompanyUserList = () => {
     if (selectedUser && selectedUser.uid === user.uid && showModal) {
       return;
     }
+    
+    // Prevent body scroll when modal opens
+    document.body.style.overflow = 'hidden';
+    
     setSelectedUser(user);
     setShowModal(true);
     setUserSalesData(null);
     setUserTrainingData(null);
+    
+    // Scroll to top of modal content smoothly and scroll page to show modal
+    setTimeout(() => {
+      const modalContent = document.querySelector('.modal-content');
+      const modalOverlay = document.querySelector('.modal-overlay');
+      
+      if (modalContent) {
+        modalContent.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      
+      // Scroll the page to center the modal if needed
+      if (modalOverlay) {
+        modalOverlay.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 100);
+    
     await fetchUserAdditionalData(user.uid, user.dataSource);
   };
 
@@ -497,6 +517,8 @@ const CompanyUserList = () => {
     setSelectedUser(null);
     setUserSalesData(null);
     setUserTrainingData(null);
+    // Re-enable body scroll
+    document.body.style.overflow = 'auto';
   };
 
   const handleRoleFilter = (role) => {
@@ -1802,6 +1824,17 @@ const CompanyUserList = () => {
   z-index: 1000;
   padding: var(--spacing-sm);
   backdrop-filter: blur(4px);
+  overflow-y: auto;
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .modal-content {
@@ -1813,6 +1846,19 @@ const CompanyUserList = () => {
   max-height: 90vh;
   overflow-y: auto;
   position: relative;
+  scroll-behavior: smooth;
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 .modal-header {
