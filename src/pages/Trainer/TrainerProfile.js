@@ -1,17 +1,10 @@
 // TrainerProfile.jsx - FIXED VERSION
-import { getDatabase, onValue, ref, update } from 'firebase/database';
-import { useEffect, useState } from 'react';
-import {
-  FaBriefcase,
-  FaCalendar,
-  FaEdit,
-  FaEnvelope,
-  FaEye, FaEyeSlash,
-  FaIdCard,
-  FaMapMarkerAlt,
-  FaPhone,
-  FaSave, FaTimes,
-  FaUser
+import React, { useState, useEffect } from 'react';
+import { getDatabase, ref, onValue, update } from 'firebase/database';
+import { auth } from '../../firebase/config';
+import { 
+  FaUser, FaPhone, FaEnvelope, FaMapMarkerAlt, FaIdCard, 
+  FaCalendar, FaBriefcase, FaEdit, FaSave, FaTimes, FaEye, FaEyeSlash 
 } from 'react-icons/fa';
 
 const TrainerProfile = () => {

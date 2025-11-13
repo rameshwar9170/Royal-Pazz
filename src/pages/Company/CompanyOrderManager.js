@@ -18,11 +18,8 @@ const CompanyOrderManager = () => {
   const pendingCount = orders.filter(order => order.status?.toLowerCase() === 'pending').length;
   const DeliveredCount = orders.filter(order => order.status?.toLowerCase() === 'delivered').length;
   const confirmedCount = orders.filter(order => order.status?.toLowerCase() === 'confirmed').length;
-  // const inProgressCount = orders.filter(order => order.status?.toLowerCase() === 'Dispatched').length;
-  const dispatchedCount = orders.filter(order => order.status?.toLowerCase() === 'dispatched').length;
-  
+  const inProgressCount = orders.filter(order => order.status?.toLowerCase() === 'Dispatched').length;
   const cancelledCount = orders.filter(order => order.status?.toLowerCase() === 'cancelled').length;
-  const installedCount = orders.filter(order => order.status?.toLowerCase() === 'installed').length;
 
   // Helper function to format address objects
   const formatAddress = (address) => {
@@ -245,16 +242,12 @@ const CompanyOrderManager = () => {
           <div className="stat-label">Confirmed</div>
         </div>
         <div className="stat-card progress" onClick={() => setFilterStatus('Dispatched')}>
-          <div className="stat-number">{dispatchedCount}</div>
-          <div className="stat-label">Dispatched</div>
+          <div className="stat-number">{inProgressCount}</div>
+          <div className="stat-label">In Progress</div>
         </div>
         <div className="stat-card Delivered" onClick={() => setFilterStatus('Delivered')}>
           <div className="stat-number">{DeliveredCount}</div>
           <div className="stat-label">Delivered</div>
-        </div>
-         <div className="stat-card Delivered" onClick={() => setFilterStatus('Delivered')}>
-          <div className="stat-number">{installedCount}</div>
-          <div className="stat-label">Installed</div>
         </div>
         <div className="stat-card cancelled" onClick={() => setFilterStatus('cancelled')}>
           <div className="stat-number">{cancelledCount}</div>
@@ -290,7 +283,7 @@ const CompanyOrderManager = () => {
             className={`filter-btn ${filterStatus === 'Dispatched' ? 'active' : ''}`}
           >
             <FiTruck />
-            Dispatched
+            In Progress
           </button>
           <button
             onClick={() => setFilterStatus('Delivered')}
@@ -298,13 +291,6 @@ const CompanyOrderManager = () => {
           >
             <FiPackage />
             Delivered
-          </button>
-          <button
-            onClick={() => setFilterStatus('installed')}
-            className={`filter-btn ${filterStatus === 'installed' ? 'active' : ''}`}
-          >
-            <FiPackage />
-            Installed
           </button>
           <button
             onClick={() => setFilterStatus('cancelled')}

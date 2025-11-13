@@ -17,7 +17,7 @@ const Dispatch = () => {
     const [timeFilter, setTimeFilter] = useState('all');
     const [currentPage, setCurrentPage] = useState(1);
 
-    const allowedStatuses = useMemo(() => new Set(['confirmed', 'dispatched', 'accepted', 'delivered','installed']), []);
+    const allowedStatuses = useMemo(() => new Set(['confirmed', 'inprocess', 'accepted', 'completed']), []);
 
     const resolveOrderDate = useCallback((order) => {
         if (!order) return null;
@@ -110,7 +110,7 @@ const Dispatch = () => {
     }, [orders, timeFilter, resolveOrderDate]);
 
     const filteredAndSortedOrders = useMemo(() => {
-        const statusOrder = { 'confirmed': 1, 'dispatched': 2, 'accepted': 3, 'delivered': 4, 'installed': 5 };
+        const statusOrder = { 'confirmed': 1, 'inprocess': 2, 'accepted': 3, 'completed': 4 };
         return timeFilteredOrders
             .filter(o => {
                 const status = o.status?.toLowerCase() || '';
@@ -141,7 +141,7 @@ const Dispatch = () => {
     const totalPages = Math.ceil(filteredAndSortedOrders.length / PAGE_SIZE);
 
     const summaryCounts = useMemo(() => {
-        const counts = { all: timeFilteredOrders.length, confirmed: 0, dispatched: 0, accepted: 0, delivered: 0, installed: 0, cancelled: 0 };
+        const counts = { all: timeFilteredOrders.length, confirmed: 0, inprocess: 0, accepted: 0, completed: 0 };
         timeFilteredOrders.forEach(o => {
             const status = o.status?.toLowerCase();
             if (status in counts) counts[status]++;
@@ -228,11 +228,9 @@ const Dispatch = () => {
                     {[
                         { key: 'all', label: 'All' },
                         { key: 'confirmed', label: 'Confirmed' },
-                        { key: 'dispatched', label: 'Dispatched' },
+                        { key: 'inprocess', label: 'In Process' },
                         { key: 'accepted', label: 'Accepted' },
-                        { key: 'delivered', label: 'Delivered' },
-                        { key: 'installed', label: 'Installed' },
-                        { key: 'cancelled', label: 'Cancelled' }
+                        { key: 'completed', label: 'Completed' }
                     ].map(({ key, label }) => (
                         <button key={key} onClick={() => { setActiveStatusFilter(key); setCurrentPage(1); }} className={`summary-card ${key} ${activeStatusFilter === key ? 'active' : ''}`}>
                             <span>{summaryCounts[key]}</span> {label}
@@ -280,11 +278,9 @@ const Dispatch = () => {
                                     <td>
                                         <select className="control-input" value={edit.status} onChange={(e) => onChangeEdit(o.id, 'status', e.target.value)} disabled={isCompleted}>
                                             <option value="confirmed">Confirmed</option>
-                                            <option value="dispatched">Dispatched</option>
+                                            <option value="inprocess">In Process</option>
                                             {technicianAssigned && <option value="accepted">Accepted</option>}
-                                            <option value="delivered">Delivered</option>
-                                            <option value="installed">Installed</option>
-                                            <option value="cancelled">Cancelled</option>
+                                            <option value="completed">Completed</option>
                                         </select>
                                     </td>
                                     <td className="actions-cell">

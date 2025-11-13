@@ -66,7 +66,7 @@ const TrainerDashboardLayout = () => {
   };
 
   // Find matching title
-  // const currentTitle = pageTitles[location.pathname] || 'Trainer Dashboard';
+  const currentTitle = pageTitles[location.pathname] || 'Trainer Dashboard';
 
   // Show loading spinner while checking authentication
   if (isLoading) {
