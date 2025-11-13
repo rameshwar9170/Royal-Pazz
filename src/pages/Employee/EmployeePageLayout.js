@@ -792,16 +792,11 @@ const EmployeePageLayout = () => {
         /* Desktop Styles */
         @media (min-width: 1024px) {
           .sidebar {
-            position: fixed;
+            position: static;
             left: 0;
-            top: 0;
-            height: 100vh;
-            overflow-y: auto;
           }
 
-          .main-content {
-            margin-left: 280px;
-          }
+         
 
           .menu-toggle {
             display: none;

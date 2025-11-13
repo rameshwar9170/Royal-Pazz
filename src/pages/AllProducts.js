@@ -2173,9 +2173,9 @@ const AllProducts = () => {
           isIntraState: isIntraState,
           items: billData.items.map(item => ({
             name: item.name,
-            price: item.mrp,
+            price: item.invoicePrice,
             quantity: item.quantity,
-            total: item.mrp * item.quantity
+            total: item.invoicePrice * item.quantity
           })),
           baseAmount: baseAmount,
           gstRate: gstRate,
