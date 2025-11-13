@@ -13,7 +13,7 @@ import Trainings from "../Company/Trainings";
 import Users from "../Company/CompanyUserList";
 
 // Icons
-import { FiMenu, FiX, FiLogOut, FiUser, FiSettings, FiHome } from "react-icons/fi";
+import { FiMenu, FiX, FiLogOut, FiUser, FiSettings } from "react-icons/fi";
 
 const SubAdminDashboard = () => {
   const { currentUser, loading } = useContext(AuthContext);

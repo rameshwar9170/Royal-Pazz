@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 import { getDatabase, ref, get } from "firebase/database";
-import { FiEye, FiEyeOff, FiLock, FiMail, FiUser, FiArrowLeft } from "react-icons/fi";
+import { FiEye, FiEyeOff, FiLock, FiMail, FiUser } from "react-icons/fi";
 
 const SubAdminLogin = () => {
   const [emailOrPan, setEmailOrPan] = useState("");

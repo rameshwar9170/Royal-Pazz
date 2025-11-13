@@ -16,8 +16,8 @@ import {
   FaCity, 
   FaFlag, 
   FaMailBulk,
-  FaRupeeSign,
-  FaBuilding, // For agency
+
+
   FaChartLine // For level
 } from 'react-icons/fa';
 
