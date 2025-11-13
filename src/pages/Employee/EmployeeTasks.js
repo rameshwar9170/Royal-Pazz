@@ -25,8 +25,8 @@ const EmployeeTasks = () => {
   const counts = useMemo(() => {
     const total = employeeTasks.length;
     const pending = employeeTasks.filter((task) => task.status === 'pending').length;
-    const inProgress = employeeTasks.filter((task) => task.status === 'in_progress').length;
-    const completed = employeeTasks.filter((task) => task.status === 'completed').length;
+    const inProgress = employeeTasks.filter((task) => task.status === 'dispatched').length;
+    const completed = employeeTasks.filter((task) => task.status === 'delivered').length;
     return { total, pending, inProgress, completed };
   }, [employeeTasks]);
 

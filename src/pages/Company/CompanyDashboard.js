@@ -44,7 +44,7 @@ const CompanyDashboard = () => {
     joinedTrainings: 0,
     pending: 0,
     confirmed: 0,
-    inProgress: 0,
+    dispatched: 0,
     completed: 0,
     cancelled: 0,
     paymentCash: 0,
@@ -409,7 +409,7 @@ const CompanyDashboard = () => {
     const statusCounts = {
       pending: 0,
       confirmed: 0,
-      inProgress: 0,
+      dispatched: 0,
       completed: 0,
       cancelled: 0,
     };
