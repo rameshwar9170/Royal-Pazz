@@ -6,7 +6,7 @@ import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import {
   FaUsers, FaCheck, FaTimes, FaSearch, FaFilter, FaDownload,
   FaSpinner, FaPhone, FaEnvelope, FaExclamationTriangle,
-  FaWhatsapp, FaUserCheck, FaCalendarAlt, FaClock, FaMapMarkerAlt,
+  FaWhatsapp, FaUserCheck, FaClock, FaMapMarkerAlt,
   FaEye, FaTachometerAlt, FaGraduationCap, FaBell
 } from 'react-icons/fa';
 
@@ -757,7 +757,7 @@ const TrainerParticipants = () => {
     );
   }
 
-  const selectedTrainingDetails = trainings.find(training => training.id === selectedTraining);
+  // const selectedTrainingDetails = trainings.find(training => training.id === selectedTraining);
 
   return (
     <div style={{

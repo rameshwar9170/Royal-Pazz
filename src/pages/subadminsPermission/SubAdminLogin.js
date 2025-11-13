@@ -92,14 +92,8 @@ const SubAdminLogin = () => {
     }
   };
 
-  const handleGoBack = () => {
-    navigate(-1);
-  };
 
-  // Navigate to terms page
-  const handleTermsNavigation = () => {
-    navigate('/policies/terms');
-  };
+  
 
   return (
     <>

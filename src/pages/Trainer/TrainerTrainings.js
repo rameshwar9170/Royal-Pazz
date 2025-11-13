@@ -10,9 +10,6 @@ import {
   FaMapMarkerAlt,
   FaChevronDown,
   FaChevronUp,
-  FaUpload,
-  FaKey,
-  FaImage,
   FaWhatsapp
 } from 'react-icons/fa';
 
