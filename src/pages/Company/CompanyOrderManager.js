@@ -20,6 +20,7 @@ const CompanyOrderManager = () => {
   const confirmedCount = orders.filter(order => order.status?.toLowerCase() === 'confirmed').length;
   const inProgressCount = orders.filter(order => order.status?.toLowerCase() === 'Dispatched').length;
   const cancelledCount = orders.filter(order => order.status?.toLowerCase() === 'cancelled').length;
+  const installedCount = orders.filter(order => order.status?.toLowerCase() === 'installed').length;
 
   // Helper function to format address objects
   const formatAddress = (address) => {
@@ -243,11 +244,15 @@ const CompanyOrderManager = () => {
         </div>
         <div className="stat-card progress" onClick={() => setFilterStatus('Dispatched')}>
           <div className="stat-number">{inProgressCount}</div>
-          <div className="stat-label">In Progress</div>
+          <div className="stat-label">Dispatched</div>
         </div>
         <div className="stat-card Delivered" onClick={() => setFilterStatus('Delivered')}>
           <div className="stat-number">{DeliveredCount}</div>
           <div className="stat-label">Delivered</div>
+        </div>
+         <div className="stat-card Delivered" onClick={() => setFilterStatus('Delivered')}>
+          <div className="stat-number">{installedCount}</div>
+          <div className="stat-label">Installed</div>
         </div>
         <div className="stat-card cancelled" onClick={() => setFilterStatus('cancelled')}>
           <div className="stat-number">{cancelledCount}</div>
@@ -283,7 +288,7 @@ const CompanyOrderManager = () => {
             className={`filter-btn ${filterStatus === 'Dispatched' ? 'active' : ''}`}
           >
             <FiTruck />
-            In Progress
+            Dispatched
           </button>
           <button
             onClick={() => setFilterStatus('Delivered')}
@@ -291,6 +296,13 @@ const CompanyOrderManager = () => {
           >
             <FiPackage />
             Delivered
+          </button>
+          <button
+            onClick={() => setFilterStatus('installed')}
+            className={`filter-btn ${filterStatus === 'installed' ? 'active' : ''}`}
+          >
+            <FiPackage />
+            Installed
           </button>
           <button
             onClick={() => setFilterStatus('cancelled')}
