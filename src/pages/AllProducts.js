@@ -1855,7 +1855,7 @@ const AllProducts = () => {
       console.log('=== API PAYLOAD ===', apiPayload);
 
       // Use processsale endpoint for new orders
-      const response = await fetch('https://processsale-udqmpp6qhq-uc.a.run.app', {
+      const response = await fetch('https://processsale-udqmpp6qhq-uc.a.run.app/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
