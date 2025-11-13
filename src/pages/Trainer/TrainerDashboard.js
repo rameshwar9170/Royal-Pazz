@@ -3,14 +3,11 @@ import React, { useEffect, useState } from 'react';
 import { getDatabase, ref, onValue, update } from 'firebase/database';
 import { auth } from '../../firebase/config';
 import { 
-  FaTachometerAlt, FaUsers, FaChalkboardTeacher, FaUserCheck,
-  FaGraduationCap, FaTrophy, FaCalendarAlt, FaClock,
-  FaEye, FaArrowRight, FaSpinner, FaExclamationTriangle,
+  FaTachometerAlt, FaUsers, FaChalkboardTeacher, FaUserCheck, FaTrophy, FaCalendarAlt, FaClock, FaArrowRight, FaSpinner, FaExclamationTriangle,
   FaMapMarkerAlt, FaBoxOpen, FaArrowLeft, FaCheck, FaTimes,
   FaChevronLeft, FaChevronRight, FaUserTie, FaUserFriends,
-  FaMobile, FaLock, FaImage, FaCheckCircle, FaCog,
-  FaHistory, FaStar, FaFire, FaRegClock, FaDotCircle,
-  FaPlay, FaPause, FaChartLine, FaGlobe
+  FaMobile, FaLock, FaImage, FaCheckCircle, FaCog, FaStar, FaRegClock, FaDotCircle,
+  FaPlay, F
 } from 'react-icons/fa';
 
 const TrainerDashboard = () => {
@@ -417,20 +414,20 @@ const TrainerDashboard = () => {
     });
   };
 
-  const getRelativeTime = (dateString) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now - date;
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  // const getRelativeTime = (dateString) => {
+  //   if (!dateString) return '';
+  //   const date = new Date(dateString);
+  //   const now = new Date();
+  //   const diffMs = now - date;
+  //   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
     
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-    if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
-    return `${Math.floor(diffDays / 365)} years ago`;
-  };
+  //   if (diffDays === 0) return 'Today';
+  //   if (diffDays === 1) return 'Yesterday';
+  //   if (diffDays < 7) return `${diffDays} days ago`;
+  //   if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+  //   if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
+  //   return `${Math.floor(diffDays / 365)} years ago`;
+  // };
 
   const groupTrainingsByStatus = (trainings) => {
     const active = trainings.filter(t => t.status !== 'completed' && t.status !== 'cancelled');
